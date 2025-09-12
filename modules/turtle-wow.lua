@@ -162,7 +162,7 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
           sh = sh + 12
           sh = sh >= 24 and sh - 24 or sh
         end
-
+        
         -- perform am/pm calculations
         if C.global.twentyfour == "0" then
           local zn, sn = " AM", " AM"
@@ -193,12 +193,21 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
           servertime = string.format("%.2d:%.2d", sh, sm)
           zonetime = string.format("%.2d:%.2d", zh, zm)
         end
+        
+        
+        -- pick color for zone time based on day/night
+        local zoneColor
+        if zh >= 6 and zh < 18 then
+          zoneColor = "|cffffbb00"  -- yellow (day)
+        else
+          zoneColor = "|cff0000ea"  -- dark blue (night)
+        end
 
         -- create the tooltip
         GameTooltip:AddLine("|cff555555" .. T["Time"])
         GameTooltip:AddDoubleLine(T["Localtime"],  "|cffffffff" .. time)
         GameTooltip:AddDoubleLine(T["Servertime"], "|cffffffff".. servertime)
-        GameTooltip:AddDoubleLine(T["Zonetime"], "|cffffffff".. zonetime)
+        GameTooltip:AddDoubleLine(T["Zonetime"],  zoneColor .. zonetime)
         GameTooltip:AddLine(" ")
         if TimeManagerFrame then
           GameTooltip:AddDoubleLine(T["Left Click"], "|cffffffff" .. T["Show/Hide TimeManager"])
