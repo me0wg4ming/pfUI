@@ -198,9 +198,9 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
         -- pick color for zone time based on day/night
         local zoneColor
         if zh >= 6 and zh < 18 then
-          zoneColor = "|cffffbb00"  -- yellow (day)
+          zoneColor = "|cffffbb00"  -- orange (day)
         else
-          zoneColor = "|cff0000ea"  -- dark blue (night)
+          zoneColor = "|cff0074FF"  -- blue (night)
         end
 
         -- create the tooltip
