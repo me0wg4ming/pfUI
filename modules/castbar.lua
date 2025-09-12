@@ -40,8 +40,8 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
     -- text left
     cb.bar.left = cb.bar:CreateFontString("Status", "DIALOG", "GameFontNormal")
     cb.bar.left:ClearAllPoints()
-    cb.bar.left:SetPoint("TOPLEFT", cb.bar, "TOPLEFT", 3, 0)
-    cb.bar.left:SetPoint("BOTTOMRIGHT", cb.bar, "BOTTOMRIGHT", -3, 0)
+    cb.bar.left:SetPoint("TOPLEFT", cb.bar, "TOPLEFT", 3 + C.castbar[unitstr].txtleftoffx, C.castbar[unitstr].txtleftoffy)
+    cb.bar.left:SetPoint("BOTTOMRIGHT", cb.bar, "BOTTOMRIGHT", -3 + C.castbar[unitstr].txtleftoffx, C.castbar[unitstr].txtleftoffy)
     cb.bar.left:SetNonSpaceWrap(false)
     cb.bar.left:SetFontObject(GameFontWhite)
     cb.bar.left:SetTextColor(1,1,1,1)
@@ -51,8 +51,8 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
     -- text right
     cb.bar.right = cb.bar:CreateFontString("Status", "DIALOG", "GameFontNormal")
     cb.bar.right:ClearAllPoints()
-    cb.bar.right:SetPoint("TOPLEFT", cb.bar, "TOPLEFT", 3, 0)
-    cb.bar.right:SetPoint("BOTTOMRIGHT", cb.bar, "BOTTOMRIGHT", -3, 0)
+    cb.bar.right:SetPoint("TOPLEFT", cb.bar, "TOPLEFT", 3 + C.castbar[unitstr].txtrightoffx, C.castbar[unitstr].txtrightoffy)
+    cb.bar.right:SetPoint("BOTTOMRIGHT", cb.bar, "BOTTOMRIGHT", -3 + C.castbar[unitstr].txtrightoffx, C.castbar[unitstr].txtrightoffy)
     cb.bar.right:SetNonSpaceWrap(false)
     cb.bar.right:SetFontObject(GameFontWhite)
     cb.bar.right:SetTextColor(1,1,1,1)
@@ -83,11 +83,10 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
       end
 
       local channel = nil
-      local name = this.unitstr and UnitName(this.unitstr) or this.unitname
-      local query = this.unitstr or this.unitname
-      if not name then return end
+      local query = this.unitstr ~= "" and this.unitstr or this.unitname
+      if not query then return end
 
-      -- try to read cast and guid from SuperWoW (except for self casts)
+      -- transform all non player unitstrings to unit guids
       if superwow_active and this.unitstr and not UnitIsUnit(this.unitstr, 'player') then
         local _, guid = UnitExists(this.unitstr)
         query = guid or query
@@ -214,8 +213,9 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
     pfUI.castbar.player.spacing = default_border * 2 + tonumber(C.unitframes.player.pspace) * GetPerfectPixel()
 
     if pfUI.uf.player then
-      local width = C.castbar.player.width ~= "-1" and C.castbar.player.width or pfUI.uf.player:GetWidth()
-      pfUI.castbar.player:SetPoint("TOPLEFT", pfUI.uf.player, "BOTTOMLEFT", 0, -pfUI.castbar.player.spacing)
+      local anchor = pfUI.uf.player.portrait:GetHeight() > pfUI.uf.player:GetHeight() and pfUI.uf.player.power or pfUI.uf.player
+      local width = C.castbar.player.width ~= "-1" and C.castbar.player.width or anchor:GetWidth()
+      pfUI.castbar.player:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -pfUI.castbar.player.spacing)
       pfUI.castbar.player:SetWidth(width)
     else
       local width = C.castbar.player.width ~= "-1" and C.castbar.player.width or 200
@@ -241,8 +241,9 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
     pfUI.castbar.target.spacing = default_border * 2 + tonumber(C.unitframes.target.pspace) * GetPerfectPixel()
 
     if pfUI.uf.target then
-      local width = C.castbar.target.width ~= "-1" and C.castbar.target.width or pfUI.uf.target:GetWidth()
-      pfUI.castbar.target:SetPoint("TOPLEFT", pfUI.uf.target, "BOTTOMLEFT", 0, -pfUI.castbar.target.spacing)
+      local anchor = pfUI.uf.target.portrait:GetHeight() > pfUI.uf.target:GetHeight() and pfUI.uf.target.power or pfUI.uf.target
+      local width = C.castbar.target.width ~= "-1" and C.castbar.target.width or anchor:GetWidth()
+      pfUI.castbar.target:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -pfUI.castbar.target.spacing)
       pfUI.castbar.target:SetWidth(width)
     else
       local width = C.castbar.target.width ~= "-1" and C.castbar.target.width or 200
@@ -272,28 +273,38 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
       pfUI.castbar.focus.unitstr = nil
     end
 
-    local width = C.castbar.focus.width ~= "-1" and C.castbar.focus.width or pfUI.uf.focus:GetWidth()
-    pfUI.castbar.focus:SetPoint("TOPLEFT", pfUI.uf.focus, "BOTTOMLEFT", 0, -pfUI.castbar.focus.spacing)
+    local anchor = pfUI.uf.focus.portrait:GetHeight() > pfUI.uf.focus:GetHeight() and pfUI.uf.focus.power or pfUI.uf.focus
+    local width = C.castbar.focus.width ~= "-1" and C.castbar.focus.width or anchor:GetWidth()
+    pfUI.castbar.focus:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -pfUI.castbar.focus.spacing)
     pfUI.castbar.focus:SetWidth(width)
 
     if C.castbar.focus.height ~= "-1" then
       pfUI.castbar.focus:SetHeight(C.castbar.focus.height)
     end
 
-    -- make sure the castbar is set to the same name as the focus frame is
+    -- keep unit values in sync with focus unitframe
     HookScript(pfUI.castbar.focus, "OnUpdate", function()
-      -- remove unitname when focus unit changed
-      if this.lastunit ~= pfUI.uf.focus.unitname then
-        this.lastunit = pfUI.uf.focus.unitname
+      -- clear on empty focus frames
+      if pfUI.uf.focus.unitname == nil and pfUI.uf.focus.label == nil then
+        pfUI.castbar.focus.unitstr = nil
         pfUI.castbar.focus.unitname = nil
+        return
       end
 
-      -- attach a proper unitname as soon as we get a unitstr
-      if not pfUI.castbar.focus.unitname and pfUI.uf.focus.unitname ~= "focus" and pfUI.uf.focus.label and pfUI.uf.focus.id then
-        local unitstr = string.format("%s%s", pfUI.uf.focus.label, pfUI.uf.focus.id)
-        if UnitExists(unitstr) and strlower(UnitName(unitstr)) == pfUI.uf.focus.unitname then
-          pfUI.castbar.focus.unitname = UnitName(unitstr)
-        end
+      -- skip on initial values
+      if pfUI.uf.focus.unitname == "focus" then return end
+      if pfUI.uf.focus.unitname == "" then return end
+
+      -- try to obtain a unitstr
+      pfUI.castbar.focus.unitstr = string.format("%s%s", (pfUI.uf.focus.label or ""), (pfUI.uf.focus.id or ""))
+      pfUI.castbar.focus.unitstr = pfUI.castbar.focus.unitstr == "" and nil or pfUI.castbar.focus.unitstr
+
+      if pfUI.castbar.focus.unitstr then
+        -- read non-lowercase unitname when possible
+        pfUI.castbar.focus.unitname = UnitName(pfUI.castbar.focus.unitstr) or pfUI.castbar.focus.unitname
+      elseif strlower(pfUI.castbar.focus.unitname) ~= strlower(pfUI.uf.focus.unitname) then
+        -- sync unitname with focus frame's lowercase value
+        pfUI.castbar.focus.unitname = pfUI.uf.focus.unitname
       end
     end)
 

@@ -32,8 +32,8 @@ pfUI:RegisterModule("sellvalue", "vanilla:tbc", function ()
   pfUI.sellvalue:SetScript("OnShow", function()
     if libtooltip:GetItemLink() then
       local id = libtooltip:GetItemID()
-      local count = libtooltip:GetItemCount() or 1
-      AddVendorPrices(GameTooltip, id, count)
+      local count = tonumber(libtooltip:GetItemCount()) or 1
+      AddVendorPrices(GameTooltip, id, math.max(count, 1))
     end
   end)
 

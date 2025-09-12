@@ -536,7 +536,7 @@ pfUI:RegisterModule("thirdparty-vanilla", "vanilla", function()
         local colorstr = rgbhex(RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b, RAID_CLASS_COLORS[class].a)
         _G.WIM_ClassColors[wimclass] = gsub(colorstr, "^|cff", "")
       end
-    end, true)
+    end)
 
     -- convo menu
     CreateBackdrop(WIM_Icon_ToolTip, 0, nil, tonumber(C.tooltip.alpha))
@@ -560,7 +560,7 @@ pfUI:RegisterModule("thirdparty-vanilla", "vanilla", function()
           btn:SetText(btn_txt)
         end
       end
-    end, true)
+    end)
 
     if WIM_HistoryFrame then -- history frame
       CreateBackdrop(WIM_HistoryFrame, nil, nil, .8)
@@ -1228,21 +1228,32 @@ pfUI:RegisterModule("thirdparty-vanilla", "vanilla", function()
     StripTextures(xpsp3Frame)
     CreateBackdrop(xpsp3Frame)
     CreateBackdropShadow(xpsp3Frame)
+
     StripTextures(xpsp3tooltip)
     CreateBackdrop(xpsp3tooltip)
     CreateBackdropShadow(xpsp3tooltip)
+
+    SkinCheckbox(xpsp3_checkButton_minimapButton)
     SkinCheckbox(xpsp3_checkButton_modernNameplate)
+    SkinCheckbox(xpsp3_checkButton_prioritizeTargetNameplate)
+    SkinCheckbox(xpsp3_checkButton_prioritizeMarkedNameplate)
+    SkinCheckbox(xpsp3_checkButton_nameplateCombatFilter)
+    SkinCheckbox(xpsp3_checkButton_showInCombatNameplatesNearPlayer)
     SkinCheckbox(xpsp3_checkButton_notify_flashTaskbarIcon)
     SkinCheckbox(xpsp3_checkButton_notify_playSystemDefaultSound)
+    SkinCheckbox(xpsp3_checkButton_cameraPinHeight)
 
-    local buttons = {
-      xpsp3_button_close,
-      xpsp3_button_cameraHeight_raise,
-      xpsp3_button_cameraHeight_lower,
-    }
-    for _, button in pairs(buttons) do
-      SkinButton(button)
-    end
+    SkinButton(xpsp3_button_cameraHeight_raise)
+    SkinButton(xpsp3_button_cameraHeight_lower)
+    SkinButton(xpsp3_button_cameraPitch_up)
+    SkinButton(xpsp3_button_cameraPitch_down)
+    SkinButton(xpsp3_button_cameraHorizontalDisplacement_leftPlayer)
+    SkinButton(xpsp3_button_cameraHorizontalDisplacement_rightPlayer)
+    SkinButton(xpsp3_buttonCancel_resetCamera)
+    SkinButton(xpsp3_buttonCancel_close)
+
+    StripTextures(xpsp3_editBox_FPScap, "BACKGROUND")
+    CreateBackdrop(xpsp3_editBox_FPScap)
   end)
 
 end)

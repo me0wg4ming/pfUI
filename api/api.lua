@@ -219,13 +219,15 @@ end
 local capture_cache = {}
 function pfUI.api.GetCaptures(pat)
   local r = capture_cache
+
   if not r[pat] then
     for a, b, c, d, e in gfind(gsub(pat, "%((.+)%)", "%1"), gsub(pat, "%d%$", "%%(.-)$")) do
       r[pat] = { a, b, c, d, e}
     end
+
+    r[pat] = r[pat] or {}
   end
 
-  if not r[pat] then return nil, nil, nil, nil end
   return r[pat][1], r[pat][2], r[pat][3], r[pat][4], r[pat][5]
 end
 
@@ -713,6 +715,7 @@ end
 -- 'position'   [string]    where it should appear, takes the following:
 --                          "TOP", "RIGHT", "BOTTOM", "LEFT"
 function pfUI.api.AlignToPosition(frame, anchor, position, spacing)
+  if frame == anchor then return end
   frame:ClearAllPoints()
   if position == "TOP" and anchor then
     frame:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, (spacing or 0))
@@ -1046,8 +1049,8 @@ function pfUI.api.CreateBackdrop(f, inset, legacy, transp, backdropSetting)
 
     if blizz then
       if not f.backdrop_border then
-        local border = CreateFrame("Frame", nil, f)
-        border:SetFrameLevel(level + 1)
+        local border = CreateFrame("Frame", nil, f.backdrop)
+        border:SetFrameLevel(level + 2)
         f.backdrop_border = border
 
         local hookSetBackdropBorderColor = f.backdrop.SetBackdropBorderColor
@@ -1079,10 +1082,10 @@ function pfUI.api.CreateBackdropShadow(f)
   f.backdrop_shadow = CreateFrame("Frame", nil, anchor)
   f.backdrop_shadow:SetFrameStrata("BACKGROUND")
   f.backdrop_shadow:SetFrameLevel(1)
-  f.backdrop_shadow:SetPoint("TOPLEFT", anchor, "TOPLEFT", -7, 7)
-  f.backdrop_shadow:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 7, -7)
+  f.backdrop_shadow:SetPoint("TOPLEFT", anchor, "TOPLEFT", -5, 5)
+  f.backdrop_shadow:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 5, -5)
   f.backdrop_shadow:SetBackdrop(pfUI.backdrop_shadow)
-  f.backdrop_shadow:SetBackdropBorderColor(0,0,0,tonumber(pfUI_config.appearance.border.shadow_intensity))
+  f.backdrop_shadow:SetBackdropBorderColor(0, 0, 0, tonumber(pfUI_config.appearance.border.shadow_intensity))
 end
 
 -- [ Bar Layout Options ] --

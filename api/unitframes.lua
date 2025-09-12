@@ -414,6 +414,7 @@ function pfUI.uf:UpdateFrameSize()
       -- use custom portrait size
       self.portrait:SetWidth(ptwidth)
       self.portrait:SetHeight(ptheight)
+      portrait = ptwidth + spacing + 2*default_border
     end
   end
 
@@ -481,13 +482,13 @@ function pfUI.uf:UpdateConfig()
   local custombgcolor = f.config.defcolor == "0" and f.config.custombgcolor or C.unitframes.custombgcolor
 
   if custombg == "1" then
-    local cr, cg, cb, ca = pfUI.api.strsplit(",", custombgcolor)
+    local cr, cg, cb, ca = GetStringColor(custombgcolor)
     cr, cg, cb, ca = tonumber(cr), tonumber(cg), tonumber(cb), tonumber(ca)
     f.hp.bar:SetStatusBarBackgroundTexture(cr,cg,cb,ca)
   end
 
   f.power:ClearAllPoints()
-  f.power:SetPoint(f.config.panchor, f.hp, relative_point, f.config.poffx, -2*default_border - f.config.pspace + f.config.poffy * GetPerfectPixel())
+  f.power:SetPoint(f.config.panchor, f.hp, relative_point, f.config.poffx, -2 * default_border - spacing + f.config.poffy * GetPerfectPixel())
   f.power:SetWidth((f.config.pwidth ~= "-1" and f.config.pwidth or f.config.width))
   f.power:SetHeight(f.config.pheight)
   if tonumber(f.config.pheight) < 0 then f.power:Hide() end
@@ -500,7 +501,7 @@ function pfUI.uf:UpdateConfig()
   local custompbgcolor = f.config.defcolor == "0" and f.config.custompbgcolor or C.unitframes.custompbgcolor
 
   if custompbg == "1" then
-    local cr, cg, cb, ca = pfUI.api.strsplit(",", custompbgcolor)
+    local cr, cg, cb, ca = GetStringColor(custompbgcolor)
     cr, cg, cb, ca = tonumber(cr), tonumber(cg), tonumber(cb), tonumber(ca)
     f.power.bar:SetStatusBarBackgroundTexture(cr,cg,cb,ca)
   end
@@ -534,11 +535,7 @@ function pfUI.uf:UpdateConfig()
   elseif f.config.portrait == "left" then
     f.portrait:SetParent(f)
     f.portrait:ClearAllPoints()
-    if f.config.portraitwidth == "-1" and f.config.portraitheight == "-1" then
-      f.portrait:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    else
-      f.portrait:SetPoint("LEFT", f, "LEFT", -f.config.portraitwidth - 2*default_border - spacing, 0)
-    end
+    f.portrait:SetPoint("LEFT", f, "LEFT", 0, 0)
 
     f.hp:ClearAllPoints()
     f.hp:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
@@ -556,11 +553,7 @@ function pfUI.uf:UpdateConfig()
   elseif f.config.portrait == "right" then
     f.portrait:SetParent(f)
     f.portrait:ClearAllPoints()
-    if f.config.portraitwidth == "-1" and f.config.portraitheight == "-1" then
-      f.portrait:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
-    else
-      f.portrait:SetPoint("RIGHT", f, "RIGHT", f.config.portraitwidth + 2*default_border + spacing, 0)
-    end
+    f.portrait:SetPoint("RIGHT", f, "RIGHT", 0, 0)
 
     f.hp:ClearAllPoints()
     f.hp:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
@@ -579,12 +572,25 @@ function pfUI.uf:UpdateConfig()
     f.portrait:Hide()
   end
 
+  if f.group then
+    if f.config.raidgrouplabel == "1" then
+      f.group:Show()
+    else
+      f.group:Hide()
+    end
+
+    local xoff = tonumber(f.config.grouplabelxoff) or 0
+    local yoff = tonumber(f.config.grouplabelyoff) or 8
+    f.group:SetPoint("TOPLEFT", f, "BOTTOMLEFT", xoff, yoff)
+    f.group:SetPoint("TOPRIGHT", f, "BOTTOMRIGHT", xoff, yoff)
+  end
+
   if f.config.hitindicator == "1" then
     f.feedbackText:SetFont(pfUI.media[f.config.hitindicatorfont], f.config.hitindicatorsize, "OUTLINE")
     f.feedbackFontHeight = f.config.hitindicatorsize
     f.feedbackStartTime = GetTime()
     if f.config.portrait == "bar" or f.config.portrait == "off" then
-      f.feedbackText:SetParent(f.hp.bar)
+      f.feedbackText:SetParent(f.texts)
       f.feedbackText:ClearAllPoints()
       f.feedbackText:SetPoint("CENTER", f.hp.bar, "CENTER")
     else
@@ -601,7 +607,6 @@ function pfUI.uf:UpdateConfig()
   f.hpLeftText:SetFontObject(GameFontWhite)
   f.hpLeftText:SetFont(fontname, fontsize, fontstyle)
   f.hpLeftText:SetJustifyH("LEFT")
-  f.hpLeftText:SetParent(f.hp.bar)
   f.hpLeftText:ClearAllPoints()
   f.hpLeftText:SetPoint("TOPLEFT",f.hp.bar, "TOPLEFT", 2*(default_border + f.config.txthpleftoffx), 1 + tonumber(f.config.txthpleftoffy))
   f.hpLeftText:SetPoint("BOTTOMRIGHT",f.hp.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txthpleftoffx), f.config.txthpleftoffy)
@@ -609,7 +614,6 @@ function pfUI.uf:UpdateConfig()
   f.hpRightText:SetFontObject(GameFontWhite)
   f.hpRightText:SetFont(fontname, fontsize, fontstyle)
   f.hpRightText:SetJustifyH("RIGHT")
-  f.hpRightText:SetParent(f.hp.bar)
   f.hpRightText:ClearAllPoints()
   f.hpRightText:SetPoint("TOPLEFT",f.hp.bar, "TOPLEFT", 2*(default_border + f.config.txthprightoffx), 1 + tonumber(f.config.txthprightoffy))
   f.hpRightText:SetPoint("BOTTOMRIGHT",f.hp.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txthprightoffx), f.config.txthprightoffy)
@@ -617,15 +621,13 @@ function pfUI.uf:UpdateConfig()
   f.hpCenterText:SetFontObject(GameFontWhite)
   f.hpCenterText:SetFont(fontname, fontsize, fontstyle)
   f.hpCenterText:SetJustifyH("CENTER")
-  f.hpCenterText:SetParent(f.hp.bar)
   f.hpCenterText:ClearAllPoints()
-  f.hpCenterText:SetPoint("TOPLEFT",f.hp.bar, "TOPLEFT", 2*(default_border + f.config.txthpcenteroffx), 1 + tonumber(f.config.txthpcenteroffy))
-  f.hpCenterText:SetPoint("BOTTOMRIGHT",f.hp.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txthpcenteroffx), f.config.txthpcenteroffy)
+  f.hpCenterText:SetPoint("TOPLEFT",f.hp.bar, "TOPLEFT", f.config.txthpcenteroffx, 1 + tonumber(f.config.txthpcenteroffy))
+  f.hpCenterText:SetPoint("BOTTOMRIGHT",f.hp.bar, "BOTTOMRIGHT", f.config.txthpcenteroffx, f.config.txthpcenteroffy)
 
   f.powerLeftText:SetFontObject(GameFontWhite)
   f.powerLeftText:SetFont(fontname, fontsize, fontstyle)
   f.powerLeftText:SetJustifyH("LEFT")
-  f.powerLeftText:SetParent(f.power.bar)
   f.powerLeftText:ClearAllPoints()
   f.powerLeftText:SetPoint("TOPLEFT",f.power.bar, "TOPLEFT", 2*(default_border + f.config.txtpowerleftoffx), 1 + tonumber(f.config.txtpowerleftoffy))
   f.powerLeftText:SetPoint("BOTTOMRIGHT",f.power.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txtpowerleftoffx), f.config.txtpowerleftoffy)
@@ -633,7 +635,6 @@ function pfUI.uf:UpdateConfig()
   f.powerRightText:SetFontObject(GameFontWhite)
   f.powerRightText:SetFont(fontname, fontsize, fontstyle)
   f.powerRightText:SetJustifyH("RIGHT")
-  f.powerRightText:SetParent(f.power.bar)
   f.powerRightText:ClearAllPoints()
   f.powerRightText:SetPoint("TOPLEFT",f.power.bar, "TOPLEFT", 2*(default_border + f.config.txtpowerrightoffx), 1 + tonumber(f.config.txtpowerrightoffy))
   f.powerRightText:SetPoint("BOTTOMRIGHT",f.power.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txtpowerrightoffx), f.config.txtpowerrightoffy)
@@ -641,15 +642,14 @@ function pfUI.uf:UpdateConfig()
   f.powerCenterText:SetFontObject(GameFontWhite)
   f.powerCenterText:SetFont(fontname, fontsize, fontstyle)
   f.powerCenterText:SetJustifyH("CENTER")
-  f.powerCenterText:SetParent(f.power.bar)
   f.powerCenterText:ClearAllPoints()
-  f.powerCenterText:SetPoint("TOPLEFT",f.power.bar, "TOPLEFT", 2*(default_border + f.config.txtpowercenteroffx) + f.config.poffx, 1 + tonumber(f.config.txtpowercenteroffy))
-  f.powerCenterText:SetPoint("BOTTOMRIGHT",f.power.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txtpowercenteroffx) + f.config.poffx, f.config.txtpowercenteroffy)
+  f.powerCenterText:SetPoint("TOPLEFT",f.power.bar, "TOPLEFT", f.config.txtpowercenteroffx, 1 + tonumber(f.config.txtpowercenteroffy))
+  f.powerCenterText:SetPoint("BOTTOMRIGHT",f.power.bar, "BOTTOMRIGHT", f.config.txtpowercenteroffx, f.config.txtpowercenteroffy)
 
   f.incHeal:SetHeight(f.config.height)
   f.incHeal:SetWidth(f.config.width)
   f.incHeal.texture:SetTexture(pfUI.media["img:bar"])
-  local cr, cg, cb, ca = pfUI.api.strsplit(",", f.config.healcolor)
+  local cr, cg, cb, ca = GetStringColor(f.config.healcolor)
   cr, cg, cb, ca = tonumber(cr), tonumber(cg), tonumber(cb), tonumber(ca)
   f.incHeal.texture:SetVertexColor(cr, cg, cb, ca)
   f.incHeal:Hide()
@@ -684,9 +684,9 @@ function pfUI.uf:UpdateConfig()
   f.lootIcon.texture:SetAllPoints(f.lootIcon)
   f.lootIcon:Hide()
 
-  f.pvpIcon:SetWidth(16)
-  f.pvpIcon:SetHeight(16)
-  f.pvpIcon:SetPoint("CENTER", 0, 0)
+  f.pvpIcon:SetWidth(f.config.pvpiconsize)
+  f.pvpIcon:SetHeight(f.config.pvpiconsize)
+  f.pvpIcon:SetPoint(f.config.pvpiconalign, f, f.config.pvpiconalign, f.config.pvpiconoffx, f.config.pvpiconoffy)
   f.pvpIcon.texture:SetTexture(pfUI.media["img:pvp"])
   f.pvpIcon.texture:SetAllPoints(f.pvpIcon)
   f.pvpIcon.texture:SetVertexColor(1,1,1,.5)
@@ -694,7 +694,7 @@ function pfUI.uf:UpdateConfig()
 
   f.raidIcon:SetWidth(f.config.raidiconsize)
   f.raidIcon:SetHeight(f.config.raidiconsize)
-  f.raidIcon:SetPoint("TOP", f, "TOP", 0, 6)
+  f.raidIcon:SetPoint("CENTER", f, f.config.raidiconalign, f.config.raidiconoffx, f.config.raidiconoffy)
   f.raidIcon.texture:SetTexture(pfUI.media["img:raidicons"])
   f.raidIcon.texture:SetAllPoints(f.raidIcon)
   f.raidIcon:Hide()
@@ -751,6 +751,7 @@ function pfUI.uf:UpdateConfig()
       f.buffs[i].id = i
       f.buffs[i]:Hide()
 
+      f.buffs[i]:SetFrameLevel(12)
       CreateBackdrop(f.buffs[i], default_border)
 
       f.buffs[i]:RegisterForClicks("RightButtonUp")
@@ -775,9 +776,14 @@ function pfUI.uf:UpdateConfig()
         af = "TOPRIGHT"
       end
 
-      f.buffs[i]:SetPoint(af, f, f.config.buffs,
-      invert_v * (i-1-row*perrow)*(2*default_border + f.config.buffsize + 1),
-      invert_h * (row*(2*default_border + f.config.buffsize + 1) + (2*default_border + 1)))
+      local anchor = f.config.portraitheight ~= "-1" and f.hp or f
+      if anchor == f.hp and (f.config.buffs == "BOTTOMLEFT" or f.config.buffs == "BOTTOMRIGHT") then
+        anchor = f.power
+      end
+      local multiply = C.appearance.border.force_blizz == "1" and 1 or 2
+      f.buffs[i]:SetPoint(af, anchor, f.config.buffs,
+      invert_v * (i-1-row*perrow)*(multiply*default_border + f.config.buffsize + 1),
+      invert_h * (row*(multiply*default_border + f.config.buffsize + 1) + (multiply*default_border + 1)))
 
       f.buffs[i]:SetWidth(f.config.buffsize)
       f.buffs[i]:SetHeight(f.config.buffsize)
@@ -826,6 +832,7 @@ function pfUI.uf:UpdateConfig()
       f.debuffs[i].id = i
       f.debuffs[i]:Hide()
 
+      f.debuffs[i]:SetFrameLevel(12)
       CreateBackdrop(f.debuffs[i], default_border)
 
       f.debuffs[i]:RegisterForClicks("RightButtonUp")
@@ -856,8 +863,8 @@ function pfUI.uf:UpdateConfig()
 end
 
 function pfUI.uf.OnShow()
-  pfUI.uf:RefreshUnit(this)
   pfUI.uf:RefreshUnit(this, "portrait")
+  pfUI.uf:RefreshUnit(this, "base")
 end
 
 function pfUI.uf.OnEvent()
@@ -927,6 +934,7 @@ function pfUI.uf.OnUpdate()
 
     -- clear update caches
     this.update_full = nil
+    this.update_base = nil
     this.update_aura = nil
     this.update_portrait = nil
     this.update_pvp = nil
@@ -935,16 +943,24 @@ function pfUI.uf.OnUpdate()
     if this.update_aura then
       pfUI.uf:RefreshUnit(this, "aura")
       this.update_aura = nil
+      this.update_base = true
     end
 
     if this.update_portrait then
       pfUI.uf:RefreshUnit(this, "portrait")
       this.update_portrait = nil
+      this.update_base = true
     end
 
     if this.update_pvp then
       pfUI.uf:RefreshUnit(this, "pvp")
       this.update_pvp = nil
+      this.update_base = true
+    end
+
+    if this.update_base then
+      pfUI.uf:RefreshUnit(this, "base")
+      this.update_base = nil
     end
   end
 
@@ -1263,12 +1279,16 @@ function pfUI.uf:CreateUnitFrame(unit, id, config, tick)
   f.combat.tex = f.combat:CreateTexture(nil, "OVERLAY")
   f.combat.tex:SetAllPoints()
 
-  f.hpLeftText = f:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
-  f.hpRightText = f:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
-  f.hpCenterText = f:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
-  f.powerLeftText = f:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
-  f.powerRightText = f:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
-  f.powerCenterText = f:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
+  f.texts = CreateFrame("Frame", nil, f)
+  f.texts:SetFrameLevel(16)
+  f.texts:SetAllPoints()
+
+  f.hpLeftText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
+  f.hpRightText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
+  f.hpCenterText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
+  f.powerLeftText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
+  f.powerRightText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
+  f.powerCenterText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
 
   f.incHeal = CreateFrame("Frame", nil, f.hp)
   f.incHeal.texture = f.incHeal:CreateTexture(nil, "BACKGROUND")
@@ -1300,6 +1320,16 @@ function pfUI.uf:CreateUnitFrame(unit, id, config, tick)
   f.portrait.model = CreateFrame("PlayerModel", "pfPortraitModel" .. f.label .. f.id, f.portrait)
   f.portrait.model.next = CreateFrame("PlayerModel", nil, nil)
   f.feedbackText = f:CreateFontString("pfHitIndicator" .. f.label .. f.id, "OVERLAY", "NumberFontNormalHuge")
+
+  if f.label == "raid" and mod(f.id, 5) == 1 then
+    local group = math.ceil(f.id/5)
+    f.group = f.group or f.hp.bar:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
+    f.group:SetFont(pfUI.font_unit, 8, "OUTLINE")
+    f.group:SetTextColor(1,1,1,.8)
+    f.group:SetHeight(16)
+    f.group:SetText("Group " .. group)
+    f.group:Hide()
+  end
 
   f:Hide()
   f:UpdateConfig()
@@ -1478,7 +1508,7 @@ function pfUI.uf:RefreshUnit(unit, component)
   -- save current values
   unit.namecache = UnitName(unitstr)
 
-  -- Buffs
+  -- buffs
   if unit.buffs and ( component == "all" or component == "aura" ) then
     local texture, stacks
 
@@ -1508,11 +1538,12 @@ function pfUI.uf:RefreshUnit(unit, component)
     end
   end
 
-  -- Debuffs
+  -- debuffs
   if unit.debuffs and ( component == "all" or component == "aura" ) then
     local texture, stacks, dtype
     local perrow = unit.config.debuffperrow
     local bperrow = unit.config.buffperrow
+    local selfdebuff = unit.config.selfdebuff
 
     local invert_h, invert_v, af
     if unit.config.debuffs == "TOPLEFT" then
@@ -1552,15 +1583,22 @@ function pfUI.uf:RefreshUnit(unit, component)
       local row = floor((i-1) / unit.config.debuffperrow)
 
       if reposition then
-        unit.debuffs[i]:SetPoint(af, unit, unit.config.debuffs,
-        invert_v * (i-1-row*perrow)*(2*default_border + unit.config.debuffsize + 1),
-        invert_h * ((row+buffrow)*(2*default_border + unit.config.debuffsize + 1) + (2*default_border + 1)))
+        local anchor = unit.config.portraitheight ~= "-1" and unit.hp or unit
+        if anchor == unit.hp and (unit.config.debuffs == "BOTTOMLEFT" or unit.config.debuffs == "BOTTOMRIGHT") then
+          anchor = unit.power
+        end
+        local multiply = C.appearance.border.force_blizz == "1" and 1 or 2
+        unit.debuffs[i]:SetPoint(af, anchor, unit.config.debuffs,
+        invert_v * (i-1-row*perrow)*(multiply*default_border + unit.config.debuffsize + 1),
+        invert_h * ((row+buffrow)*(multiply*default_border + unit.config.debuffsize + 1) + (multiply*default_border + 1)))
       end
 
       if unit.label == "player" then
         texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HARMFUL"))
         stacks = GetPlayerBuffApplications(GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HARMFUL"))
         dtype = GetPlayerBuffDispelType(GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HARMFUL"))
+      elseif selfdebuff == "1" then
+        _, _, texture, stacks, dtype = libdebuff:UnitOwnDebuff(unitstr, i)
       else
         texture, stacks, dtype = UnitDebuff(unitstr, i)
       end
@@ -1579,8 +1617,13 @@ function pfUI.uf:RefreshUnit(unit, component)
         if unit:GetName() == "pfPlayer" then
           local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+unit.debuffs[i].id, "HARMFUL"),"HARMFUL")
           CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime(), timeleft, 1)
+        elseif libdebuff and selfdebuff == "1" then
+          local name, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitOwnDebuff(unitstr, i)
+          if duration and timeleft then
+            CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime() + timeleft - duration, duration, 1)
+          end
         elseif libdebuff then
-          local name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
+          local name, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitDebuff(unitstr, i)
           if duration and timeleft then
             CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime() + timeleft - duration, duration, 1)
           end
@@ -1598,7 +1641,7 @@ function pfUI.uf:RefreshUnit(unit, component)
   end
 
   -- indicators
-  if component == "all" or ( component == "all" or component == "aura" ) then
+  if component == "all" or component == "aura" then
     if not unit.dispellable and unit.config.debuff_indicator ~= "0" then
       unit.dispellable = pfUI.uf:SetupDebuffFilter((unit.config.debuff_ind_class == "0" and true or nil))
     elseif not unit.dispellable then
@@ -1744,17 +1787,17 @@ function pfUI.uf:RefreshUnit(unit, component)
             if filter == string.lower(texture) then
               if string.lower(texture) == "interface\\icons\\spell_nature_rejuvenation" then
                 local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Reju")
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count)
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
                 pos = pos + 1
                 break
               elseif string.lower(texture) == "interface\\icons\\spell_holy_renew" then
                 local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Renew")
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count)
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
                 pos = pos + 1
                 break
               elseif string.lower(texture) == "interface\\icons\\spell_nature_resistnature" then
                 local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Regr")
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count)
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
                 pos = pos + 1
                 break
               else
@@ -1865,110 +1908,114 @@ function pfUI.uf:RefreshUnit(unit, component)
     end
   end
 
-  -- Unit HP/MP
-  local hp, hpmax = UnitHealth(unitstr), UnitHealthMax(unitstr)
-  local power, powermax = UnitMana(unitstr), UnitManaMax(unitstr)
+  -- base frame
+  if component == "all" or component == "base" then
+    -- Unit HP/MP
+    local hp, hpmax = UnitHealth(unitstr), UnitHealthMax(unitstr)
+    local power, powermax = UnitMana(unitstr), UnitManaMax(unitstr)
 
-  if unit.config.invert_healthbar == "1" then
-    hp = hpmax - hp
-  end
+    if unit.config.invert_healthbar == "1" then
+      hp = hpmax - hp
+    end
 
-  unit.hp.bar:SetMinMaxValues(0, hpmax, true)
-  unit.hp.bar:SetValue(hp)
+    unit.hp.bar:SetMinMaxValues(0, hpmax, true)
+    unit.hp.bar:SetValue(hp)
 
-  unit.power.bar:SetMinMaxValues(0, powermax, true)
-  unit.power.bar:SetValue(power)
+    unit.power.bar:SetMinMaxValues(0, powermax, true)
+    unit.power.bar:SetValue(power)
 
-  -- set healthbar color
-  local custom_active = nil
-  local customfullhp = unit.config.defcolor == "0" and unit.config.customfullhp or C.unitframes.customfullhp
-  local customcolor = unit.config.defcolor == "0" and unit.config.customcolor or C.unitframes.customcolor
-  local customfade = unit.config.defcolor == "0" and unit.config.customfade or C.unitframes.customfade
-  local custom = unit.config.defcolor == "0" and unit.config.custom or C.unitframes.custom
+    -- set healthbar color
+    local custom_active = nil
+    local customfullhp = unit.config.defcolor == "0" and unit.config.customfullhp or C.unitframes.customfullhp
+    local customcolor = unit.config.defcolor == "0" and unit.config.customcolor or C.unitframes.customcolor
+    local customfade = unit.config.defcolor == "0" and unit.config.customfade or C.unitframes.customfade
+    local custom = unit.config.defcolor == "0" and unit.config.custom or C.unitframes.custom
 
-  local r, g, b, a = .2, .2, .2, 1
-  if customfullhp == "1" and UnitHealth(unitstr) == UnitHealthMax(unitstr) then
-    r, g, b, a = pfUI.api.strsplit(",", customcolor)
-    custom_active = true
-  elseif custom == "0" then
-    if UnitIsPlayer(unitstr) then
-      local _, class = UnitClass(unitstr)
-      local color = RAID_CLASS_COLORS[class]
-      if color then r, g, b = color.r, color.g, color.b end
-    elseif unit.label == "pet" then
-      local happiness = GetPetHappiness()
-      if happiness == 1 then
-        r, g, b = 1, 0, 0
-      elseif happiness == 2 then
-        r, g, b = 1, 1, 0
+    local r, g, b, a = .2, .2, .2, 1
+    if customfullhp == "1" and UnitHealth(unitstr) == UnitHealthMax(unitstr) then
+      r, g, b, a = GetStringColor(customcolor)
+      custom_active = true
+    elseif custom == "0" then
+      if UnitIsPlayer(unitstr) then
+        local _, class = UnitClass(unitstr)
+        local color = RAID_CLASS_COLORS[class]
+        if color then r, g, b = color.r, color.g, color.b end
+      elseif unit.label == "pet" then
+        local happiness = GetPetHappiness()
+        if happiness == 1 then
+          r, g, b = 1, 0, 0
+        elseif happiness == 2 then
+          r, g, b = 1, 1, 0
+        else
+          r, g, b = 0, 1, 0
+        end
       else
-        r, g, b = 0, 1, 0
+        local color = UnitReactionColor[UnitReaction(unitstr, "player")]
+        if color then r, g, b = color.r, color.g, color.b end
       end
-    else
-      local color = UnitReactionColor[UnitReaction(unitstr, "player")]
-      if color then r, g, b = color.r, color.g, color.b end
+    elseif custom == "1"  then
+      r, g, b, a = GetStringColor(customcolor)
+      custom_active = true
+    elseif custom == "2" then
+      if UnitHealthMax(unitstr) > 0 then
+        r, g, b = GetColorGradient(UnitHealth(unitstr) / UnitHealthMax(unitstr))
+      else
+        r, g, b = 0, 0, 0
+      end
     end
-  elseif custom == "1"  then
-    r, g, b, a = pfUI.api.strsplit(",", customcolor)
-    custom_active = true
-  elseif custom == "2" then
-    if UnitHealthMax(unitstr) > 0 then
-      r, g, b = GetColorGradient(UnitHealth(unitstr) / UnitHealthMax(unitstr))
-    else
-      r, g, b = 0, 0, 0
+
+    if C.unitframes.pastel == "1" and not custom_active then
+      r, g, b = (r + .5) * .5, (g + .5) * .5, (b + .5) * .5
     end
-  end
 
-  if C.unitframes.pastel == "1" and not custom_active then
-    r, g, b = (r + .5) * .5, (g + .5) * .5, (b + .5) * .5
-  end
+    if customfade == "1" then
+      -- fade custom color into default color
+      local perc = UnitHealth(unitstr) / UnitHealthMax(unitstr)
+      local cr, cg, cb, ca = GetStringColor(customcolor)
 
-  if customfade == "1" then
-    -- fade custom color into default color
-    local perc = UnitHealth(unitstr) / UnitHealthMax(unitstr)
-    local cr, cg, cb, ca = pfUI.api.strsplit(",", customcolor)
-
-    r = (cr*perc) + (r*(1-perc))
-    g = (cg*perc) + (g*(1-perc))
-    b = (cb*perc) + (b*(1-perc))
-  end
-
-  unit.hp.bar:SetStatusBarColor(r, g, b, a)
-
-  -- set powerbar color
-  local mana = unit.config.defcolor == "0" and unit.config.manacolor or C.unitframes.manacolor
-  local rage = unit.config.defcolor == "0" and unit.config.ragecolor or C.unitframes.ragecolor
-  local energy = unit.config.defcolor == "0" and unit.config.energycolor or C.unitframes.energycolor
-  local focus = unit.config.defcolor == "0" and unit.config.focuscolor or C.unitframes.focuscolor
-
-  local r, g, b, a = .5, .5, .5, 1
-  local utype = UnitPowerType(unitstr)
-  if utype == 0 then
-    r, g, b, a = pfUI.api.strsplit(",", mana)
-  elseif utype == 1 then
-    r, g, b, a = pfUI.api.strsplit(",", rage)
-  elseif utype == 2 then
-    r, g, b, a = pfUI.api.strsplit(",", focus)
-  elseif utype == 3 then
-    r, g, b, a = pfUI.api.strsplit(",", energy)
-  end
-  unit.power.bar:SetStatusBarColor(r, g, b, a)
-
-  if UnitName(unitstr) then
-    unit.hpLeftText:SetText(pfUI.uf:GetStatusValue(unit, "hpleft"))
-    unit.hpCenterText:SetText(pfUI.uf:GetStatusValue(unit, "hpcenter"))
-    unit.hpRightText:SetText(pfUI.uf:GetStatusValue(unit, "hpright"))
-
-    unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
-    unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
-    unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
-
-    if UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
-      unit.hp.bar:SetStatusBarColor(.5,.5,.5,.5)
+      r = (cr*perc) + (r*(1-perc))
+      g = (cg*perc) + (g*(1-perc))
+      b = (cb*perc) + (b*(1-perc))
     end
-  end
 
-  pfUI.uf:RefreshUnitState(unit)
+    unit.hp.bar:SetStatusBarColor(r, g, b, a)
+
+    -- set powerbar color
+    local mana = unit.config.defcolor == "0" and unit.config.manacolor or C.unitframes.manacolor
+    local rage = unit.config.defcolor == "0" and unit.config.ragecolor or C.unitframes.ragecolor
+    local energy = unit.config.defcolor == "0" and unit.config.energycolor or C.unitframes.energycolor
+    local focus = unit.config.defcolor == "0" and unit.config.focuscolor or C.unitframes.focuscolor
+
+    local r, g, b, a = .5, .5, .5, 1
+    local utype = UnitPowerType(unitstr)
+    if utype == 0 then
+      r, g, b, a = GetStringColor(mana)
+    elseif utype == 1 then
+      r, g, b, a = GetStringColor(rage)
+    elseif utype == 2 then
+      r, g, b, a = GetStringColor(focus)
+    elseif utype == 3 then
+      r, g, b, a = GetStringColor(energy)
+    end
+
+    unit.power.bar:SetStatusBarColor(r, g, b, a)
+
+    if UnitName(unitstr) then
+      unit.hpLeftText:SetText(pfUI.uf:GetStatusValue(unit, "hpleft"))
+      unit.hpCenterText:SetText(pfUI.uf:GetStatusValue(unit, "hpcenter"))
+      unit.hpRightText:SetText(pfUI.uf:GetStatusValue(unit, "hpright"))
+
+      unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
+      unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
+      unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
+
+      if UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
+        unit.hp.bar:SetStatusBarColor(.5,.5,.5,.5)
+      end
+    end
+
+    pfUI.uf:RefreshUnitState(unit)
+  end
 end
 
 local buttons = {
@@ -2056,16 +2103,23 @@ function pfUI.uf:ClickAction(button)
       showmenu = nil
     else
       -- run click cast action
-      local tswitch = UnitIsUnit(unitstr, "target")
-      TargetUnit(unitstr)
+      local is_macro = string.find(this.clickactions[modstring], "^%/(.+)")
 
-      if string.find(this.clickactions[modstring], "^%/(.+)") then
-        RunMacroText(this.clickactions[modstring])
+      if superwow_active and not is_macro then
+        CastSpellByName(this.clickactions[modstring], unitstr)
       else
-        CastSpellByName(this.clickactions[modstring])
+        local tswitch = UnitIsUnit(unitstr, "target")
+        TargetUnit(unitstr)
+
+        if is_macro then
+          RunMacroText(this.clickactions[modstring])
+        else
+          CastSpellByName(this.clickactions[modstring])
+        end
+
+        if not tswitch then TargetLastTarget() end
       end
 
-      if not tswitch then TargetLastTarget() end
       return
     end
   end
@@ -2089,7 +2143,7 @@ function pfUI.uf:ClickAction(button)
   TargetUnit(unitstr)
 end
 
-function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks)
+function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks, start, duration)
   local showtime = frame.config.indicator_time == "1" and true or nil
   local showstacks = frame.config.indicator_stacks == "1" and true or nil
   local position = frame.config.indicator_pos or "TOPLEFT"
@@ -2103,7 +2157,7 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks)
   frame.icon = frame.icon or CreateFrame("Frame", nil, frame)
 
   if not frame.icon[pos] then
-    frame.icon[pos] = CreateFrame("Frame", frame.icon)
+    frame.icon[pos] = CreateFrame("Frame", nil, frame.icon)
     frame.icon[pos]:SetParent(frame)
     frame.icon[pos].tex = frame.icon[pos]:CreateTexture("OVERLAY")
     frame.icon[pos].tex:SetAllPoints(frame.icon[pos])
@@ -2115,7 +2169,7 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks)
     frame.icon[pos].cd = CreateFrame(COOLDOWN_FRAME_TYPE, nil, frame.icon[pos])
     frame.icon[pos].cd.pfCooldownStyleAnimation = 0
     frame.icon[pos].cd.pfCooldownType = "ALL"
-    frame.icon[pos].cd:SetAlpha(0)
+    frame.icon[pos].cd:SetFrameLevel(48)
   end
 
   -- update icon configuration
@@ -2135,7 +2189,9 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks)
   end
 
   -- show remaining time if config is set
-  if showtime and timeleft and timeleft < 100 and iconsize > 9 then
+  if showtime and start and duration and timeleft < 100 and iconsize > 9 then
+    CooldownFrame_SetTimer(frame.icon[pos].cd, start, duration, 1)
+  elseif showtime and timeleft and timeleft < 100 and iconsize > 9 then
     CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), timeleft, 1)
   else
     CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), 0, 1)
@@ -2489,7 +2545,7 @@ function pfUI.uf:GetStatusValue(unit, pos)
   elseif config == "namehealthbreak" then
     local health = ceil(rhp - rhpmax)
     if UnitIsDead(unitstr) then
-      return unit:GetColor("health") .. DEAD
+      return unit:GetColor("unit") .. pfUI.uf:GetNameString(unitstr) .. "\n" .. unit:GetColor("health") .. DEAD
     elseif health == 0 then
       return unit:GetColor("unit") .. pfUI.uf:GetNameString(unitstr)
     else
@@ -2584,18 +2640,14 @@ function pfUI.uf.GetColor(self, preset)
     r = ManaBarColor[UnitPowerType(unitstr)].r
     g = ManaBarColor[UnitPowerType(unitstr)].g
     b = ManaBarColor[UnitPowerType(unitstr)].b
-
   elseif preset == "level" and config["levelcolor"] == "1" then
     r = GetDifficultyColor(UnitLevel(unitstr)).r
     g = GetDifficultyColor(UnitLevel(unitstr)).g
     b = GetDifficultyColor(UnitLevel(unitstr)).b
   end
 
-  -- pastel
   if C.unitframes.pastel == "1" then
-    r = ( r + .75 ) * .5
-    g = ( g + .75 ) * .5
-    b = ( b + .75 ) * .5
+    r, g, b = (r + .75) * .5, (g + .75) * .5, (b + .75) * .5
   end
 
   return rgbhex(r,g,b)

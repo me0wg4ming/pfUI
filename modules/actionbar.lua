@@ -386,11 +386,8 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
     self.spellslot = nil
     self.booktype = nil
     if macro then
-      local name, body, _
-      for slot = 1, 36 do
-        name, _, body = GetMacroInfo(slot)
-        if name == macro then break end
-      end
+      local slot = GetMacroIndexByName(macro)
+      local name, _, body = GetMacroInfo(slot)
 
       if name and body then
         local match
@@ -1404,6 +1401,24 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
       bars[i]:SetPoint("BOTTOM", bars[6], "TOP", 0, 3*border)
     elseif i == 12 then -- pet
       bars[i]:SetPoint("BOTTOM", bars[6], "TOP", 0, 3*border)
+
+      -- make stance bar dodge by default
+      bars[i]:SetScript("OnShow", function()
+        if bars[11] and bars[11]:IsShown() then
+          bars[11]:ClearAllPoints()
+          bars[11]:SetPoint("BOTTOM", bars[12], "TOP", 0, 3*border)
+          UpdateMovable(bars[11], true)
+        end
+      end)
+
+      -- restore old stance bar position
+      bars[i]:SetScript("OnHide", function()
+        if bars[11] and bars[11]:IsShown() then
+          bars[11]:ClearAllPoints()
+          bars[11]:SetPoint("BOTTOM", bars[6], "TOP", 0, 3*border)
+          UpdateMovable(bars[11], true)
+        end
+      end)
     else -- others
       bars[i]:SetPoint("TOP", 0, -i*50)
     end
@@ -1415,48 +1430,50 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
       CreateBackdrop(bars[i], border)
       CreateBackdropShadow(bars[i])
       bars[i].backdrop:Show()
+    elseif bars[i].backdrop then
+      bars[i].backdrop:Hide()
+    end
 
-      -- share backdrop of main and top actionbar
-      if i == 6 then
-        bars[6].OnMove = bars[6].OnMove or function()
-          local _, a, _ = bars[6]:GetPoint()
-          if a == bars[1] and C.bars.bar1.enable == "1"
-            and C.bars.bar1.background == "1" and C.bars.bar6.background == "1"
-            and C.bars.bar1.autohide == "0" and C.bars.bar6.autohide == "0"
-            and C.bars.bar1.icon_size == C.bars.bar6.icon_size
-            and C.bars.bar1.spacing == C.bars.bar6.spacing
-            and C.bars.bar1.formfactor == C.bars.bar6.formfactor
-            and C.bars.bar1.buttons == C.bars.bar6.buttons
-          then
-            bars[1].backdrop:ClearAllPoints()
-            bars[1].backdrop:SetPoint("BOTTOMRIGHT", bars[1], "BOTTOMRIGHT", border, -border)
-            bars[1].backdrop:SetPoint("TOPLEFT", bars[6], "TOPLEFT", -border, border)
+    -- share backdrop of main and top actionbar
+    if bars[6] and bars[1] then
+      bars[6].OnMove = bars[6].OnMove or function()
+        bars[1].mergedBackdrop = bars[1].mergedBackdrop or CreateFrame("Frame", nil, UIParent)
+        bars[1].mergedBackdrop:SetPoint("TOPLEFT", bars[6], "TOPLEFT", 0, 0)
+        bars[1].mergedBackdrop:SetPoint("BOTTOMRIGHT", bars[1], "BOTTOMRIGHT", 0, 0)
+        CreateBackdrop(bars[1].mergedBackdrop)
+
+        local _, anchor, _ = bars[6]:GetPoint()
+        if anchor == bars[1] and C.bars.bar1.enable == "1"
+          and C.bars.bar1.enable == "1" and C.bars.bar6.enable == "1"
+          and C.bars.bar1.background == "1" and C.bars.bar6.background == "1"
+          and C.bars.bar1.autohide == "0" and C.bars.bar6.autohide == "0"
+          and C.bars.bar1.icon_size == C.bars.bar6.icon_size
+          and C.bars.bar1.spacing == C.bars.bar6.spacing
+          and C.bars.bar1.formfactor == C.bars.bar6.formfactor
+          and C.bars.bar1.buttons == C.bars.bar6.buttons
+        then
+          bars[1].mergedBackdrop:Show()
+
+          if C.bars.bar1.background == "1" and bars[1].backdrop then
+            bars[1].backdrop:Hide()
+          end
+
+          if C.bars.bar6.background == "1" and bars[6].backdrop then
             bars[6].backdrop:Hide()
-          else
-            if C.bars.bar1.background == "1" then
-              -- create/reset bar1 backdrop if required
-              CreateBackdrop(bars[1], border)
-              bars[1].backdrop:ClearAllPoints()
-              bars[1].backdrop:SetPoint("BOTTOMRIGHT", bars[1], "BOTTOMRIGHT", border, -border)
-              bars[1].backdrop:SetPoint("TOPLEFT", bars[1], "TOPLEFT", -border, border)
-            end
+          end
+        else
+          bars[1].mergedBackdrop:Hide()
 
-            if C.bars.bar6.background == "1" then
-              bars[6].backdrop:Show()
-            end
+          if C.bars.bar1.background == "1" and bars[1].backdrop then
+            bars[1].backdrop:Show()
+          end
+
+          if C.bars.bar6.background == "1" and bars[6].backdrop then
+            bars[6].backdrop:Show()
           end
         end
-
-        bars[i].OnMove()
       end
-    else
-      if bars[i].backdrop then
-        bars[i].backdrop:Hide()
-      end
-
-      if bars[i].shadow then
-        bars[i].shadow:Hide()
-      end
+      bars[6].OnMove()
     end
   end
 

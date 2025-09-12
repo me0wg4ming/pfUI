@@ -193,13 +193,13 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           local preview = this.prev
 
           function ColorPickerFrame.func()
-            local r,g,b = ColorPickerFrame:GetColorRGB()
+            local r, g, b = ColorPickerFrame:GetColorRGB()
             local a = 1 - OpacitySliderFrame:GetValue()
 
-            r = round(r, 1)
-            g = round(g, 1)
-            b = round(b, 1)
-            a = round(a, 1)
+            r = round(r, 3)
+            g = round(g, 3)
+            b = round(b, 3)
+            a = round(a, 3)
 
             preview:SetTexture(r,g,b,a)
 
@@ -825,8 +825,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "frFR:French",
         "koKR:Korean",
         "ruRU:Russian",
-        "zhCN:Chinese (simplified; China)",
-        "zhTW:Chinese (traditional; Taiwan)",
+        "zhCN:Chinese (Simplified)",
+        "zhTW:Chinese (Traditional)",
         -- http://wowprogramming.com/docs/api/GetLocale
       },
       ["fonts"] = {
@@ -1069,6 +1069,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "combat:" .. T["Combat Timer"],
         "ammo:" .. T["Ammo Counter"],
         "soulshard:" .. T["Soulshard Counter"],
+        "bindlocation:" .. T["Hearth"],
+        "thistletea:" .. T["Thistle Tea"],
+        "flashpowder:" .. T["Flash Powder"],
+        "blindpowder:" .. T["Blinding Powder"],
         "bagspace:" .. T["Bagspace"]
       },
       ["tooltip_position"] = {
@@ -1192,6 +1196,11 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "CENTER:" .. T["Center"],
         "RIGHT:" .. T["Right"],
       },
+      ["gryphons"] = {
+        "None:"..T["None"],
+        "Gryphon:"..T["Gryphon"],
+        "Lion:"..T["Lion"],
+      }
     }
 
     -- add locale dependent client fonts to the list
@@ -1396,6 +1405,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(function() return end, T["Select profile"], C.global, "profile", "dropdown", function()
         local values = {}
         for name, config in pairs(pfUI_profiles) do table.insert(values, name) end
+        table.sort(values)
         return values
       end, false, "Profile")
 
@@ -1404,9 +1414,18 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         if C.global.profile and pfUI_profiles[C.global.profile] then
           CreateQuestionDialog(T["Load profile"] .. " '|cff33ffcc" .. C.global.profile .. "|r'?", function()
             local selp = C.global.profile
+            local rchat = C.chat.right.enable
+
+            -- load profile
             _G["pfUI_config"] = CopyTable(pfUI_profiles[C.global.profile])
+
+            -- restore values
+            pfUI:UpdateConfig("global", nil, "profile", selp)
+            pfUI:UpdateConfig("chat", "right", "enable", rchat)
+
+            -- add default values
             pfUI:LoadConfig()
-            C.global.profile = selp
+
             ReloadUI()
           end)
         end
@@ -1560,6 +1579,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Cooldown Color (Hours)"], C.appearance.cd, "hourcolor", "color")
       CreateConfig(nil, T["Cooldown Color (Days)"], C.appearance.cd, "daycolor", "color")
       CreateConfig(nil, T["Use Dynamic Font Size"], C.appearance.cd, "dynamicsize", "checkbox")
+      CreateConfig(nil, T["Cooldown Text Font"], C.appearance.cd, "font", "dropdown", pfUI.gui.dropdowns.fonts)
       CreateConfig(nil, T["Cooldown Text Font Size"], C.appearance.cd, "font_size")
       CreateConfig(nil, T["Cooldown Text Font Size (Blizzard Frames)"], C.appearance.cd, "font_size_blizz")
       CreateConfig(nil, T["Cooldown Text Font Size (Foreign Frames)"], C.appearance.cd, "font_size_foreign")
@@ -1597,7 +1617,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Always Use 2D Portraits"], C.unitframes, "always2dportrait", "checkbox")
       CreateConfig(nil, T["Enable 2D Portraits As Fallback"], C.unitframes, "portraittexture", "checkbox")
       CreateConfig(nil, T["Unit Frame Layout"], C.unitframes, "layout", "dropdown", pfUI.gui.dropdowns.uf_layout)
-      CreateConfig(nil, T["Combopoint Size"], C.unitframes, "combosize")
+      CreateConfig(nil, T["Combopoint Width"], C.unitframes, "combowidth")
+      CreateConfig(nil, T["Combopoint Height"], C.unitframes, "comboheight")
       CreateConfig(nil, T["Show Resting"], C.unitframes.player, "showRest", "checkbox")
       CreateConfig(nil, T["Enable Energy Ticks"], C.unitframes.player, "energy", "checkbox")
       CreateConfig(nil, T["Enable Mana Ticks"], C.unitframes.player, "manatick", "checkbox")
@@ -1631,6 +1652,11 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Rage Color"], C.unitframes, "ragecolor", "color")
       CreateConfig(nil, T["Energy Color"], C.unitframes, "energycolor", "color")
       CreateConfig(nil, T["Focus Color"], C.unitframes, "focuscolor", "color")
+
+      CreateConfig(nil, T["SuperWoW Settings"], nil, nil, "header")
+      CreateConfig(nil, T["Show Druid Mana Bar"], C.unitframes, "druidmanabar", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Druid Mana Bar Height"], C.unitframes, "druidmanaheight", nil, nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Druid Mana Bar Text"], C.unitframes, "druidmanatext", "checkbox", nil, nil, nil, nil, "vanilla" )
     end)
 
     -- Shared Unit- and Groupframes
@@ -1714,6 +1740,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Power Bar Texture"], C.unitframes[c], "pbartexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture)
         CreateConfig(U[c], T["UnitFrame Spacing"], C.unitframes[c], "pspace")
         CreateConfig(U[c], T["Show PvP-Flag"], C.unitframes[c], "showPVP", "checkbox")
+        CreateConfig(U[c], T["PVP Flag Size"], C.unitframes[c], "pvpiconsize")
+        CreateConfig(U[c], T["PvP Flag Position"], C.unitframes[c], "pvpiconalign", "dropdown", pfUI.gui.dropdowns.positions)
+        CreateConfig(U[c], T["PvP Flag X-Offset"], C.unitframes[c], "pvpiconoffx")
+        CreateConfig(U[c], T["PvP Flag Y-Offset"], C.unitframes[c], "pvpiconoffy")
         CreateConfig(U[c], T["Show Loot Icon"], C.unitframes[c], "looticon", "checkbox")
         CreateConfig(U[c], T["Show Leader Icon"], C.unitframes[c], "leadericon", "checkbox")
         if c == "pet" then
@@ -1721,11 +1751,18 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           CreateConfig(U[c], T["Happiness Icon Size"], C.unitframes[c], "happinesssize")
         end
         CreateConfig(U[c], T["Show Raid Mark"], C.unitframes[c], "raidicon", "checkbox")
+        CreateConfig(U[c], T["Raid Mark Position"], C.unitframes[c], "raidiconalign", "dropdown", pfUI.gui.dropdowns.positions)
+        CreateConfig(U[c], T["Raid Mark X-Offset"], C.unitframes[c], "raidiconoffx")
+        CreateConfig(U[c], T["Raid Mark Y-Offset"], C.unitframes[c], "raidiconoffy")
         CreateConfig(U[c], T["Raid Mark Size"], C.unitframes[c], "raidiconsize")
         CreateConfig(U[c], T["Heal Color"], C.unitframes[c], "healcolor", "color")
         CreateConfig(U[c], T["Display Overheal"], C.unitframes[c], "overhealperc", "dropdown", pfUI.gui.dropdowns.uf_overheal)
 
         if c == "raid" then
+          CreateConfig(U["raid"], T["Display Raid Group Label"], C.unitframes[c], "raidgrouplabel", "checkbox")
+          CreateConfig(U["raid"], T["Group Label X-Offset"], C.unitframes[c], "grouplabelxoff")
+          CreateConfig(U["raid"], T["Group Label Y-Offset"], C.unitframes[c], "grouplabelyoff")
+
           CreateConfig(U[c], T["Layout"], nil, nil, "header")
           CreateConfig(U["raid"], T["Raid Padding"], C.unitframes[c], "raidpadding")
           CreateConfig(U["raid"], T["Raid Layout"], C.unitframes[c], "raidlayout", "dropdown", pfUI.gui.dropdowns.uf_raidlayout)
@@ -1778,6 +1815,22 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Show Timer Text"], C.unitframes[c], "cooldown_text", "checkbox")
         CreateConfig(U[c], T["Show Timer Animation"], C.unitframes[c], "cooldown_anim", "checkbox")
 
+        CreateConfig(U[c], T["Buffs"], nil, nil, "header")
+        CreateConfig(U[c], T["Buff Position"], C.unitframes[c], "buffs", "dropdown", pfUI.gui.dropdowns.uf_buff_position)
+        CreateConfig(U[c], T["Buff Size"], C.unitframes[c], "buffsize")
+        CreateConfig(U[c], T["Buff Limit"], C.unitframes[c], "bufflimit")
+        CreateConfig(U[c], T["Buffs Per Row"], C.unitframes[c], "buffperrow")
+
+        CreateConfig(U[c], T["Debuffs"], nil, nil, "header")
+        CreateConfig(U[c], T["Debuff Position"], C.unitframes[c], "debuffs", "dropdown", pfUI.gui.dropdowns.uf_buff_position)
+        CreateConfig(U[c], T["Debuff Size"], C.unitframes[c], "debuffsize")
+        CreateConfig(U[c], T["Debuff Limit"], C.unitframes[c], "debufflimit")
+        CreateConfig(U[c], T["Debuffs Per Row"], C.unitframes[c], "debuffperrow")
+
+        if c ~= "player" then
+          CreateConfig(U[c], T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.unitframes[c], "selfdebuff", "checkbox")
+        end
+
         CreateConfig(U[c], T["Combat/Aggro Indicators"], nil, nil, "header")
         CreateConfig(U[c], T["Display Aggro Indicator"], C.unitframes[c], "squareaggro", "checkbox")
         CreateConfig(U[c], T["Display Combat Indicator"], C.unitframes[c], "squarecombat", "checkbox")
@@ -1804,18 +1857,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Only Class Dispellable"], C.unitframes[c], "debuff_ind_class", "checkbox")
         CreateConfig(U[c], T["Indicator Position"], C.unitframes[c], "debuff_ind_pos", "dropdown", pfUI.gui.dropdowns.positions)
         CreateConfig(U[c], T["Indicator Size"], C.unitframes[c], "debuff_ind_size", "dropdown", pfUI.gui.dropdowns.uf_debuff_indicator_size)
-
-        CreateConfig(U[c], T["Buffs"], nil, nil, "header")
-        CreateConfig(U[c], T["Buff Position"], C.unitframes[c], "buffs", "dropdown", pfUI.gui.dropdowns.uf_buff_position)
-        CreateConfig(U[c], T["Buff Size"], C.unitframes[c], "buffsize")
-        CreateConfig(U[c], T["Buff Limit"], C.unitframes[c], "bufflimit")
-        CreateConfig(U[c], T["Buffs Per Row"], C.unitframes[c], "buffperrow")
-
-        CreateConfig(U[c], T["Debuffs"], nil, nil, "header")
-        CreateConfig(U[c], T["Debuff Position"], C.unitframes[c], "debuffs", "dropdown", pfUI.gui.dropdowns.uf_buff_position)
-        CreateConfig(U[c], T["Debuff Size"], C.unitframes[c], "debuffsize")
-        CreateConfig(U[c], T["Debuff Limit"], C.unitframes[c], "debufflimit")
-        CreateConfig(U[c], T["Debuffs Per Row"], C.unitframes[c], "debuffperrow")
 
         CreateConfig(U[c], T["Overwrite Fonts"], nil, nil, "header")
         CreateConfig(U[c], T["Use Custom Font Settings"], C.unitframes[c], "customfont", "checkbox")
@@ -1868,6 +1909,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
     CreateGUIEntry(T["Minimap"], T["Minimap"], function()
       CreateConfig(U["minimap"], T["Minimap Size (|cffffaaaaExperimental|r)"], C.appearance.minimap, "size")
+      CreateConfig(U["minimap"], T["Minimap Player Arrow Scale"], C.appearance.minimap, "arrowscale")
       CreateConfig(nil, T["Zone Text On Minimap"], C.appearance.minimap, "zonetext", "dropdown", pfUI.gui.dropdowns.minimap_zone_visibility)
       CreateConfig(nil, T["Coordinates On Minimap"], C.appearance.minimap, "coordstext", "dropdown", pfUI.gui.dropdowns.minimap_cords_visibility)
       CreateConfig(nil, T["Coordinates Location"], C.appearance.minimap, "coordsloc", "dropdown", pfUI.gui.dropdowns.minimap_cords_position)
@@ -1958,6 +2000,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Color Debuff Stacks"], C.buffbar.tdebuff, "colorstacks", "checkbox")
       CreateConfig(nil, T["Buffbar Width"], C.buffbar.tdebuff, "width")
       CreateConfig(nil, T["Buffbar Height"], C.buffbar.tdebuff, "height")
+      CreateConfig(nil, T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.buffbar.tdebuff, "selfdebuff", "checkbox")
       CreateConfig(nil, T["Filter Mode"], C.buffbar.tdebuff, "filter", "dropdown", pfUI.gui.dropdowns.buffbarfilter)
       CreateConfig(nil, T["Time Threshold"], C.buffbar.tdebuff, "threshold")
       CreateConfig(nil, T["Whitelist"], C.buffbar.tdebuff, "whitelist", "list")
@@ -2001,6 +2044,16 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["bars"], T["Switch Pages On Ctrl Key Press"], C.bars, "pagemasterctrl", "checkbox")
       CreateConfig(U["bars"], T["Switch Pages On Druid Stealth"], C.bars, "druidstealth", "checkbox")
       CreateConfig(nil, T["Range Based Hunter Paging"], C.bars, "hunterbar", "checkbox", nil, nil, nil, nil, "vanilla")
+    end)
+
+    CreateGUIEntry(T["Actionbar"], T["Gryphons"], function()
+      CreateConfig(U["gryphons"], T["Texture"], C.bars.gryphons, "texture", "dropdown", pfUI.gui.dropdowns.gryphons)
+      CreateConfig(U["gryphons"], T["Color"], C.bars.gryphons, "color", "color")
+      CreateConfig(U["gryphons"], T["Left Anchor"], C.bars.gryphons, "anchor_left", "dropdown", pfUI.gui.dropdowns.xpanchors)
+      CreateConfig(U["gryphons"], T["Right Anchor"], C.bars.gryphons, "anchor_right", "dropdown", pfUI.gui.dropdowns.xpanchors)
+      CreateConfig(U["gryphons"], T["Size"], C.bars.gryphons, "size")
+      CreateConfig(U["gryphons"], T["Horizontal Offset"], C.bars.gryphons, "offset_h")
+      CreateConfig(U["gryphons"], T["Vertical Offset"], C.bars.gryphons, "offset_v")
     end)
 
     -- Shared Actionbar Settings
@@ -2099,6 +2152,11 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["xpbar"], T["Aligned Position"], C.panel.xp, "xp_position", "dropdown", pfUI.gui.dropdowns.xp_position)
       CreateConfig(U["xpbar"], T["Don't overlap rested"], C.panel.xp, "dont_overlap", "checkbox")
 
+      CreateConfig(nil, T["Text"], nil, nil, "header")
+      CreateConfig(U["xpbar"], T["Show Text"], C.panel.xp, "xp_text", "checkbox")
+      CreateConfig(U["xpbar"], T["Vertical Text Offset"], C.panel.xp, "xp_text_off_y")
+      CreateConfig(U["xpbar"], T["Only Show On Mouse Over"], C.panel.xp, "xp_text_mouse", "checkbox")
+
       CreateConfig(nil, T["Colors"], nil, nil, "header")
       CreateConfig(U["xpbar"], T["Experience Color"], C.panel.xp, "xp_color", "color")
       CreateConfig(U["xpbar"], T["Rested Color"], C.panel.xp, "rest_color", "color")
@@ -2114,6 +2172,11 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["xpbar"], T["Orientation"], C.panel.xp, "rep_mode", "dropdown", pfUI.gui.dropdowns.orientation)
       CreateConfig(U["xpbar"], T["Frame Anchor"], C.panel.xp, "rep_anchor", "dropdown", pfUI.gui.dropdowns.xpanchors)
       CreateConfig(U["xpbar"], T["Aligned Position"], C.panel.xp, "rep_position", "dropdown", pfUI.gui.dropdowns.xp_position)
+
+      CreateConfig(nil, T["Text"], nil, nil, "header")
+      CreateConfig(U["xpbar"], T["Show Text"], C.panel.xp, "rep_text", "checkbox")
+      CreateConfig(U["xpbar"], T["Vertical Text Offset"], C.panel.xp, "rep_text_off_y")
+      CreateConfig(U["xpbar"], T["Only Show On Mouse Over"], C.panel.xp, "rep_text_mouse", "checkbox")
     end)
 
     CreateGUIEntry(T["Tooltip"], nil, function()
@@ -2142,34 +2205,46 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Disable Blizzard Castbar"], C.castbar.player, "hide_blizz", "checkbox")
 
       CreateConfig(nil, T["Player Castbar"], nil, nil, "header")
+      CreateConfig(nil, T["Disable Player Castbar"], C.castbar.player, "hide_pfui", "checkbox")
+      CreateConfig(nil, T["Castbar Width"], C.castbar.player, "width")
+      CreateConfig(nil, T["Castbar Height"], C.castbar.player, "height")
       CreateConfig(nil, T["Show Spell Icon"], C.castbar.player, "showicon", "checkbox")
       CreateConfig(nil, T["Show Spell Name"], C.castbar.player, "showname", "checkbox")
       CreateConfig(nil, T["Show Timer"], C.castbar.player, "showtimer", "checkbox")
+      CreateConfig(nil, T["Left Text X Offset"], C.castbar.player, "txtleftoffx")
+      CreateConfig(nil, T["Left Text Y Offset"], C.castbar.player, "txtleftoffy")
       CreateConfig(nil, T["Show Lag"], C.castbar.player, "showlag", "checkbox")
       CreateConfig(nil, T["Show Rank"], C.castbar.player, "showrank", "checkbox")
-      CreateConfig(nil, T["Castbar Width"], C.castbar.player, "width")
-      CreateConfig(nil, T["Castbar Height"], C.castbar.player, "height")
-      CreateConfig(nil, T["Disable Player Castbar"], C.castbar.player, "hide_pfui", "checkbox")
+      CreateConfig(nil, T["Right Text X Offset"], C.castbar.player, "txtrightoffx")
+      CreateConfig(nil, T["Right Text Y Offset"], C.castbar.player, "txtrightoffy")
 
       CreateConfig(nil, T["Target Castbar"], nil, nil, "header")
+      CreateConfig(nil, T["Disable Target Castbar"], C.castbar.target, "hide_pfui", "checkbox")
+      CreateConfig(nil, T["Castbar Width"], C.castbar.target, "width")
+      CreateConfig(nil, T["Castbar Height"], C.castbar.target, "height")
       CreateConfig(nil, T["Show Spell Icon"], C.castbar.target, "showicon", "checkbox")
       CreateConfig(nil, T["Show Spell Name"], C.castbar.target, "showname", "checkbox")
       CreateConfig(nil, T["Show Timer"], C.castbar.target, "showtimer", "checkbox")
+      CreateConfig(nil, T["Left Text X Offset"], C.castbar.target, "txtleftoffx")
+      CreateConfig(nil, T["Left Text Y Offset"], C.castbar.target, "txtleftoffy")
       CreateConfig(nil, T["Show Lag"], C.castbar.target, "showlag", "checkbox")
       CreateConfig(nil, T["Show Rank"], C.castbar.target, "showrank", "checkbox")
-      CreateConfig(nil, T["Castbar Width"], C.castbar.target, "width")
-      CreateConfig(nil, T["Castbar Height"], C.castbar.target, "height")
-      CreateConfig(nil, T["Disable Target Castbar"], C.castbar.target, "hide_pfui", "checkbox")
+      CreateConfig(nil, T["Right Text X Offset"], C.castbar.target, "txtrightoffx")
+      CreateConfig(nil, T["Right Text Y Offset"], C.castbar.target, "txtrightoffy")
 
       CreateConfig(nil, T["Focus Castbar"], nil, nil, "header")
+      CreateConfig(nil, T["Disable Focus Castbar"], C.castbar.focus, "hide_pfui", "checkbox")
+      CreateConfig(nil, T["Castbar Width"], C.castbar.focus, "width")
+      CreateConfig(nil, T["Castbar Height"], C.castbar.focus, "height")
       CreateConfig(nil, T["Show Spell Icon"], C.castbar.focus, "showicon", "checkbox")
       CreateConfig(nil, T["Show Spell Name"], C.castbar.focus, "showname", "checkbox")
       CreateConfig(nil, T["Show Timer"], C.castbar.focus, "showtimer", "checkbox")
+      CreateConfig(nil, T["Left Text X Offset"], C.castbar.focus, "txtleftoffx")
+      CreateConfig(nil, T["Left Text Y Offset"], C.castbar.focus, "txtleftoffy")
       CreateConfig(nil, T["Show Lag"], C.castbar.focus, "showlag", "checkbox")
       CreateConfig(nil, T["Show Rank"], C.castbar.focus, "showrank", "checkbox")
-      CreateConfig(nil, T["Castbar Width"], C.castbar.focus, "width")
-      CreateConfig(nil, T["Castbar Height"], C.castbar.focus, "height")
-      CreateConfig(nil, T["Disable Focus Castbar"], C.castbar.focus, "hide_pfui", "checkbox")
+      CreateConfig(nil, T["Right Text X Offset"], C.castbar.focus, "txtrightoffx")
+      CreateConfig(nil, T["Right Text Y Offset"], C.castbar.focus, "txtrightoffy")
     end)
 
     CreateGUIEntry(T["Chat"], nil, function()
@@ -2188,7 +2263,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Generate Playerlinks"], C.chat.text, "playerlinks", "checkbox")
       CreateConfig(nil, T["Enable URL Detection"], C.chat.text, "detecturl", "checkbox")
       CreateConfig(nil, T["Enable Class Colors"], C.chat.text, "classcolor", "checkbox")
-      CreateConfig(nil, T["Who Search Unknown Classes"], C.chat.text, "whosearchunknown", "checkbox")
+      CreateConfig(nil, T["Who Search Unknown Classes (|cffffaaaaExperimental|r)"], C.chat.text, "whosearchunknown", "checkbox")
       CreateConfig(nil, T["Colorize Unknown Classes"], C.chat.text, "tintunknown", "checkbox")
       CreateConfig(nil, T["Unknown Class Color"], C.chat.text, "unknowncolor", "color")
       CreateConfig(nil, T["Left Chat Width"], C.chat.left, "width")
@@ -2223,6 +2298,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Inactive Nameplate Alpha"], C.nameplates, "notargalpha", "dropdown", pfUI.gui.dropdowns.percent_small)
       CreateConfig(U["nameplates"], T["Draw Glow Around Target Nameplate"], C.nameplates, "targetglow", "checkbox")
       CreateConfig(U["nameplates"], T["Glow Color Around Target Nameplate"], C.nameplates, "glowcolor", "color")
+      CreateConfig(U["nameplates"], T["Red Name Text On Infight Units"], C.nameplates, "namefightcolor", "checkbox")
       CreateConfig(U["nameplates"], T["Zoom Target Nameplate"], C.nameplates, "targetzoom", "checkbox")
       CreateConfig(U["nameplates"], T["Target Nameplate Zoom Factor"], C.nameplates, "targetzoomval", "dropdown", pfUI.gui.dropdowns.percent_small)
       CreateConfig(U["nameplates"], T["Nameplate Width"], C.nameplates, "width")
@@ -2258,6 +2334,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Debuff Icon Size"], C.nameplates, "debuffsize")
       CreateConfig(U["nameplates"], T["Estimate Debuffs"], C.nameplates, "guessdebuffs", "checkbox")
       CreateConfig(U["nameplates"], T["Show Debuff Stacks"], C.nameplates.debuffs, "showstacks", "checkbox")
+      CreateConfig(U["nameplates"], T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.nameplates, "selfdebuff", "checkbox")
       CreateConfig(U["nameplates"], T["Filter Mode"], C.nameplates.debuffs, "filter", "dropdown", pfUI.gui.dropdowns.buffbarfilter)
       CreateConfig(U["nameplates"], T["Blacklist"], C.nameplates.debuffs, "blacklist", "list")
       CreateConfig(U["nameplates"], T["Whitelist"], C.nameplates.debuffs, "whitelist", "list")
@@ -2269,7 +2346,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Red Border On Enemy Units"], C.nameplates, "outenemy", "checkbox")
       CreateConfig(U["nameplates"], T["Border Around Target Unit"], C.nameplates, "targethighlight", "checkbox")
       CreateConfig(U["nameplates"], T["Border Color Around Target Unit"], C.nameplates, "highlightcolor", "color")
-      CreateConfig(U["nameplates"], T["Overwrite Border Color With Combat State"], C.nameplates, "outcombatstate", "checkbox")
 
       CreateConfig(nil, T["Healthbar"], nil, nil, "header")
       CreateConfig(U["nameplates"], T["Healthbar Vertical Offset"], C.nameplates.health, "offset")
@@ -2288,6 +2364,21 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Always Show On Units With Missing HP"], C.nameplates, "fullhealth", "checkbox")
       CreateConfig(U["nameplates"], T["Always Show On Target Units"], C.nameplates, "target", "checkbox")
       CreateConfig(U["nameplates"], T["Vertical Healthbar"], C.nameplates, "verticalhealth", "checkbox")
+
+      CreateConfig(nil, T["SuperWoW Settings"], nil, nil, "header")
+      CreateConfig(U["nameplates"], T["Overwrite Border Color With Combat State"], C.nameplates, "outcombatstate", "checkbox")
+      CreateConfig(U["nameplates"], T["Overwrite Health Color With Combat State"], C.nameplates, "barcombatstate", "checkbox")
+      CreateConfig(U["nameplates"], T["Overwrite If Unit Is Attacking You"], C.nameplates, "ccombatthreat", "checkbox")
+      CreateConfig(U["nameplates"], T["Overwrite If Unit Is Attacking Off-Tank"], C.nameplates, "ccombatofftank", "checkbox")
+      CreateConfig(U["nameplates"], T["Overwrite If Unit Is Attacking Others"], C.nameplates, "ccombatnothreat", "checkbox")
+      CreateConfig(U["nameplates"], T["Overwrite If Unit Is Attacking No One"], C.nameplates, "ccombatstun", "checkbox")
+      CreateConfig(U["nameplates"], T["Overwrite If Unit Is Casting"], C.nameplates, "ccombatcasting", "checkbox")
+      CreateConfig(U["nameplates"], T["Unit Is Attacking You Color"], C.nameplates, "combatthreat", "color")
+      CreateConfig(U["nameplates"], T["Unit Is Attacking Off-Tank Color"], C.nameplates, "combatofftank", "color")
+      CreateConfig(U["nameplates"], T["Unit Is Attacking Others Color"], C.nameplates, "combatnothreat", "color")
+      CreateConfig(U["nameplates"], T["Unit Is Attacking No One Color"], C.nameplates, "combatstun", "color")
+      CreateConfig(U["nameplates"], T["Unit Is Casting Color"], C.nameplates, "combatcasting", "color")
+      CreateConfig(U["nameplates"], T["Off-Tank Names"], C.nameplates, "combatofftanks", "list")
     end)
 
     CreateGUIEntry(T["Thirdparty"], T["Integrations"], function()

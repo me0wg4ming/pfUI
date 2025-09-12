@@ -10,6 +10,18 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     ["FRIENDLY_PLAYER"] = { .2, .6, 1, .8 }
   }
 
+  local offtanks = {}
+
+  local combatstate = {
+    -- gets overwritten by user config
+    ["OFFTANK"]  = { r = .7, g = .4, b = .2, a = 1 },
+    ["NOTHREAT"] = { r = .7, g = .7, b = .2, a = 1 },
+    ["THREAT"]   = { r = .7, g = .2, b = .2, a = 1 },
+    ["CASTING"]  = { r = .7, g = .2, b = .7, a = 1 },
+    ["STUN"]     = { r = .2, g = .7, b = .7, a = 1 },
+    ["NONE"]     = { r = .2, g = .2, b = .2, a = 1 },
+  }
+
   local elitestrings = {
     ["elite"] = "+",
     ["rareelite"] = "R+",
@@ -27,6 +39,33 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
 
   -- cache default border color
   local er, eg, eb, ea = GetStringColor(pfUI_config.appearance.border.color)
+
+  local function GetCombatStateColor(guid)
+    local target = guid.."target"
+    local color = false
+
+    if UnitAffectingCombat("player") and UnitAffectingCombat(guid) and not UnitCanAssist("player", guid) then
+      if C.nameplates.ccombatcasting == "1" and (UnitCastingInfo(guid) or UnitChannelInfo(guid)) then
+        color = combatstate.CASTING
+      elseif C.nameplates.ccombatthreat == "1" and UnitIsUnit(target, "player") then
+        color = combatstate.THREAT
+      elseif C.nameplates.ccombatofftank == "1" and UnitName(target) and offtanks[strlower(UnitName(target))] then
+        color = combatstate.OFFTANK
+      elseif C.nameplates.ccombatofftank == "1" and pfUI.uf and pfUI.uf.raid and pfUI.uf.raid.tankrole[UnitName(target)] then
+        color = combatstate.OFFTANK
+      elseif C.nameplates.ccombatnothreat == "1" and UnitExists(target) then
+        color = combatstate.NOTHREAT
+      elseif C.nameplates.ccombatstun == "1" and not UnitExists(target) and not UnitIsPlayer(guid) then
+        color = combatstate.STUN
+      end
+    end
+
+    return color
+  end
+
+  local function DoNothing()
+    return
+  end
 
   local function IsNamePlate(frame)
     if frame:GetObjectType() ~= NAMEPLATE_FRAMETYPE then return nil end
@@ -161,8 +200,15 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     if not self.debuffcache then self.debuffcache = {} end
 
     for id = 1, 16 do
-      local effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
-      if effect and timeleft then
+      local effect, _, texture, stacks, _, duration, timeleft
+
+      if unitstr and C.nameplates.selfdebuff == "1" then
+        effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, id)
+      else
+        effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
+      end
+
+      if effect and timeleft and timeleft > 0 then
         local start = GetTime() - ( (duration or 0) - ( timeleft or 0) )
         local stop = GetTime() + ( timeleft or 0 )
         self.debuffcache[id] = self.debuffcache[id] or {}
@@ -172,9 +218,7 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
         self.debuffcache[id].duration = duration or 0
         self.debuffcache[id].start = start
         self.debuffcache[id].stop = stop
-      elseif self.debuffcache[id] then
-        self.debuffcache[id] = nil
-        table.remove(self.debuffcache, id)
+        self.debuffcache[id].empty = nil
       end
     end
 
@@ -182,10 +226,16 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
   end
 
   local function PlateUnitDebuff(self, id)
+    -- break on unknown data
     if not self.debuffcache then return end
     if not self.debuffcache[id] then return end
     if not self.debuffcache[id].stop then return end
 
+    -- break on timeout debuffs
+    if self.debuffcache[id].empty then return end
+    if self.debuffcache[id].stop < GetTime() then return end
+
+    -- return cached debuff
     local c = self.debuffcache[id]
     return c.effect, c.rank, c.texture, c.stacks, c.dtype, c.duration, (c.stop - GetTime())
   end
@@ -205,7 +255,18 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     plate.debuffs[index].stacks:SetJustifyV("BOTTOM")
     plate.debuffs[index].stacks:SetTextColor(1,1,0)
 
-    plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
+    if pfUI.client <= 11200 then
+      -- create a fake animation frame on vanilla to improve performance
+      plate.debuffs[index].cd = CreateFrame("Frame", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index])
+      plate.debuffs[index].cd:SetScript("OnUpdate", CooldownFrame_OnUpdateModel)
+      plate.debuffs[index].cd.AdvanceTime = DoNothing
+      plate.debuffs[index].cd.SetSequence = DoNothing
+      plate.debuffs[index].cd.SetSequenceTime = DoNothing
+    else
+      -- use regular cooldown animation frames on burning crusade and later
+      plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
+    end
+
     plate.debuffs[index].cd.pfCooldownStyleAnimation = 0
     plate.debuffs[index].cd.pfCooldownType = "ALL"
   end
@@ -455,6 +516,18 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     local healthoffset = tonumber(C.nameplates.health.offset)
     local orientation = C.nameplates.verticalhealth == "1" and "VERTICAL" or "HORIZONTAL"
 
+    local c = combatstate -- load combat state colors
+    c.CASTING.r, c.CASTING.g, c.CASTING.b, c.CASTING.a = GetStringColor(C.nameplates.combatcasting)
+    c.THREAT.r, c.THREAT.g, c.THREAT.b, c.THREAT.a = GetStringColor(C.nameplates.combatthreat)
+    c.NOTHREAT.r, c.NOTHREAT.g, c.NOTHREAT.b, c.NOTHREAT.a = GetStringColor(C.nameplates.combatnothreat)
+    c.OFFTANK.r, c.OFFTANK.g, c.OFFTANK.b, c.OFFTANK.a = GetStringColor(C.nameplates.combatofftank)
+    c.STUN.r, c.STUN.g, c.STUN.b, c.STUN.a = GetStringColor(C.nameplates.combatstun)
+
+    offtanks = {}
+    for k, v in pairs({strsplit("#", C.nameplates.combatofftanks)}) do
+      offtanks[string.lower(v)] = true
+    end
+
     nameplate:SetWidth(plate_width)
     nameplate:SetHeight(plate_height)
     nameplate:SetPoint("TOP", parent, "TOP", 0, 0)
@@ -499,7 +572,7 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     nameplate.castbar:SetPoint("TOPLEFT", nameplate.health, "BOTTOMLEFT", 0, -default_border*3)
     nameplate.castbar:SetPoint("TOPRIGHT", nameplate.health, "BOTTOMRIGHT", 0, -default_border*3)
     nameplate.castbar:SetHeight(C.nameplates.heightcast)
-    nameplate.castbar:SetStatusBarTexture(pfUI.media["img:bar"])
+    nameplate.castbar:SetStatusBarTexture(hptexture)
     nameplate.castbar:SetStatusBarColor(.9,.8,0,1)
     CreateBackdrop(nameplate.castbar, default_border)
 
@@ -584,29 +657,23 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     -- target indicator
     if superwow_active and C.nameplates.outcombatstate == "1" then
       local guid = plate.parent:GetName(1) or ""
-      local target = guid.."target"
 
-      if UnitAffectingCombat(guid) then
-        if UnitIsUnit(target, "player") then
-          plate.health.backdrop:SetBackdropBorderColor(.7,.2,.3,1)
-        elseif UnitExists(target) or UnitIsPlayer(guid) then
-          plate.health.backdrop:SetBackdropBorderColor(.7,.7,.2,1)
-        else
-          plate.health.backdrop:SetBackdropBorderColor(.2,.7,.7,1)
-        end
-      else
-        plate.health.backdrop:SetBackdropBorderColor(.2,.2,.2,1)
-      end
+      -- determine color based on combat state
+      local color = GetCombatStateColor(guid)
+      if not color then color = combatstate.NONE end
+
+      -- set border color
+      plate.health.backdrop:SetBackdropBorderColor(color.r, color.g, color.b, color.a)
     elseif target and C.nameplates.targethighlight == "1" then
       plate.health.backdrop:SetBackdropBorderColor(plate.health.hlr, plate.health.hlg, plate.health.hlb, plate.health.hla)
     elseif C.nameplates.outfriendlynpc == "1" and unittype == "FRIENDLY_NPC" then
-      plate.health.backdrop:SetBackdropBorderColor(.2,.7,.3,1)
+      plate.health.backdrop:SetBackdropBorderColor(unpack(unitcolors[unittype]))
     elseif C.nameplates.outfriendly == "1" and unittype == "FRIENDLY_PLAYER" then
-      plate.health.backdrop:SetBackdropBorderColor(.2,.3,.7,1)
+      plate.health.backdrop:SetBackdropBorderColor(unpack(unitcolors[unittype]))
     elseif C.nameplates.outneutral == "1" and strfind(unittype, "NEUTRAL") then
-      plate.health.backdrop:SetBackdropBorderColor(.7,.7,.2,1)
+      plate.health.backdrop:SetBackdropBorderColor(unpack(unitcolors[unittype]))
     elseif C.nameplates.outenemy == "1" and strfind(unittype, "ENEMY") then
-      plate.health.backdrop:SetBackdropBorderColor(.7,.2,.3,1)
+      plate.health.backdrop:SetBackdropBorderColor(unpack(unitcolors[unittype]))
     else
       plate.health.backdrop:SetBackdropBorderColor(er,eg,eb,ea)
     end
@@ -712,6 +779,15 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
       r, g, b, a = .5, .5, .5, .8
     end
 
+    if superwow_active and C.nameplates.barcombatstate == "1" then
+      local guid = plate.parent:GetName(1) or ""
+      local color = GetCombatStateColor(guid)
+
+      if color then
+        r, g, b, a = color.r, color.g, color.b, color.a
+      end
+    end
+
     if r ~= plate.cache.r or g ~= plate.cache.g or b ~= plate.cache.b then
       plate.health:SetStatusBarColor(r, g, b, a)
       plate.cache.r, plate.cache.g, plate.cache.b = r, g, b
@@ -742,7 +818,10 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
       -- update all debuff icons
       for i = 1, 16 do
         local effect, rank, texture, stacks, dtype, duration, timeleft
-        if unitstr then
+
+        if unitstr and C.nameplates.selfdebuff == "1" then
+          effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, i)
+        elseif unitstr then
           effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
         elseif plate.verify == verify then
           effect, rank, texture, stacks, dtype, duration, timeleft = plate:UnitDebuff(i)
@@ -799,6 +878,7 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     local name = original.name:GetText()
     local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
     local mouseover = UnitExists("mouseover") and original.glow:IsShown() or nil
+    local namefightcolor = C.nameplates.namefightcolor == "1"
 
     -- trigger queued event update
     if nameplate.eventcache then
@@ -831,12 +911,6 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
       nameplate:SetAlpha(tonumber(C.nameplates.notargalpha))
     end
 
-    -- use timer based updates
-    if not nameplate.tick or nameplate.tick < GetTime() then
-      nameplate.tick = GetTime() + .2
-      update = true
-    end
-
     -- queue update on visual target update
     if nameplate.cache.target ~= target then
       nameplate.cache.target = target
@@ -859,15 +933,20 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
     local r, g, b = original.name:GetTextColor()
     if r + g + b ~= nameplate.cache.namecolor then
       nameplate.cache.namecolor = r + g + b
-      if r > .9 and g < .2 and b < .2 then
-        nameplate.name:SetTextColor(1,0.4,0.2,1) -- infight
+
+      if namefightcolor then
+        if r > .9 and g < .2 and b < .2 then
+          nameplate.name:SetTextColor(1,0.4,0.2,1) -- infight
+        else
+          nameplate.name:SetTextColor(r,g,b,1)
+        end
       else
-        nameplate.name:SetTextColor(r,g,b,1)
+        nameplate.name:SetTextColor(1,1,1,1)
       end
       update = true
     end
 
-    -- trigger update when name color changed
+    -- trigger update when level color changed
     local r, g, b = original.level:GetTextColor()
     r, g, b = r + .3, g + .3, b + .3
     if r + g + b ~= nameplate.cache.levelcolor then
@@ -878,31 +957,23 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
 
     -- scan for debuff timeouts
     if nameplate.debuffcache then
-      -- delete timed out caches
       for id, data in pairs(nameplate.debuffcache) do
-        if not data.stop or data.stop < GetTime() then
-          nameplate.debuffcache[id] = nil
-          trigger = true
+        if ( not data.stop or data.stop < GetTime() ) and not data.empty then
+          data.empty = true
+          update = true
         end
       end
+    end
 
-      -- remove nil keys whenever a value was removed
-      if trigger then
-        local count = 1
-        for id, data in pairs(nameplate.debuffcache) do
-          if id ~= count then
-            nameplate.debuffcache[count] = nameplate.debuffcache[id]
-            nameplate.debuffcache[id] = nil
-          end
-          count = count + 1
-        end
-        update = true
-      end
+    -- use timer based updates
+    if not nameplate.tick or nameplate.tick < GetTime() then
+      update = true
     end
 
     -- run full updates if required
     if update then
       nameplates:OnDataChanged(nameplate)
+      nameplate.tick = GetTime() + .5
     end
 
     -- target zoom
@@ -960,22 +1031,34 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
 
     -- castbar update
     if C.nameplates["showcastbar"] == "1" and ( C.nameplates["targetcastbar"] == "0" or target ) then
-      local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(target and "target" or name)
+      local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
+
+      -- detect cast or channel bars
+      cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(target and "target" or name)
+      if not cast then channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(target and "target" or name) end
 
       -- read enemy casts from SuperWoW if enabled
       if superwow_active then
         cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(nameplate.parent:GetName(1))
+        if not cast then channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(nameplate.parent:GetName(1)) end
       end
 
-      if not cast then
+      if not cast and not channel then
         nameplate.castbar:Hide()
-      elseif cast then
+      elseif cast or channel then
+        local effect = cast or channel
         local duration = endTime - startTime
+        local max = duration / 1000
+        local cur = GetTime() - startTime / 1000
+
+        -- invert castbar values while channeling
+        if channel then cur = max + startTime/1000 - GetTime() end
+
         nameplate.castbar:SetMinMaxValues(0,  duration/1000)
-        nameplate.castbar:SetValue(GetTime() - startTime/1000)
-        nameplate.castbar.text:SetText(round(startTime/1000 + duration/1000 - GetTime(),1))
+        nameplate.castbar:SetValue(cur)
+        nameplate.castbar.text:SetText(round(cur,1))
         if C.nameplates.spellname == "1" then
-          nameplate.castbar.spell:SetText(cast)
+          nameplate.castbar.spell:SetText(effect)
         else
           nameplate.castbar.spell:SetText("")
         end

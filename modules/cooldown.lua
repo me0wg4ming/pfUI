@@ -58,7 +58,7 @@ pfUI:RegisterModule("cooldown", "vanilla:tbc", function ()
   local function pfCreateCoolDown(cooldown, start, duration)
     cooldown.pfCooldownText = CreateFrame("Frame", "pfCooldownFrame", cooldown:GetParent())
     cooldown.pfCooldownText:SetAllPoints(cooldown)
-    cooldown.pfCooldownText:SetFrameLevel(cooldown:GetParent():GetFrameLevel() + 1)
+    cooldown.pfCooldownText:SetFrameLevel(cooldown:GetParent():GetFrameLevel() + 2)
     cooldown.pfCooldownText.text = cooldown.pfCooldownText:CreateFontString("pfCooldownFrameText", "OVERLAY")
 
     if not cooldown.pfCooldownType then
@@ -77,7 +77,7 @@ pfUI:RegisterModule("cooldown", "vanilla:tbc", function ()
       size = math.max((height > 0 and height * .64 or 16), size)
     end
 
-    cooldown.pfCooldownText.text:SetFont(pfUI.font_unit, size, "OUTLINE")
+    cooldown.pfCooldownText.text:SetFont(pfUI.media[C.appearance.cd.font], size, "OUTLINE")
     cooldown.pfCooldownText.text:SetPoint("CENTER", cooldown.pfCooldownText, "CENTER", 0, 0)
     cooldown.pfCooldownText:SetScript("OnUpdate", pfCooldownOnUpdate)
   end
@@ -104,12 +104,12 @@ pfUI:RegisterModule("cooldown", "vanilla:tbc", function ()
 
     -- don't draw global cooldowns
     if this.pfCooldownType == "NOGCD" and duration < tonumber(C.appearance.cd.threshold) then
-      return
+      start, duration = 0, 0
     end
 
     -- disable GCDs on non pfUI frames
     if not this.pfCooldownType and duration < tonumber(C.appearance.cd.threshold) then
-      return
+      start, duration = 0, 0
     end
 
     -- hide animation
