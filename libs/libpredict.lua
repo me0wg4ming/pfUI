@@ -96,6 +96,10 @@ libpredict:SetScript("OnEvent", function()
 end)
 
 libpredict:SetScript("OnUpdate", function()
+  -- throttle cleanup to 0.1s - no need to check every frame
+  if (this.tick or 0) > GetTime() then return end
+  this.tick = GetTime() + 0.1
+
   -- update on timeout events
   for timestamp, targets in pairs(events) do
     if GetTime() >= timestamp then
