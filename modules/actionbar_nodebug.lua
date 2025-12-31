@@ -980,17 +980,25 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
     pageswitch:SetScript("OnEvent", function()
       if class ~= "DRUID" then return end
       
-      -- UNIT_CASTEVENT: detect Cat Form and Prowl cast instantly
-      -- Cat Form: 768 | Prowl: 5215 (R1), 6783 (R2), 9913 (R3)
+      -- On login/reload: full scan
+      if event == "PLAYER_ENTERING_WORLD" then
+        prowling = FullScan()
+        return
+      end
+      
+      -- UNIT_CASTEVENT: detect Prowl cast instantly
+      -- Prowl Spell IDs: 5215 (Rank 1), 6783 (Rank 2), 9913 (Rank 3)
       if event == "UNIT_CASTEVENT" then
         local guid, target, cEvent, spellId = arg1, arg2, arg3, arg4
         local _, playerGuid = UnitExists("player")
         if guid == playerGuid and cEvent == "CAST" then
           if spellId == 5215 or spellId == 6783 or spellId == 9913 then
+            -- Prowl cast detected
             inCatForm = true
             prowlActive = true
             prowling = true
           elseif spellId == 768 then
+            -- Cat Form cast (Spell ID 768)
             inCatForm = true
           end
         end

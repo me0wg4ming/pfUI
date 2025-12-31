@@ -321,6 +321,9 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
   end)
 
   nameplates:SetScript("OnUpdate", function()
+    -- throttle to 10 updates per second instead of every frame
+    if (this.tick or 0.1) > GetTime() then return else this.tick = GetTime() + 0.1 end
+
     -- propagate events to all nameplates
     if this.eventcache then
       this.eventcache = nil
