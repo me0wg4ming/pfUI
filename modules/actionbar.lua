@@ -1,4 +1,4 @@
-pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
+pfUI:RegisterModule("actionbar", "vanilla", function ()
   local _, class = UnitClass("player")
   local color = RAID_CLASS_COLORS[class]
   local cr, cg, cb = color.r , color.g, color.b
@@ -394,14 +394,6 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
 
         for line in gfind(body, "[^%\n]+") do
           _, _, match = string.find(line, '^#showtooltip (.+)')
-
-          -- skip any further manual macro scanning on
-          -- gameclients with native macro spell detection
-          if pfUI.client > 11200 and match then
-            self.spellslot = nil
-            self.booktype = nil
-            return
-          end
 
           -- allow the user to disable the scan
           if match and strfind(match, "disable") then
@@ -1176,39 +1168,6 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
       buttoncache[id] = f
     end
 
-    -- set required attributes for regular tbc buttons
-    if pfUI.client > 11200 then
-      if bar == 11 then
-        f:SetAttribute("type", "spell")
-        f:SetAttribute('spell', select(2, GetShapeshiftFormInfo(button)))
-      elseif bar == 12 then
-        f:SetAttribute("type1", "pet")
-        f:SetAttribute("action1", button)
-        f:SetAttribute("type2", "macro")
-        f:SetAttribute("macrotext2", "/click PetActionButton".. button .. " RightButton")
-      else
-        bars[bar]:SetAttribute("addchild", f)
-        f:SetAttribute("type", "action")
-        f:SetAttribute("action", id)
-        f:SetAttribute("checkselfcast", true)
-        f:SetAttribute("useparent-unit", true)
-        f:SetAttribute("useparent-statebutton", true)
-
-        for state = 0, 11 do -- add custom states
-          local action = ((state == 0 and bar or state)-1)*12+button
-          f:SetAttribute(string.format("*type-S%d", state), "action")
-          f:SetAttribute(string.format("*type-S%dRight", state), "action")
-          f:SetAttribute(string.format("*action-S%d", state), action)
-          f:SetAttribute(string.format("*action-S%dRight", state), action)
-          if C.bars.rightself == "1" then
-            f:SetAttribute(string.format("*unit-S%dRight", state), "player")
-          else
-            f:SetAttribute(string.format("*unit-S%dRight", state), nil)
-          end
-        end
-      end
-    end
-
     -- set keydown option
     if C.bars.keydown == "1" then
       f:RegisterForClicks("LeftButtonDown", "RightButtonDown")
@@ -1335,40 +1294,26 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
     if enable == "1" then
       -- handle pet bar
       if i == 12 then
-        if pfUI.client > 11200 then
-          if InCombatLockdown and InCombatLockdown() then
-            -- don't process those events during combat
-          else
-            -- set state driver for pet bars
-            bars[i]:SetAttribute("unit", "pet")
-            local visibility = pfUI.unlock and pfUI.unlock:IsShown() and "show" or petvisibility
-            if bars[i].visibility ~= visibility then
-              RegisterStateDriver(bars[i], 'visibility', visibility)
-              bars[i].visibility = visibility
-            end
-          end
+        -- only show when pet actions exists
+        if PetHasActionBar() or pfUI.unlock and pfUI.unlock:IsShown() then
+          bars[i]:Show()
         else
-          -- only show when pet actions exists
-          if PetHasActionBar() or pfUI.unlock and pfUI.unlock:IsShown() then
-            bars[i]:Show()
-          else
-            bars[i]:Hide()
-          end
+          bars[i]:Hide()
+        end
 
-          -- show/hide petbar on petbar updates
-          if init then
-            bars[i]:RegisterEvent("PET_BAR_UPDATE")
-            bars[i]:SetScript("OnEvent", function()
-              -- hide obsolete buttons
-              for i=1, NUM_PET_ACTION_SLOTS do
-               if not PetHasActionBar() and bars[12][i] then
-                 bars[12][i]:Hide()
-               end
-              end
-              -- refresh layout
-              CreateActionBar(12)
-            end)
-          end
+        -- show/hide petbar on petbar updates
+        if init then
+          bars[i]:RegisterEvent("PET_BAR_UPDATE")
+          bars[i]:SetScript("OnEvent", function()
+            -- hide obsolete buttons
+            for i=1, NUM_PET_ACTION_SLOTS do
+             if not PetHasActionBar() and bars[12][i] then
+               bars[12][i]:Hide()
+             end
+            end
+            -- refresh layout
+            CreateActionBar(12)
+          end)
         end
 
       -- handle shapeshift bar

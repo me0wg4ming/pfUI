@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Friends", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Friends", "vanilla", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
   local maxtab = pfUI.expansion == "vanilla" and 4 or 5
@@ -336,24 +336,6 @@ pfUI:RegisterSkin("Friends", "vanilla:tbc", function ()
     GuildInfoCancelButton:ClearAllPoints()
     GuildInfoCancelButton:SetPoint("BOTTOMRIGHT", GuildInfoFrame, "BOTTOMRIGHT", -10, 8)
 
-    if GuildInfoGuildEventButton then -- log button (tbc+)
-      SkinButton(GuildInfoGuildEventButton)
-      GuildInfoGuildEventButton:ClearAllPoints()
-      GuildInfoGuildEventButton:SetPoint("BOTTOM", GuildInfoFrame, "BOTTOM", 0, 8)
-    end
-
-    if GuildEventLogFrame then -- guild log frame (tbc+)
-      StripTextures(GuildEventFrame)
-      CreateBackdrop(GuildEventFrame, nil, true, .75)
-      StripTextures(GuildEventLogFrame)
-      CreateBackdrop(GuildEventLogFrame, nil, true, .75)
-      StripTextures(GuildEventLogScrollFrame)
-      SkinScrollbar(GuildEventLogScrollFrameScrollBar)
-      SkinCloseButton(GuildEventLogCloseButton)
-      GuildEventLogCancelButton:SetPoint("BOTTOMRIGHT", -9, 8)
-      SkinButton(GuildEventLogCancelButton)
-    end
-
     -- guild control
     StripTextures(GuildControlPopupFrame)
     CreateBackdrop(GuildControlPopupFrame, nil, true, .75)
@@ -390,46 +372,6 @@ pfUI:RegisterSkin("Friends", "vanilla:tbc", function ()
     SkinButton(GuildControlPopupAcceptButton)
     GuildControlPopupAcceptButton:ClearAllPoints()
     GuildControlPopupAcceptButton:SetPoint("RIGHT", GuildControlPopupFrameCancelButton, "LEFT", -2*bpad, 0)
-  end
-
-  if ChannelFrameVerticalBar then -- Channel Tab (TBC+)
-    StripTextures(ChannelFrameVerticalBar)
-    SkinButton(ChannelFrameNewButton)
-    ChannelFrameNewButton:SetPoint("BOTTOMRIGHT", -15, 82)
-
-    StripTextures(ChannelListScrollFrame)
-    SkinScrollbar(ChannelListScrollFrameScrollBar)
-
-    for i = 1, MAX_DISPLAY_CHANNEL_BUTTONS do
-      StripTextures(_G["ChannelButton"..i])
-      SkinButton(_G["ChannelButton"..i])
-    end
-
-    for i = 1, 22 do
-      StripTextures(_G["ChannelMemberButton"..i])
-    end
-
-    CreateBackdrop(ChannelMemberButton1)
-    ChannelMemberButton1.backdrop:SetPoint("BOTTOMRIGHT", ChannelMemberButton22, "BOTTOMRIGHT", -1, 0)
-
-    StripTextures(ChannelRosterScrollFrame)
-    SkinScrollbar(ChannelRosterScrollFrameScrollBar)
-
-    StripTextures(ChannelFrameDaughterFrame)
-    CreateBackdrop(ChannelFrameDaughterFrame)
-
-    StripTextures(ChannelFrameDaughterFrameChannelName)
-    CreateBackdrop(ChannelFrameDaughterFrameChannelName, nil, true)
-    ChannelFrameDaughterFrameChannelName:SetTextInsets(5,5,5,5)
-
-    StripTextures(ChannelFrameDaughterFrameChannelPassword)
-    CreateBackdrop(ChannelFrameDaughterFrameChannelPassword, nil, true)
-    ChannelFrameDaughterFrameChannelPassword:SetTextInsets(5,5,5,5)
-
-    SkinCloseButton(ChannelFrameDaughterFrameDetailCloseButton)
-
-    SkinButton(ChannelFrameDaughterFrameCancelButton)
-    SkinButton(ChannelFrameDaughterFrameOkayButton)
   end
 
   do -- Raid Tab

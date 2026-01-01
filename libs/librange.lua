@@ -39,10 +39,10 @@ local spells = {
   },
 }
 
--- use native IsSpellInRange checker for tbc and skip
--- the whole targeting approach that is required for vanilla
-if pfUI.expansion == "tbc" then
-  local spell
+-- Use Nampower's IsSpellInRange if available (vanilla only)
+-- This provides more accurate range checking without needing to find spell slots
+local nampower_spell
+if GetNampowerVersion then
   librange:RegisterEvent("LEARNED_SPELL_IN_TAB")
   librange:RegisterEvent("PLAYER_ENTERING_WORLD")
   librange:SetScript("OnEvent", function()
@@ -53,12 +53,14 @@ if pfUI.expansion == "tbc" then
       local _, _, offset, num = GetSpellTabInfo(i)
       for id = offset + 1, offset + num do
         local name, rank = GetSpellName(id, BOOKTYPE_SPELL)
-        local texture = GetSpellTexture(name)
+        local texture = GetSpellTexture(id, BOOKTYPE_SPELL)
 
-        for _, tex in pairs(spells[class]) do
-          if tex == texture then
-            spell = name
-            return
+        if texture then
+          for _, tex in pairs(spells[class]) do
+            if tex == texture then
+              nampower_spell = name
+              return
+            end
           end
         end
       end
@@ -66,8 +68,12 @@ if pfUI.expansion == "tbc" then
   end)
 
   function librange:UnitInSpellRange(unit)
-    if not spell then return nil end
-    return IsSpellInRange(spell, unit) == 1 and true or nil
+    if not nampower_spell then return nil end
+    -- Nampower's IsSpellInRange returns 1 if in range, 0 if not, -1 if invalid
+    local result = IsSpellInRange(nampower_spell, unit)
+    if result == 1 then return 1
+    elseif result == 0 then return nil
+    else return nil end
   end
 
   -- add librange to pfUI API
@@ -161,7 +167,17 @@ librange:SetScript("OnUpdate", function()
   if this.id <= numunits and librange.slot then
     local unit = units[this.id]
     if not UnitIsUnit("target", unit) then
-      -- try to read distance via superwow first
+      -- Try UnitXP_SP3 first (most accurate distance measurement)
+      local unitxp_success, unitxp_distance = pcall(function()
+        return UnitXP("distanceBetween", "player", unit)
+      end)
+      if unitxp_success and unitxp_distance then
+        unitdata[unit] = unitxp_distance < 45 and 1 or 0
+        this.id = this.id + 1
+        return
+      end
+
+      -- try to read distance via superwow second
       if superwow_active then
         local x1, y1, z1 = UnitPosition("player")
         local x2, y2, z2 = UnitPosition(unit)

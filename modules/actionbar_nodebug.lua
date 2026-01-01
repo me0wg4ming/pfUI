@@ -1,4 +1,4 @@
-pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
+pfUI:RegisterModule("actionbar", "vanilla", function ()
   local _, class = UnitClass("player")
   local color = RAID_CLASS_COLORS[class]
   local cr, cg, cb = color.r , color.g, color.b
@@ -1182,39 +1182,6 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
 
       -- add to buttoncache
       buttoncache[id] = f
-    end
-
-    -- set required attributes for regular tbc buttons
-    if pfUI.client > 11200 then
-      if bar == 11 then
-        f:SetAttribute("type", "spell")
-        f:SetAttribute('spell', select(2, GetShapeshiftFormInfo(button)))
-      elseif bar == 12 then
-        f:SetAttribute("type1", "pet")
-        f:SetAttribute("action1", button)
-        f:SetAttribute("type2", "macro")
-        f:SetAttribute("macrotext2", "/click PetActionButton".. button .. " RightButton")
-      else
-        bars[bar]:SetAttribute("addchild", f)
-        f:SetAttribute("type", "action")
-        f:SetAttribute("action", id)
-        f:SetAttribute("checkselfcast", true)
-        f:SetAttribute("useparent-unit", true)
-        f:SetAttribute("useparent-statebutton", true)
-
-        for state = 0, 11 do -- add custom states
-          local action = ((state == 0 and bar or state)-1)*12+button
-          f:SetAttribute(string.format("*type-S%d", state), "action")
-          f:SetAttribute(string.format("*type-S%dRight", state), "action")
-          f:SetAttribute(string.format("*action-S%d", state), action)
-          f:SetAttribute(string.format("*action-S%dRight", state), action)
-          if C.bars.rightself == "1" then
-            f:SetAttribute(string.format("*unit-S%dRight", state), "player")
-          else
-            f:SetAttribute(string.format("*unit-S%dRight", state), nil)
-          end
-        end
-      end
     end
 
     -- set keydown option

@@ -1,4 +1,4 @@
-pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
+pfUI:RegisterModule("energytick", "vanilla", function ()
   if not pfUI.uf or not pfUI.uf.player then return end
 
   local energytick = CreateFrame("Frame", nil, pfUI.uf.player.power.bar)

@@ -1,4 +1,4 @@
-pfUI:RegisterModule("firstrun", "vanilla:tbc", function ()
+pfUI:RegisterModule("firstrun", "vanilla", function ()
   pfUI.firstrun = CreateFrame("Frame", "pfFirstRunWizard", UIParent)
   pfUI.firstrun.steps = {}
 

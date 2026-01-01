@@ -1,4 +1,4 @@
-pfUI:RegisterModule("pixelperfect", "vanilla:tbc", function ()
+pfUI:RegisterModule("pixelperfect", "vanilla", function ()
   -- pre-calculated min values
   local statics = {
     [4] = 1.4222222222222,

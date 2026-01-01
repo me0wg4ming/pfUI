@@ -9,10 +9,9 @@ setfenv(1, pfUI:GetEnvironment())
 --   UnitGetIncomingHeals(unit)
 --   UnitHasIncomingResurrection(unit)
 --
--- The library is able to receive and send compatible messages to HealComm (vanilla)
--- and HealComm (tbc) including the ressurections of both versions. It has an option
--- to disable the sending of those messages in case one of the mentioned libraries
--- is already active.
+-- The library is able to receive and send compatible messages to HealComm
+-- including resurrections. It has an option to disable the sending of those
+-- messages in case HealComm is already active.
 
 -- return instantly when another libpredict is already active
 if pfUI.api.libpredict then return end
@@ -457,15 +456,6 @@ libpredict.sender:SetScript("OnUpdate", function()
   end
 end)
 
--- tbc
-libpredict.sender:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-libpredict.sender:RegisterEvent("UNIT_SPELLCAST_START")
-libpredict.sender:RegisterEvent("UNIT_SPELLCAST_STOP")
-libpredict.sender:RegisterEvent("UNIT_SPELLCAST_FAILED")
-libpredict.sender:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
-libpredict.sender:RegisterEvent("UNIT_SPELLCAST_SENT")
-
--- vanilla
 libpredict.sender:RegisterEvent("CHAT_MSG_SPELL_SELF_BUFF")
 libpredict.sender:RegisterEvent("SPELLCAST_START")
 libpredict.sender:RegisterEvent("SPELLCAST_STOP")
@@ -502,23 +492,8 @@ libpredict.sender:SetScript("OnEvent", function()
       if spell == spell_queue[1] then UpdateCache(spell_queue[2], heal, true) end
       return
     end
-  elseif event == "COMBAT_LOG_EVENT_UNFILTERED" and arg2 == "SPELL_HEAL" and arg4 == player then -- tbc
-    local spell, heal, crit = arg10, arg12, arg13
-    if spell and heal and crit then
-      if spell == spell_queue[1] then UpdateCache(spell_queue[2], heal, true) end
-    elseif spell and heal then
-      if spell == spell_queue[1] then UpdateCache(spell_queue[2], heal) end
-    end
-  elseif event == "UNIT_SPELLCAST_SENT" and arg4 then -- fix tbc mouseover macros
-      senttarget = arg4
-  elseif strfind(event, "SPELLCAST_START", 1) then
+  elseif event == "SPELLCAST_START" then
     local spell, time = arg1, arg2
-
-    if strfind(event, "UNIT_", 1) then -- tbc
-      if arg1 ~= "player" then return end
-      local spellname, _, _, _, starttime, endtime = UnitCastingInfo("player")
-      spell, time = spellname, endtime - starttime
-    end
 
     if spell_queue[1] == spell and cache[spell_queue[2]] then
       local sender = player
@@ -540,22 +515,14 @@ libpredict.sender:SetScript("OnEvent", function()
         for i=1,4 do
           if CheckInteractDistance("party"..i, 4) then
             libpredict:Heal(player, UnitName("party"..i), amount, casttime)
-            if pfUI.client < 20000 then -- vanilla
-              libpredict.sender:SendHealCommMsg("Heal/" .. UnitName("party"..i) .. "/" .. amount .. "/" .. casttime .. "/")
-            else -- tbc
-              libpredict.sender:SendHealCommMsg(string.format("002%05d%s", math.min(amount, 99999), UnitName("party"..i)))
-            end
+            libpredict.sender:SendHealCommMsg("Heal/" .. UnitName("party"..i) .. "/" .. amount .. "/" .. casttime .. "/")
             libpredict.sender.healing = true
           end
         end
       end
 
       libpredict:Heal(player, target, amount, casttime)
-      if pfUI.client < 20000 then -- vanilla
-        libpredict.sender:SendHealCommMsg("Heal/" .. target .. "/" .. amount .. "/" .. casttime .. "/")
-      else -- tbc
-        libpredict.sender:SendHealCommMsg(string.format("002%05d%s", math.min(amount, 99999), target))
-      end
+      libpredict.sender:SendHealCommMsg("Heal/" .. target .. "/" .. amount .. "/" .. casttime .. "/")
       libpredict.sender.healing = true
 
     elseif spell_queue[1] == spell and L["resurrections"][spell] then
@@ -565,15 +532,10 @@ libpredict.sender:SetScript("OnEvent", function()
       libpredict.sender:SendResCommMsg("RES " .. target)
       libpredict.sender.resurrecting = true
     end
-  elseif strfind(event, "SPELLCAST_FAILED", 1) or strfind(event, "SPELLCAST_INTERRUPTED", 1) then
-    if strfind(event, "UNIT_", 1) and arg1 ~= "player" then return end
+  elseif event == "SPELLCAST_FAILED" or event == "SPELLCAST_INTERRUPTED" then
     if libpredict.sender.healing then
       libpredict:HealStop(player)
-      if pfUI.client < 20000 then -- vanilla
-        libpredict.sender:SendHealCommMsg("HealStop")
-      else -- tbc
-        libpredict.sender:SendHealCommMsg("001F")
-      end
+      libpredict.sender:SendHealCommMsg("HealStop")
       libpredict.sender.healing = nil
     elseif libpredict.sender.resurrecting then
       local target = senttarget or spell_queue[3]
@@ -590,21 +552,16 @@ libpredict.sender:SetScript("OnEvent", function()
       libpredict:HealDelay(player, arg1)
       libpredict.sender:SendHealCommMsg("Healdelay/" .. arg1 .. "/")
     end
-  elseif strfind(event, "SPELLCAST_STOP", 1) then
-    if strfind(event, "UNIT_", 1) and arg1 ~= "player" then return end
+  elseif event == "SPELLCAST_STOP" then
     libpredict:HealStop(player)
-    if pfUI.client < 20000 then -- vanilla
-      if spell_queue[1] == REJUVENATION then
-        libpredict:Hot(player, spell_queue[3], "Reju", rejuvDuration)
-        libpredict.sender:SendHealCommMsg("Reju/"..spell_queue[3].."/"..rejuvDuration.."/")
-      elseif spell_queue[1] == RENEW then
-        libpredict:Hot(player, spell_queue[3], "Renew", renewDuration)
-        libpredict.sender:SendHealCommMsg("Renew/"..spell_queue[3].."/"..renewDuration.."/")
-      elseif spell_queue[1] == REGROWTH then
-        this.regrowth_timer = GetTime() + 0.1
-      end
-    else -- tbc
-      --todo
+    if spell_queue[1] == REJUVENATION then
+      libpredict:Hot(player, spell_queue[3], "Reju", rejuvDuration)
+      libpredict.sender:SendHealCommMsg("Reju/"..spell_queue[3].."/"..rejuvDuration.."/")
+    elseif spell_queue[1] == RENEW then
+      libpredict:Hot(player, spell_queue[3], "Renew", renewDuration)
+      libpredict.sender:SendHealCommMsg("Renew/"..spell_queue[3].."/"..renewDuration.."/")
+    elseif spell_queue[1] == REGROWTH then
+      this.regrowth_timer = GetTime() + 0.1
     end
   end
 end)

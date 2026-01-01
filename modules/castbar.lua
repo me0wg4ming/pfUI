@@ -1,4 +1,4 @@
-pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
+pfUI:RegisterModule("castbar", "vanilla", function ()
   local font = C.castbar.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
   local font_size = C.castbar.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
   local rawborder, default_border = GetBorderSize("unitframes")
@@ -86,8 +86,9 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
       local query = this.unitstr ~= "" and this.unitstr or this.unitname
       if not query then return end
 
-      -- transform all non player unitstrings to unit guids
-      if superwow_active and this.unitstr and not UnitIsUnit(this.unitstr, 'player') then
+      -- transform unitstrings to unit guids when SuperWoW is active
+      -- SuperWoW stores cast data by GUID for all units including player
+      if superwow_active and this.unitstr then
         local _, guid = UnitExists(this.unitstr)
         query = guid or query
       end
