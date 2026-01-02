@@ -87,10 +87,18 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       if not query then return end
 
       -- transform unitstrings to unit guids when SuperWoW is active
-      -- SuperWoW stores cast data by GUID for all units including player
-      if superwow_active and this.unitstr then
+      -- SuperWoW stores cast data by GUID for all units INCLUDING player
+      -- BUT: For player casts, we need to use libcast data because it handles pushback correctly
+      local useLibcastForPlayer = this.unitstr == "player"
+      
+      if superwow_active and this.unitstr and not useLibcastForPlayer then
         local _, guid = UnitExists(this.unitstr)
         query = guid or query
+      end
+      
+      -- For player: use player name to query libcast.db directly
+      if useLibcastForPlayer then
+        query = UnitName("player")
       end
 
       local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
@@ -150,10 +158,10 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
         if this.showtimer then
           if this.delay and this.delay > 0 then
-            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. round(this.delay,1) .. " |r "
-            this.bar.right:SetText(delay .. string.format("%.1f",cur) .. " / " .. round(max,1))
+            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. round(this.delay,2) .. " |r "
+            this.bar.right:SetText(delay .. string.format("%.2f",cur) .. " / " .. round(max,2))
           else
-            this.bar.right:SetText(string.format("%.1f",cur) .. " / " .. round(max,1))
+            this.bar.right:SetText(string.format("%.2f",cur) .. " / " .. round(max,2))
           end
         end
 
