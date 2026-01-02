@@ -214,7 +214,7 @@ libcast:SetScript("OnEvent", function()
     end
   elseif event == "SPELLCAST_DELAYED" then
     if this.db[player].cast then
-      this.db[player].casttime = this.db[player].casttime + arg1
+      this.db[player].start = this.db[player].start + arg1/1000
     end
   elseif event == "SPELLCAST_CHANNEL_START" then
     -- add cast action to the database

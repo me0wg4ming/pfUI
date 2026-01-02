@@ -56,7 +56,6 @@ Nampower provides spell queuing, precise cooldown tracking, and detailed aura/bu
 #### Features
 
 - **Spell Queue Indicator** - Shows queued spell icon near castbar (requires `unitframes.spellqueue` config)
-- **Enhanced Cast Bar** - More accurate cast progress via `GetCastInfo()` (requires `unitframes.nampower_castbar`)
 - **Reactive Spell Indicator** - Highlights when Overpower, Revenge, Execute, Riposte, etc. are usable (requires `unitframes.reactive_indicator`)
 - **Enhanced Debuff Tracking** - GUID-based debuff tracking via `DEBUFF_ADDED/REMOVED` events
 - **Enhanced Buff Tracking** - GUID-based buff tracking via `BUFF_ADDED/REMOVED` events (requires `unitframes.nampower_buffs`)
@@ -93,8 +92,6 @@ Nampower provides spell queuing, precise cooldown tracking, and detailed aura/bu
 | `pfUI.api.StopChannelNextTick()` | Stop channeling next tick |
 | `pfUI.api.GetSpellRecord(spellId)` | Get full spell database record |
 | `pfUI.api.GetSpellSchool(spellId)` | Get spell school (Fire, Frost, etc.) |
-| `pfUI.api.GetCurrentCast()` | Get current cast info |
-| `pfUI.api.GetDetailedCastInfo()` | Get detailed cast/GCD timing |
 | `pfUI.api.GetSwingTimers()` | Get auto-attack swing timers |
 | `pfUI.api.libdebuff_nampower(unit, id)` | Enhanced UnitDebuff with Nampower data |
 
@@ -141,7 +138,6 @@ These DLL features can be enabled/disabled via `/pfui` settings under Unit Frame
 | `unitframes.track_group` | SuperWoW | Track group members on minimap |
 | `unitframes.spellqueue` | Nampower | Show spell queue indicator |
 | `unitframes.spellqueuesize` | Nampower | Spell queue icon size |
-| `unitframes.nampower_castbar` | Nampower | Use precise cast bar timing |
 | `unitframes.reactive_indicator` | Nampower | Show reactive ability procs |
 | `unitframes.reactive_size` | Nampower | Reactive indicator icon size |
 | `unitframes.nampower_buffs` | Nampower | Enhanced buff tracking |

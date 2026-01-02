@@ -66,29 +66,6 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
     end)
   end
 
-  -- Enhanced cast bar timing using GetCastInfo
-  -- Provides more accurate cast progress by using Nampower's precise timing
-  -- This hooks the castbar's value update without replacing other functionality
-  if pfUI.castbar and pfUI.castbar.player and C.unitframes.nampower_castbar == "1" then
-    local castbar = pfUI.castbar.player
-
-    -- Hook the bar's SetValue to use Nampower timing when available
-    local originalSetValue = castbar.bar.SetValue
-    castbar.bar.SetValue = function(self, value)
-      local castInfo = GetCastInfo and GetCastInfo()
-      if castInfo and castInfo.castDurationMs and castInfo.castDurationMs > 0 then
-        -- Use Nampower's precise timing
-        -- Convert to seconds to match the bar's min/max values (0 to duration in seconds)
-        local elapsedMs = castInfo.castDurationMs - castInfo.castRemainingMs
-        local elapsedSec = elapsedMs / 1000
-        originalSetValue(self, elapsedSec)
-      else
-        -- Fall back to original value
-        originalSetValue(self, value)
-      end
-    end
-  end
-
   -- Enhanced Debuff Tracking using Nampower events
   -- DEBUFF_ADDED_OTHER/DEBUFF_REMOVED_OTHER provide accurate debuff tracking with spellId
   if libdebuff then
@@ -714,42 +691,6 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         end
       end
     end)
-  end
-
-  -- Enhanced Current Cast Info
-  if GetCurrentCastingInfo then
-    pfUI.api.GetCurrentCast = function()
-      local info = GetCurrentCastingInfo()
-      if not info then return nil end
-      return {
-        spellId = info.spellId,
-        startTimeMs = info.startTimeMs,
-        endTimeMs = info.endTimeMs,
-        castTimeMs = info.castTimeMs,
-        channeling = info.channeling == 1,
-        casting = info.casting == 1,
-      }
-    end
-  end
-
-  -- Detailed Cast Info (includes GCD state)
-  if GetCastInfo then
-    pfUI.api.GetDetailedCastInfo = function()
-      local info = GetCastInfo()
-      if not info then return nil end
-      return {
-        -- Cast timing
-        castDurationMs = info.castDurationMs,
-        castRemainingMs = info.castRemainingMs,
-        castProgress = info.castDurationMs > 0 and ((info.castDurationMs - info.castRemainingMs) / info.castDurationMs) or 0,
-        -- GCD timing
-        gcdRemainingMs = info.gcdCategoryRemainingMs,
-        gcdProgress = info.gcdCategoryRemainingMs > 0 and (1 - info.gcdCategoryRemainingMs / 1500) or 1,
-        -- State
-        isCasting = info.castDurationMs > 0 and info.castRemainingMs > 0,
-        isOnGCD = info.gcdCategoryRemainingMs > 0,
-      }
-    end
   end
 
   -- Swing Timer Integration

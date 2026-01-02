@@ -559,12 +559,29 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
   end
 
-  -- Enhance libcast with SuperWoW data
+  -- Enhance libcast with SuperWoW data for NPCs and other players only
+  -- Player casts use SPELLCAST_* events for proper pushback handling
   local supercast = CreateFrame("Frame")
+  local playerGuid = nil
+
+  supercast:RegisterEvent("PLAYER_ENTERING_WORLD")
   supercast:RegisterEvent("UNIT_CASTEVENT")
   supercast:SetScript("OnEvent", function()
+    if event == "PLAYER_ENTERING_WORLD" then
+      -- Cache player GUID
+      if UnitExists then
+        local _, guid = UnitExists("player")
+        playerGuid = guid
+      end
+      return
+    end
+
+    -- Skip player casts - let libcast handle those via SPELLCAST_* events
+    local guid = arg1
+    if guid == playerGuid then return end
+
     if not supercast.init then
-      -- disable combat parsing events in superwow mode
+      -- disable combat parsing events in superwow mode (for non-player units)
       libcast:UnregisterEvent("CHAT_MSG_SPELL_SELF_DAMAGE")
       libcast:UnregisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
       libcast:UnregisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF")
@@ -587,13 +604,10 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
 
     if arg3 == "START" or arg3 == "CAST" or arg3 == "CHANNEL" then
-      -- human readable argument list
-      local guid = arg1
       local target = arg2
       local event_type = arg3
       local spell_id = arg4
       local timer = arg5
-      local start = GetTime()
 
       -- get spell info from spell id
       local spell, icon, _
@@ -608,9 +622,6 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
       -- skip on buff procs during cast
       if event_type == "CAST" then
         if not libcast.db[guid] or libcast.db[guid].cast ~= spell then
-          -- ignore casts without 'START' event, while there is already another cast.
-          -- those events can be for example a frost shield proc while casting frostbolt.
-          -- we want to keep the cast itself, so we simply skip those.
           return
         end
       end
@@ -620,17 +631,10 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
       libcast.db[guid].cast = spell
       libcast.db[guid].rank = nil
       libcast.db[guid].start = GetTime()
-      -- libcast expects casttime in milliseconds (SuperWoW provides ms)
       libcast.db[guid].casttime = timer or 0
       libcast.db[guid].icon = icon
       libcast.db[guid].channel = event_type == "CHANNEL" or false
-
-      -- write state variable
-      superwow_active = true
     elseif arg3 == "FAIL" then
-      local guid = arg1
-
-      -- delete all cast entries of guid
       if libcast.db[guid] then
         libcast.db[guid].cast = nil
         libcast.db[guid].rank = nil

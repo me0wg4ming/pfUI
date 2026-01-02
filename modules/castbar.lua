@@ -112,6 +112,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
         if this.endTime ~= endTime then
           this.bar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(channel and "channelcolor" or "castbarcolor")]))
+          this.bar:SetMinMaxValues(0, duration / 1000)
           this.bar.left:SetText(spellname .. rank)
           this.fadeout = nil
           this.endTime = endTime
@@ -138,20 +139,11 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
           end
         end
 
-        -- use original max (without pushback) for the bar
-        local originalMax = max - (this.delay or 0)
-        this.bar:SetMinMaxValues(0, originalMax)
-
         if channel then
           cur = max + startTime/1000 - GetTime()
         end
 
-        -- apply pushback: bar goes backwards by delay amount
-        if not channel and this.delay and this.delay > 0 then
-          cur = cur - this.delay
-        end
-
-        cur = cur > originalMax and originalMax or cur
+        cur = cur > max and max or cur
         cur = cur < 0 and 0 or cur
 
         this.bar:SetValue(cur)
