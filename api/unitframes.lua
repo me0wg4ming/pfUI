@@ -1,6 +1,8 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
+local superwow_active = HasSuperWoW()
+
 pfUI.uf = CreateFrame("Frame", nil, UIParent)
 pfUI.uf:SetScript("OnUpdate", function()
   if InCombatLockdown and not InCombatLockdown() then

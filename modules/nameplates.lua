@@ -2,6 +2,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
+  -- check for SuperWoW support
+  local superwow_active = HasSuperWoW()
+
   local unitcolors = {
     ["ENEMY_NPC"] = { .9, .2, .3, .8 },
     ["NEUTRAL_NPC"] = { 1, 1, .3, .8 },
@@ -631,6 +634,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
 
     if player and unittype == "ENEMY_NPC" then unittype = "ENEMY_PLAYER" end
+    if player and unittype == "FRIENDLY_NPC" then unittype = "FRIENDLY_PLAYER" end
     elite = plate.original.levelicon:IsShown() and not player and "boss" or elite
     if not class then plate.wait_for_scan = true end
 
