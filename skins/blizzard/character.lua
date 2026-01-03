@@ -1,26 +1,13 @@
-pfUI:RegisterSkin("Character", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Character", "vanilla", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
-  -- Compatibility
-  if PlayerTitleDropDown then -- tbc, wotlk
-    -- Character Tab
-    SkinDropDown(PlayerTitleDropDown)
-    PlayerTitleDropDown:SetPoint("TOP", CharacterLevelText, "BOTTOM", 0, -2)
-    PlayerTitleDropDownText:SetPoint("LEFT", PlayerTitleDropDown.backdrop, "LEFT", 6, 2)
-    SkinDropDown(PlayerStatFrameLeftDropDown)
-    SkinDropDown(PlayerStatFrameRightDropDown)
+  -- Honor Tab
+  StripTextures(HonorFrame)
 
-    -- Honor Tab
-    StripTextures(PVPFrame)
-  else -- vanilla
-    -- Honor Tab
-    StripTextures(HonorFrame)
-
-    HonorFrameProgressBar:SetStatusBarTexture(pfUI.media["img:bar"])
-    CreateBackdrop(HonorFrameProgressBar)
-    HonorFrameProgressBar:SetHeight(24)
-  end
+  HonorFrameProgressBar:SetStatusBarTexture(pfUI.media["img:bar"])
+  CreateBackdrop(HonorFrameProgressBar)
+  HonorFrameProgressBar:SetHeight(24)
 
   local magicResTextureCords = {
     {0.21875, 0.78125, 0.25, 0.3203125},

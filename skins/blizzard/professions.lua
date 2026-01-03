@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Profession", "vanilla", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
@@ -219,37 +219,7 @@ pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
         end)
       end
 
-      -- Compatibility
-      if search then -- tbc
-        _G[displayed] = 21
-        scrollframe:SetHeight(338)
-
-        local rank = _G[name.."RankFrameSkillRank"]
-        rank:ClearAllPoints()
-        rank:SetPoint("CENTER", rankbar, "CENTER", 0, 0)
-
-        local available = _G[frame:GetName().."AvailableFilterCheckButton"]
-        SkinCheckbox(available)
-        available:ClearAllPoints()
-        available:SetPoint("TOPLEFT", scrollframe.backdrop, "BOTTOMLEFT", -4, -5)
-
-        search:DisableDrawLayer("BACKGROUND")
-        CreateBackdrop(search, nil, nil, 1)
-        search.backdrop:SetAllPoints(search)
-        search:SetTextInsets(5, 5, 5, 5)
-        search:SetHeight(22)
-        search:ClearAllPoints()
-        search:SetPoint("TOPRIGHT", scrollframe.backdrop, "BOTTOMRIGHT", 0, -5)
-
-        local craft_filter = CraftFrameFilterDropDown
-        if craft_filter then
-          SkinDropDown(craft_filter)
-          craft_filter:ClearAllPoints()
-          craft_filter:SetPoint("BOTTOMRIGHT", scrollframe.backdrop, "TOPRIGHT", 15, 0)
-        end
-      else -- vanilla
-        _G[displayed] = 23
-      end
+      _G[displayed] = 23
       -- build remaining tradeskills
       for i = 9, _G[displayed] do
         local button = _G[template..i] or CreateFrame("Button", template..i, frame, template.."ButtonTemplate")
