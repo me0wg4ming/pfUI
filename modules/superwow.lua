@@ -578,7 +578,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
 
     local guid = arg1
     local isPlayer = guid == playerGuid
-    
+
     -- For non-player units: disable combat parsing events (one-time init)
     if not isPlayer and not supercast.init then
       -- disable combat parsing events in superwow mode (for non-player units)
