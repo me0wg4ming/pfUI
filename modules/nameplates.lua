@@ -2,6 +2,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
+  -- check for SuperWoW support
+  local superwow_active = HasSuperWoW()
+
   local unitcolors = {
     ["ENEMY_NPC"] = { .9, .2, .3, .8 },
     ["NEUTRAL_NPC"] = { 1, 1, .3, .8 },
