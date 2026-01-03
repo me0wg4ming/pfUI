@@ -1,4 +1,4 @@
-pfUI:RegisterModule("chat", "vanilla:tbc", function ()
+pfUI:RegisterModule("chat", "vanilla", function ()
   local panelfont = C.panel.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
   local panelfont_size = C.panel.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
   local rawborder, default_border = GetBorderSize("chat")
@@ -455,6 +455,8 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
   if C.chat.global.tabmouse == "1" then
     pfUI.chat.mouseovertab = CreateFrame("Frame")
     pfUI.chat.mouseovertab:SetScript("OnUpdate", function()
+      -- throttle to 0.1s
+      if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
 
       if pfUI.chat.hideLock then return end
 
@@ -725,6 +727,12 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
     end
   end)
 
+  local function GetPlayerLevel(name)
+    if not pfUI_playerDB then return nil end
+    if not pfUI_playerDB[name] then return nil end
+    return pfUI_playerDB[name].level
+  end
+
   local function ScanWhoName(name)
     -- abort if another query is ongoing
     if who_query.pending then return end
@@ -745,8 +753,7 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
     end
 
     -- Remove prat CLINKs
-    text = gsub(text, "{CLINK:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r") -- tbc
-    text = gsub(text, "{CLINK:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r") -- vanilla
+    text = gsub(text, "{CLINK:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r")
 
     -- Remove chatter CLINKs
     text = gsub(text, "{CLINK:item:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r")
@@ -779,6 +786,21 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
         if C.chat.text.tintunknown == "1" or match then
           text = string.gsub(text, "|Hplayer:"..name.."|h%["..real.."%]|h(.-:-)",
             left..color.."|Hplayer:"..name.."|h" .. color .. real .. "|h|r"..right.."%1")
+        end
+      end
+    end
+
+    -- display player levels if available
+    if C.chat.text.playerlevel == "1" then
+      for name in gfind(text, "|Hplayer:(.-)|h") do
+        local real, _ = strsplit(":", name)
+        local level = GetPlayerLevel(real)
+
+        if level then
+          local levelcolor = rgbhex(GetDifficultyColor(level))
+          -- Add level after the player name, before the closing bracket
+          text = string.gsub(text, "(|Hplayer:" .. name .. "|h.-|h|r)" .. right,
+            "%1 " .. levelcolor .. level .. "|r" .. right)
         end
       end
     end

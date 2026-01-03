@@ -7,6 +7,82 @@ setfenv(1, pfUI:GetEnvironment())
 gfind = string.gmatch or string.gfind
 mod = math.mod or mod
 
+-- [ DLL Detection Helpers ]
+-- Detects presence of various DLL extensions for enhanced functionality
+
+-- [ HasSuperWoW ]
+-- Returns true if SuperWoW DLL is active
+-- SuperWoW provides: UNIT_CASTEVENT, UnitPosition, SetMouseoverUnit, SpellInfo, etc.
+function pfUI.api.HasSuperWoW()
+  return SUPERWOW_VERSION or (SetAutoloot and SpellInfo)
+end
+
+-- [ HasUnitXP ]
+-- Returns true if UnitXP_SP3 DLL is active
+-- UnitXP provides: distance, line of sight, behind detection, targeting helpers
+function pfUI.api.HasUnitXP()
+  local success = pcall(UnitXP, "nop", "nop")
+  return success
+end
+
+-- [ HasNampower ]
+-- Returns true if Nampower DLL is active
+-- Nampower provides: spell queuing, GetCastInfo, GetSpellIdCooldown, IsSpellInRange, etc.
+function pfUI.api.HasNampower()
+  return GetNampowerVersion and true or false
+end
+
+-- [ GetUnitDistance ]
+-- Returns distance to unit using best available method
+-- 'unit1'    [string]    first unit (default: "player")
+-- 'unit2'    [string]    second unit
+-- returns:   [number]    distance in yards, or nil if unavailable
+function pfUI.api.GetUnitDistance(unit1, unit2)
+  if not unit2 then
+    unit2 = unit1
+    unit1 = "player"
+  end
+
+  if not UnitExists(unit2) then return nil end
+
+  -- Try UnitXP first (most accurate)
+  if pfUI.api.HasUnitXP() then
+    local success, distance = pcall(UnitXP, "distanceBetween", unit1, unit2)
+    if success and distance then return distance end
+  end
+
+  -- Try SuperWoW UnitPosition
+  if pfUI.api.HasSuperWoW() and UnitPosition then
+    local x1, y1, z1 = UnitPosition(unit1)
+    local x2, y2, z2 = UnitPosition(unit2)
+    if x1 and y1 and z1 and x2 and y2 and z2 then
+      return ((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2)^0.5
+    end
+  end
+
+  return nil
+end
+
+-- [ UnitInLineOfSight ]
+-- Returns true if unit1 has line of sight to unit2
+-- Requires UnitXP_SP3
+function pfUI.api.UnitInLineOfSight(unit1, unit2)
+  if not pfUI.api.HasUnitXP() then return nil end
+  local success, inSight = pcall(UnitXP, "inSight", unit1, unit2)
+  if success then return inSight end
+  return nil
+end
+
+-- [ UnitIsBehind ]
+-- Returns true if unit1 is behind unit2
+-- Requires UnitXP_SP3
+function pfUI.api.UnitIsBehind(unit1, unit2)
+  if not pfUI.api.HasUnitXP() then return nil end
+  local success, behind = pcall(UnitXP, "behind", unit1, unit2)
+  if success then return behind end
+  return nil
+end
+
 -- [ strsplit ]
 -- Splits a string using a delimiter.
 -- 'delimiter'  [string]        characters that will be interpreted as delimiter

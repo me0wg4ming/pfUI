@@ -1,4 +1,4 @@
-pfUI:RegisterModule("tooltip", "vanilla:tbc", function ()
+pfUI:RegisterModule("tooltip", "vanilla", function ()
   local rawborder, default_border = GetBorderSize()
 
   pfUI.tooltip = CreateFrame('Frame', "pfTooltip", GameTooltip)
@@ -33,6 +33,10 @@ pfUI:RegisterModule("tooltip", "vanilla:tbc", function ()
           tooltip.cursor:SetWidth(tonumber(C.tooltip.cursoroffset) * 2)
           tooltip.cursor:SetHeight(tonumber(C.tooltip.cursoroffset) * 2)
           tooltip.cursor:SetScript("OnUpdate", function()
+            -- throttle to 0.1s - cursor following doesn't need to be every frame
+            if (this.tick or 0) > GetTime() then return end
+            this.tick = GetTime() + 0.1
+
             local scale = UIParent:GetScale()
             local x, y = GetCursorPosition()
             this:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x/scale, y/scale)

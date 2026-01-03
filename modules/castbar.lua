@@ -1,4 +1,4 @@
-pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
+pfUI:RegisterModule("castbar", "vanilla", function ()
   local font = C.castbar.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
   local font_size = C.castbar.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
   local rawborder, default_border = GetBorderSize("unitframes")
@@ -86,10 +86,19 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
       local query = this.unitstr ~= "" and this.unitstr or this.unitname
       if not query then return end
 
-      -- transform all non player unitstrings to unit guids
-      if superwow_active and this.unitstr and not UnitIsUnit(this.unitstr, 'player') then
+      -- transform unitstrings to unit guids when SuperWoW is active
+      -- SuperWoW stores cast data by GUID for all units INCLUDING player
+      -- BUT: For player casts, we need to use libcast data because it handles pushback correctly
+      local useLibcastForPlayer = this.unitstr == "player"
+      
+      if superwow_active and this.unitstr and not useLibcastForPlayer then
         local _, guid = UnitExists(this.unitstr)
         query = guid or query
+      end
+      
+      -- For player: use player name to query libcast.db directly
+      if useLibcastForPlayer then
+        query = UnitName("player")
       end
 
       local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
@@ -149,10 +158,10 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
 
         if this.showtimer then
           if this.delay and this.delay > 0 then
-            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. round(this.delay,1) .. " |r "
-            this.bar.right:SetText(delay .. string.format("%.1f",cur) .. " / " .. round(max,1))
+            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. round(this.delay,2) .. " |r "
+            this.bar.right:SetText(delay .. string.format("%.2f",cur) .. " / " .. round(max,2))
           else
-            this.bar.right:SetText(string.format("%.1f",cur) .. " / " .. round(max,1))
+            this.bar.right:SetText(string.format("%.2f",cur) .. " / " .. round(max,2))
           end
         end
 

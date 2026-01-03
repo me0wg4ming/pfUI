@@ -1,4 +1,4 @@
-pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
+pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
@@ -321,6 +321,9 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
   end)
 
   nameplates:SetScript("OnUpdate", function()
+    -- throttle to 10 updates per second instead of every frame
+    if (this.tick or 0.1) > GetTime() then return else this.tick = GetTime() + 0.1 end
+
     -- propagate events to all nameplates
     if this.eventcache then
       this.eventcache = nil
@@ -1112,7 +1115,6 @@ pfUI:RegisterModule("nameplates", "vanilla:tbc", function ()
 
   if pfUI.client <= 11200 then
     -- handle vanilla only settings
-    -- due to the secured lua api, those settings can't be applied to TBC and later.
     local hookOnConfigChange = nameplates.OnConfigChange
     nameplates.OnConfigChange = function(self)
       hookOnConfigChange(self)

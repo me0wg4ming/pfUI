@@ -26,7 +26,6 @@
   <Include file="..\skins\blizzard\game_menu.lua"/>
   <Include file="..\skins\blizzard\guild_registrar.lua"/>
   <Include file="..\skins\blizzard\help.lua"/>
-  <Include file="..\skins\blizzard\options-interface.lua"/>
   <Include file="..\skins\blizzard\options-sound.lua"/>
   <Include file="..\skins\blizzard\options-video.lua"/>
   <Include file="..\skins\blizzard\petition.lua"/>
@@ -34,13 +33,4 @@
   <Include file="..\skins\blizzard\tooltips.lua"/>
   <Include file="..\skins\blizzard\tabard.lua"/>
   <Include file="..\skins\blizzard\itemtext.lua"/>
-
-  <!-- TBC -->
-  <Include file="..\skins\blizzard\tracking.lua"/>
-  <Include file="..\skins\blizzard\guildbank.lua"/>
-  <Include file="..\skins\blizzard\socket.lua"/>
-  <Include file="..\skins\blizzard\arena_registrar.lua"/>
-  <Include file="..\skins\blizzard\arena.lua"/>
-  <Include file="..\skins\blizzard\time_manager.lua"/>
-  <Include file="..\skins\blizzard\lfg.lua"/>
 </Ui>

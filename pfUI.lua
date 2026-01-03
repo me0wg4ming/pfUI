@@ -77,17 +77,9 @@ end})
 local _, _, _, client = GetBuildInfo()
 client = client or 11200
 
--- detect client expansion
-if client >= 20000 and client <= 20400 then
-  pfUI.expansion = "tbc"
-  pfUI.client = client
-elseif client >= 30000 and client <= 30300 then
-  pfUI.expansion = "wotlk"
-  pfUI.client = client
-else
-  pfUI.expansion = "vanilla"
-  pfUI.client = client
-end
+-- set expansion to vanilla
+pfUI.expansion = "vanilla"
+pfUI.client = client
 
 -- setup pfUI namespace
 setmetatable(pfUI.env, {__index = getfenv(0)})
@@ -119,34 +111,20 @@ function pfUI:UpdateFonts()
 
   -- load font configuration
   local default, tooltip, unit, unit_name, combat
-  if pfUI_config.global.force_region == "1" and GetLocale() == "zhCN" and pfUI.expansion == "vanilla" then
+  if pfUI_config.global.force_region == "1" and GetLocale() == "zhCN" then
     -- force locale compatible fonts (zhCN 1.12)
     default = "Fonts\\FZXHLJW.TTF"
     tooltip = "Fonts\\FZXHLJW.TTF"
     combat = "Fonts\\FZXHLJW.TTF"
     unit = "Fonts\\FZXHLJW.TTF"
     unit_name = "Fonts\\FZXHLJW.TTF"
-  elseif pfUI_config.global.force_region == "1" and GetLocale() == "zhCN" and pfUI.expansion == "tbc" then
-    -- force locale compatible fonts (zhCN 2.4.3)
-    default = "Fonts\\ZYHei.ttf"
-    tooltip = "Fonts\\ZYHei.ttf"
-    combat = "Fonts\\ZYKai_C.ttf"
-    unit = "Fonts\\ZYKai_T.ttf"
-    unit_name = "Fonts\\ZYHei.ttf"
-  elseif pfUI_config.global.force_region == "1" and GetLocale() == "zhTW" and pfUI.expansion == "vanilla" then
+  elseif pfUI_config.global.force_region == "1" and GetLocale() == "zhTW" then
     -- force locale compatible fonts (zhTW 1.12)
     default = "Fonts\\FZXHLJW.ttf"
     tooltip = "Fonts\\FZXHLJW.ttf"
     combat = "Fonts\\FZXHLJW.ttf"
     unit = "Fonts\\FZXHLJW.ttf"
     unit_name = "Fonts\\FZXHLJW.ttf"
-  elseif pfUI_config.global.force_region == "1" and GetLocale() == "zhTW" and pfUI.expansion == "tbc" then
-    -- force locale compatible fonts (zhTW 2.4.3)
-    default = "Fonts\\bHEI01B.ttf"
-    tooltip = "Fonts\\bHEI01B.ttf"
-    combat = "Fonts\\bHEI01B.ttf"
-    unit = "Fonts\\bHEI01B.ttf"
-    unit_name = "Fonts\\bHEI01B.ttf"
   elseif pfUI_config.global.force_region == "1" and GetLocale() == "koKR" then
     -- force locale compatible fonts (koKR)
     default = "Fonts\\2002.TTF"
@@ -244,7 +222,7 @@ end
 function pfUI:RegisterModule(name, a2, a3)
   if pfUI.module[name] then return end
   local hasv = type(a2) == "string"
-  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla:tbc:wotlk"
+  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla"
 
   -- check for client compatibility
   if not strfind(version, pfUI.expansion) then return end
@@ -259,7 +237,7 @@ end
 function pfUI:RegisterSkin(name, a2, a3)
   if pfUI.skin[name] then return end
   local hasv = type(a2) == "string"
-  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla:tbc:wotlk"
+  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla"
 
   -- check for client compatibility
   if not strfind(version, pfUI.expansion) then return end

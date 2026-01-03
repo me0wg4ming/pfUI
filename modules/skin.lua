@@ -1,7 +1,10 @@
-pfUI:RegisterModule("skin", "vanilla:tbc", function ()
+pfUI:RegisterModule("skin", "vanilla", function ()
   -- align UIParent panels
   pfUI.panelalign = CreateFrame("Frame", "pfUIParentPanelAlign", UIParent)
   pfUI.panelalign:SetScript("OnUpdate", function()
+    -- throttle to 5 updates per second instead of every frame
+    if (this.tick or 0.2) > GetTime() then return else this.tick = GetTime() + 0.2 end
+
     local left = UIParent.left
     local center = UIParent.center
     local rbpos, ropos

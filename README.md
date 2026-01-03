@@ -1,121 +1,146 @@
-# pfUI
+pfUI performance updates, use on own risk.
 
-An AddOn for World of Warcraft: Vanilla (1.12.1) and The Burning Crusade (2.4.3), which aims to be a full replacement for the original interface. The design is inspired by several screenshots I've seen from TukUI, ElvUI and others. This addon delivers modern features and a minimalistic style that's easy to use right from the start. It is entirely written from scratch without any inclusion of third-party addons or libraries.
+## DLL Integrations
 
-This is **not** an addon-pack like [ShaguUI](http://shagu.org/ShaguUI/), however, there is support for external addons like MobHealth3, DPSMate and others, but they will never be shipped within the package.
+pfUI includes optional integration modules for client DLLs that provide enhanced functionality beyond what the standard WoW 1.12 client supports. These features are only enabled when the corresponding DLL is installed.
 
-**Please do not re-upload or distribute outdated versions of this project. However, you are more than welcome to fork or link to the official github page.**
+---
 
-## Screenshots
+### SuperWoW
 
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/config.jpg" align="right" width="48.5%">
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/unlock.jpg" width="48.5%">
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/contrib.jpg" align="right" width="48.5%">
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/maraudon.jpg" width="48.5%">
+**Repository:** https://github.com/balakethelock/SuperWoW
 
-## Installation (Vanilla)
-1. Download **[Latest Version](https://github.com/shagu/pfUI/archive/master.zip)**
-2. Unpack the Zip file
-3. Rename the folder "pfUI-master" to "pfUI"
-4. Copy "pfUI" into Wow-Directory\Interface\AddOns
-5. Restart Wow
+SuperWoW provides GUID-based unit tracking, spell information APIs, and various client enhancements.
 
-## Installation (The Burning Crusade)
-1. Download **[Latest Version](https://github.com/shagu/pfUI/archive/master.zip)**
-2. Unpack the Zip file
-3. Rename the folder "pfUI-master" to "pfUI-tbc"
-4. Copy "pfUI-tbc" into Wow-Directory\Interface\AddOns
-5. Restart Wow
+#### Features
 
-## Commands
+- **GUID-Based Focus Frame** - Focus frame uses actual unit GUIDs instead of name-based emulation
+- **Native Mouseover Casting** - `/pfcast` supports true mouseover targeting via `CastSpellByName(spell, unit)`
+- **Druid Mana Bar** - Shows mana while in feral forms (requires `unitframes.druidmanabar` config)
+- **Enhanced Cast Bars** - Uses `UNIT_CASTEVENT` for accurate cast/channel tracking with spell IDs
+- **Enhanced Debuff Tracking** - Accurate debuff application via `UNIT_CASTEVENT` with caster info
+- **Group Minimap Tracking** - Track party/raid members on minimap via `TrackUnit()` API
+- **Raid Marker Targeting** - Target units by raid marker (`mark1` to `mark8`)
+- **Clickthrough Mode** - Click through corpses to loot underneath (`/clickthrough` or `/ct`)
+- **Config Import/Export** - Save and load pfUI configs via `/pfexport` and `/pfimport`
+- **Local Raid Markers** - Set raid markers visible only to yourself
+- **Enchanting Link Fixes** - Converts enchant links for compatibility with non-SuperWoW clients
 
-    /pfui         Open the configuration GUI
-    /share        Open the configuration import/export dialog
-    /gm           Open the ticket Dialog
-    /rl           Reload the whole UI
-    /farm         Toggles the Farm-Mode
-    /pfcast       Same as /cast but for mouseover units
-    /focus        Creates a Focus-Frame for the current target
-    /castfocus    Same as /cast but for focus frame
-    /clearfocus   Clears the Focus-Frame
-    /swapfocus    Toggle Focus and Target-Frame
-    /pftest       Toggle pfUI Unitframe Test Mode
-    /abp          Addon Button Panel
+#### API Functions
 
-## Languages
-pfUI supports and contains language specific code for the following gameclients.
-* English (enUS)
-* Korean (koKR)
-* French (frFR)
-* German (deDE)
-* Chinese (zhCN)
-* Spanish (esES)
-* Russian (ruRU)
+| Function | Description |
+|----------|-------------|
+| `pfUI.api.GetMarkedUnit(index)` | Get unit ID for raid marker 1-8 |
+| `pfUI.api.TargetMark(index)` | Target unit with raid marker |
+| `pfUI.api.GetUnitOwner(unit)` | Get owner of pet/totem |
+| `pfUI.api.GetSpellInfo(spellId)` | Get spell name, rank, texture, range |
+| `pfUI.api.SetClickthrough(enabled)` | Enable/disable clickthrough |
+| `pfUI.api.ToggleClickthrough()` | Toggle clickthrough mode |
+| `pfUI.api.SetAutoloot(enabled)` | Enable/disable autoloot |
+| `pfUI.api.ExportConfig(filename)` | Export config to file |
+| `pfUI.api.ImportConfig(filename)` | Import config from file |
+| `pfUI.api.GetPlayerBuffSpellId(index)` | Get spell ID for player buff |
+| `pfUI.api.LogToCombatLog(text)` | Add text to combat log |
+| `pfUI.api.SetLocalRaidTarget(unit, index)` | Set local-only raid marker |
+| `pfUI.api.GetItemCharges(bag, slot)` | Get item charges (returns positive) |
+| `pfUI.api.GetUnitWeaponEnchants(unit)` | Get weapon enchant info |
 
-## Recommended Addons
-* [pfQuest](https://shagu.org/pfQuest) A simple database and quest helper
-* [WIM](http://addons.us.to/addon/wim), [WIM (continued)](https://github.com/shirsig/WIM) Give whispers an instant messenger feel
+---
 
-## Plugins
-* [pfUI-eliteoverlay](https://shagu.org/pfUI-eliteoverlay) Add elite dragons to unitframes
-* [pfUI-fonts](https://shagu.org/pfUI-fonts) Additional fonts for pfUI
-* [pfUI-CustomMedia](https://github.com/mrrosh/pfUI-CustomMedia) Additional textures for pfUI
-* [pfUI-Gryphons](https://github.com/mrrosh/pfUI-Gryphons) Add back the gryphons to your actionbars
+### Nampower
 
-## FAQ
-**What does "pfUI" stand for?**  
-The term "*pfui!*" is german and simply stands for "*pooh!*", because I'm not a
-big fan of creating configuration UI's, especially not via the Wow-API
-(you might have noticed that in ShaguUI).
+**Repository:** https://gitea.com/avitasia/nampower
 
-**How can I donate?**  
-You can donate via [GitHub](https://github.com/sponsors/shagu) or [Ko-fi](https://ko-fi.com/shagu)
+Nampower provides spell queuing, precise cooldown tracking, and detailed aura/buff information.
 
-**How do I report a Bug?**  
-Please provide as much information as possible in the [Bugtracker](https://github.com/shagu/pfUI/issues).
-If there is an error message, provide the full content of it. Just telling that "there is an error" won't help any of us.
-Please consider adding additional information such as: since when did you got the error,
-does it still happen using a clean configuration, what other addons are loaded and which version you're running.
-When playing with a non-english client, the language might be relevant too. If possible, explain how people can reproduce the issue.
+#### Features
 
-**How can I contribute?**
-Report errors and issues in the [Bugtracker](https://github.com/shagu/pfUI/issues).
-Please make sure to have the latest version installed and check for conflicting addons beforehand.
+- **Spell Queue Indicator** - Shows queued spell icon near castbar (requires `unitframes.spellqueue` config)
+- **Reactive Spell Indicator** - Highlights when Overpower, Revenge, Execute, Riposte, etc. are usable (requires `unitframes.reactive_indicator`)
+- **Enhanced Debuff Tracking** - GUID-based debuff tracking via `DEBUFF_ADDED/REMOVED` events
+- **Enhanced Buff Tracking** - GUID-based buff tracking via `BUFF_ADDED/REMOVED` events (requires `unitframes.nampower_buffs`)
+- **Swing Timer** - Track main-hand and off-hand auto-attack timers
+- **Disenchant All** - `/disenchantall` or `/dea` to disenchant eligible items
 
-**I have bad performance, what can I do?**  
-There's only one known performance issue: that is while using "Frame Shadows". Make sure to disable those
-in the pfUI settings (Settings -> Appearance -> Enable Frame Shadows). If you still have a low performance,
-it's most likely a combination with another addon. Disable all AddOns but pfUI and then enable one-by-one,
-till the performance problem occurs again. Make sure to report the identified AddOn and what you did to reproduce
-via the [Bugtracker](https://github.com/shagu/pfUI/issues).
+#### API Functions
 
-**Where is the happiness indicator for pets?**  
-The pet happiness is shown as the color of your pet's frame. Depending on your skin, this can either be the text or the background color of your pet's healthbar:
+| Function | Description |
+|----------|-------------|
+| `pfUI.api.GetUnitAuras(unit)` | Get all buffs/debuffs with spell IDs via `GetUnitField` |
+| `pfUI.api.UnitHasAura(unit, spellId)` | Check if unit has specific aura |
+| `pfUI.api.GetUnitResistances(unit)` | Get unit's resistances (armor, fire, frost, etc.) |
+| `pfUI.api.GetPreciseCooldown(spellId)` | Get precise cooldown info (remaining ms, GCD state) |
+| `pfUI.api.GetPreciseItemCooldown(itemId)` | Get precise item cooldown |
+| `pfUI.api.GetEquippedTrinkets()` | Get equipped trinket info |
+| `pfUI.api.GetTrinketCooldown(slot)` | Get trinket cooldown |
+| `pfUI.api.UseTrinket(slot, target)` | Use trinket |
+| `pfUI.api.GetNampowerItemStats(itemId)` | Get item stats |
+| `pfUI.api.GetNampowerItemLevel(itemId)` | Get item level |
+| `pfUI.api.GetSpellBonus(spellId, modType)` | Get spell modifiers (damage, crit, cost) |
+| `pfUI.api.GetSpellDamageBonus(spellId)` | Get spell damage bonus |
+| `pfUI.api.GetSpellCritBonus(spellId)` | Get spell crit bonus |
+| `pfUI.api.GetSpellCostReduction(spellId)` | Get spell cost reduction |
+| `pfUI.api.GetAllBagItems()` | Get all bag items |
+| `pfUI.api.FindItem(itemIdOrName)` | Find item in bags |
+| `pfUI.api.UseItem(itemIdOrName, target)` | Use item |
+| `pfUI.api.GetPlayerEquipment()` | Get player's equipped items |
+| `pfUI.api.GetTargetEquipment()` | Get target's equipped items |
+| `pfUI.api.GetMaxRankSpellId(spellName)` | Get spell ID for max rank |
+| `pfUI.api.GetSpellSlotInfo(spellName)` | Get spell slot/book info |
+| `pfUI.api.QueueLuaScript(script, priority)` | Queue Lua script for execution |
+| `pfUI.api.QueueSpell(spellName)` | Queue spell by name |
+| `pfUI.api.StopChannelNextTick()` | Stop channeling next tick |
+| `pfUI.api.GetSpellRecord(spellId)` | Get full spell database record |
+| `pfUI.api.GetSpellSchool(spellId)` | Get spell school (Fire, Frost, etc.) |
+| `pfUI.api.GetSwingTimers()` | Get auto-attack swing timers |
+| `pfUI.api.libdebuff_nampower(unit, id)` | Enhanced UnitDebuff with Nampower data |
 
-- Green = Happy
-- Yellow = Content
-- Red = Unhappy
+---
 
-Since version 4.0.7 there is also an additional icon that can be enabled from the pet unit frame options.
+### UnitXP_SP3
 
-**Can I use Clique with pfUI?**  
-This addon already includes support for clickcasting. If you still want to make use of clique, all pfUI's unitframes are already compatible to Clique-TBC. For Vanilla, a pfUI compatible version can be found [Here](https://github.com/shagu/Clique/archive/master.zip). If you want to keep your current version of Clique, you'll have to apply this [Patch](https://github.com/shagu/Clique/commit/a5ee56c3f803afbdda07bae9cd330e0d4a75d75a).
+**Repository:** https://github.com/allfoxwy/UnitXP_SP3
 
-**Where is the Experience Bar?**  
-The experience bar shows up on mouseover and whenever you gain experience, next to left chatframe by default. There's also an option to make it stay visible all the time.
+UnitXP provides line-of-sight checks, positional information, precise distances, and OS-level notifications.
 
-**How do I show the Damage- and Threatmeter Dock?**  
-If you enabled the "dock"-feature for your external (third-party) meters such as DPSMate or KTM, then you'll be able to toggle between them and the Right Chat by clicking on the ">" symbol on the bottom-right panel.
+#### Features
 
-**Why is my chat always resetting to only 3 lines of text?**  
-This happens if "Simple Chat" is enabled in blizzards interface settings (Advanced Options).
-Paste the following command into your chat to disable that option: `/run SIMPLE_CHAT="0"; pfUI.chat.SetupPositions(); ReloadUI()`
+- **Line of Sight Indicator** - Shows "NO LOS" text on target frame when target is obstructed (requires `unitframes.los_indicator`)
+- **Behind Indicator** - Shows "BEHIND" text on target frame when positioned behind target (requires `unitframes.behind_indicator`)
+- **OS Notifications** - Flashes taskbar and plays system sound on whispers, ready checks, BG queue pops (requires `unitframes.unitxp_notify`)
+- **Precise Distance** - Exact yard distance between units
+- **Smart Targeting** - Target nearest enemy, highest HP, cycle through enemies
 
-**How can I enable mouseover cast?**  
-On Vanilla, create a macro with "/pfcast SPELLNAME". If you also want to see the cooldown, You might want to add "/run if nil then CastSpellByName("SPELLNAME") end" on top of the macro. For The Burning Crusade, just use the regular mouseover macros.
+#### API Functions
 
-**Will there be pfUI for Activision's "Classic" remakes?**  
-No, it would require an entire rewrite of the AddOn since the game is now a different one. The AddOn-API has evolved during the last 15 years and the new "Classic" versions are based on a current retail gameclient. I don't plan to play any of those new versions, so I won't be porting any of my addons to it.
+| Function | Description |
+|----------|-------------|
+| `pfUI.api.GetPreciseDistance(unit1, unit2)` | Get exact distance in yards |
+| `pfUI.api.IsInMeleeRange(unit)` | Check if unit is in melee range |
+| `pfUI.api.GetAoEDistance(unit1, unit2)` | Get distance for AoE calculations |
+| `pfUI.api.TargetNearestEnemy()` | Target nearest hostile unit |
+| `pfUI.api.TargetHighestHP()` | Target enemy with most HP |
+| `pfUI.api.TargetNextEnemy()` | Cycle to next enemy |
+| `pfUI.api.TargetPreviousEnemy()` | Cycle to previous enemy |
+| `pfUI.api.TargetNextMarked(order)` | Target next marked enemy in order |
+| `pfUI.api.UnitInLineOfSight(unit1, unit2)` | Check line of sight between units |
+| `pfUI.api.UnitIsBehind(unit1, unit2)` | Check if unit1 is behind unit2 |
 
-**Everything from scratch?! Are you insane?**  
-Most probably, yes.
+---
+
+### Configuration Options
+
+These DLL features can be enabled/disabled via `/pfui` settings under Unit Frames:
+
+| Setting | DLL | Description |
+|---------|-----|-------------|
+| `unitframes.druidmanabar` | SuperWoW | Show mana bar while shapeshifted |
+| `unitframes.track_group` | SuperWoW | Track group members on minimap |
+| `unitframes.spellqueue` | Nampower | Show spell queue indicator |
+| `unitframes.spellqueuesize` | Nampower | Spell queue icon size |
+| `unitframes.reactive_indicator` | Nampower | Show reactive ability procs |
+| `unitframes.reactive_size` | Nampower | Reactive indicator icon size |
+| `unitframes.nampower_buffs` | Nampower | Enhanced buff tracking |
+| `unitframes.los_indicator` | UnitXP | Show line of sight indicator |
+| `unitframes.behind_indicator` | UnitXP | Show behind indicator |
+| `unitframes.unitxp_notify` | UnitXP | Enable OS notifications |
