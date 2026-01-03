@@ -1,4 +1,4 @@
-pfUI:RegisterModule("mirrortimers", "vanilla:tbc", function ()
+pfUI:RegisterModule("mirrortimers", "vanilla", function ()
   local font = pfUI.font_default
   local fontsize = tonumber(C.global.font_size)
   local height = fontsize * 1.3

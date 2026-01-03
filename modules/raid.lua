@@ -1,4 +1,4 @@
-pfUI:RegisterModule("raid", "vanilla:tbc", function ()
+pfUI:RegisterModule("raid", "vanilla", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
 
@@ -107,6 +107,11 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
       if name and not pfUI.uf.raid.tankrole[name] then
         pfUI.uf.raid:AddUnitToGroup(i, subgroup)
       end
+    end
+
+    -- rebuild unitmap after frame IDs are assigned
+    if pfUI.uf.RebuildUnitmap then
+      pfUI.uf.RebuildUnitmap()
     end
 
     this:Hide()
