@@ -3178,7 +3178,8 @@ function pfUI.uf:GetStatusValue(unit, pos)
   elseif config == "name" then
     return unit:GetColor("unit") .. pfUI.uf:GetNameString(unitstr)
   elseif config == "nameshort" then
-    return unit:GetColor("unit") .. strsub(UnitName(unitstr), 0, 3)
+    local length = tonumber(C.global.font_unit_name_length)
+    return unit:GetColor("unit") .. strsub(UnitName(unitstr), 0, length)
   elseif config == "level" then
     return unit:GetColor("level") .. pfUI.uf:GetLevelString(unitstr)
   elseif config == "class" then

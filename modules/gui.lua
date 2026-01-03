@@ -2066,6 +2066,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
       CreateConfig(nil, T["Unit Frame Text Size"], C.global, "font_unit_size")
       CreateConfig(nil, T["Unit Frame Text Style"], C.global, "font_unit_style", "dropdown", pfUI.gui.dropdowns.fontstyle)
+      CreateConfig(nil, T["Unit Frame short Name length"], C.global, "font_unit_name_length")
 
       CreateConfig(U[c], T["Group Options"], nil, nil, "header")
       CreateConfig(nil, T["Enable 40y-Range Check"], C.unitframes, "rangecheck", "checkbox", nil, nil, nil, nil, "vanilla" )
