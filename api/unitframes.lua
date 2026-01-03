@@ -420,21 +420,7 @@ function pfUI.uf:UpdateVisibility()
      self.visible = nil
   end
 
-  -- tbc visibility
-  if pfUI.client > 11200 then
-    self:SetAttribute("unit", unitstr)
-
-    -- update visibility condition on change
-    if self.visibilitycondition ~= visibility then
-      RegisterStateDriver(self, 'visibility', visibility)
-      self.visibilitycondition = visibility
-      self.visible = true
-    end
-
-    return
-  end
-
-  -- vanilla visibility
+  -- visibility
   if self.unitname and self.unitname ~= "focus" and self.unitname ~= "focustarget" then
     self:Show()
   elseif visibility == "hide" then
@@ -866,8 +852,6 @@ function pfUI.uf:UpdateConfig()
 
       if f:GetName() == "pfPlayer" then
         f.buffs[i]:SetScript("OnUpdate", BuffOnUpdate)
-      elseif f:GetName() == "pfTarget" and pfUI.expansion == "tbc" then
-        f.buffs[i]:SetScript("OnUpdate", TargetBuffOnUpdate)
       end
 
       f.buffs[i]:SetScript("OnEnter", BuffOnEnter)
@@ -1209,6 +1193,18 @@ end
 
 function pfUI.uf.OnEnter()
   if not this.label then return end
+
+  -- SuperWoW: Set native mouseover unit for macro/addon compatibility
+  if SetMouseoverUnit then
+    local unitstr = this.label .. this.id
+    -- For GUID-based frames (focus), use the GUID directly
+    if this.label and string.find(this.label, "^0x") then
+      SetMouseoverUnit(this.label)
+    elseif UnitExists(unitstr) then
+      SetMouseoverUnit(unitstr)
+    end
+  end
+
   if this.config.showtooltip == "0" then return end
   GameTooltip_SetDefaultAnchor(GameTooltip, this)
   GameTooltip:SetUnit(this.label .. this.id)
@@ -1216,6 +1212,11 @@ function pfUI.uf.OnEnter()
 end
 
 function pfUI.uf.OnLeave()
+  -- SuperWoW: Clear native mouseover unit
+  if SetMouseoverUnit then
+    SetMouseoverUnit()
+  end
+
   GameTooltip:FadeOut()
 end
 
@@ -2139,33 +2140,8 @@ function pfUI.uf:EnableClickCast()
       local bconf = bid == 1 and "" or bid
       if pfUI_config.unitframes["clickcast"..bconf..mconf] ~= "" then
         -- prepare click casting
-        if pfUI.client > 11200 then
-          -- set attributes for tbc+
-          local prefix = modifier == "" and "" or modifier .. "-"
-
-          -- check for "/" in the beginning of the string, to detect macros
-          if string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^%/(.+)") then
-            self:SetAttribute(prefix.."type"..bid, "macro")
-            self:SetAttribute(prefix.."macrotext"..bid, pfUI_config.unitframes["clickcast"..bconf..mconf])
-            self:SetAttribute(prefix.."spell"..bid, nil)
-          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^target") then
-            self:SetAttribute(prefix.."type"..bid, "target")
-            self:SetAttribute(prefix.."macrotext"..bid, nil)
-            self:SetAttribute(prefix.."spell"..bid, nil)
-          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^menu") then
-            self:SetAttribute(prefix.."type"..bid, "showmenu")
-            self:SetAttribute(prefix.."macrotext"..bid, nil)
-            self:SetAttribute(prefix.."spell"..bid, nil)
-          else
-            self:SetAttribute(prefix.."type"..bid, "spell")
-            self:SetAttribute(prefix.."spell"..bid, pfUI_config.unitframes["clickcast"..bconf..mconf])
-            self:SetAttribute(prefix.."macro"..bid, nil)
-          end
-        else
-          -- fill clickaction table for vanillla
-          self.clickactions = self.clickactions or {}
-          self.clickactions[modifier..button] = pfUI_config.unitframes["clickcast"..bconf..mconf]
-        end
+        self.clickactions = self.clickactions or {}
+        self.clickactions[modifier..button] = pfUI_config.unitframes["clickcast"..bconf..mconf]
       end
     end
   end
@@ -2427,8 +2403,6 @@ function pfUI.uf:SetupBuffIndicators(config)
     if myclass == "WARRIOR" then
       -- Battle Shout
       table.insert(indicators, "interface\\icons\\ability_warrior_battleshout")
-      -- Commanding Shout (TBC)
-      table.insert(indicators, "interface\\icons\\ability_warrior_rallyingcry")
     end
 
     if myclass == "MAGE" then
@@ -2447,14 +2421,6 @@ function pfUI.uf:SetupBuffIndicators(config)
 
       -- Aspect of the Pack
       table.insert(indicators, "interface\\icons\\ability_mount_whitetiger")
-
-      -- Misdirection (TBC)
-      table.insert(indicators, "interface\\icons\\ability_hunter_misdirection")
-    end
-
-    if myclass == "SHAMAN" then
-      -- Earth Shield (TBC)
-      table.insert(indicators, "interface\\icons\\spell_nature_skinofearth")
     end
   end
 
@@ -2483,8 +2449,6 @@ function pfUI.uf:SetupBuffIndicators(config)
       table.insert(indicators, "interface\\icons\\spell_holy_renew")
       -- Power Word: Shield
       table.insert(indicators, "interface\\icons\\spell_holy_powerwordshield")
-      -- Prayer of Mending (TBC)
-      table.insert(indicators, "interface\\icons\\spell_holy_prayerofmendingtga")
     end
 
     if myclass == "DRUID" or config.all_hots == "1" then
