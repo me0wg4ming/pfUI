@@ -1,6 +1,8 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
+local superwow_active = HasSuperWoW()
+
 --[[ librange ]]--
 -- A pfUI library that detects and caches distance to units.
 --
