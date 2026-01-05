@@ -1,11 +1,18 @@
-# pfUI
+# pfUI - Turtle WoW Edition
 
 [![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
-[![WoW](https://img.shields.io/badge/WoW-1.12.1%20Vanilla-orange.svg)](#)
-[![TBC](https://img.shields.io/badge/WoW-2.4.3%20TBC-green.svg)](https://github.com/shagu/pfUI/)
+[![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtle-wow.org/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
 [![UnitXP](https://img.shields.io/badge/UnitXP__SP3-Optional-yellow.svg)](https://codeberg.org/konaka/UnitXP_SP3)
+
+**A pfUI fork specifically optimized for [Turtle WoW](https://turtle-wow.org/) with full SuperWoW, Nampower, and UnitXP_SP3 DLL integration.**
+
+This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
+
+> **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
 
 ## What's New in Version 6.0.0 (January 5, 2026)
 
@@ -122,9 +129,9 @@ All new features are configurable via `/pfui`:
 - ✅ **Unitmap Race Condition** - Fixed HP/Mana not updating when raid members swap positions
 - ✅ **Friendly Nameplate Color** - Fixed friendly players using NPC color instead of player color
 
-### 🔄 TBC Compatibility Preserved
+### 🐢 Turtle WoW TBC Spell Indicators
 
-All TBC-specific features remain intact:
+Turtle WoW includes TBC spells in the Vanilla client. This version includes all TBC buff indicators:
 - ✅ Commanding Shout indicator
 - ✅ Misdirection indicator
 - ✅ Earth Shield indicator
@@ -134,28 +141,21 @@ All TBC-specific features remain intact:
 
 **Version:** 6.0.0  
 **Release Date:** January 5, 2026  
-**Compatibility:** World of Warcraft 1.12.1 (Vanilla) & 2.4.3 (TBC)  
+**Compatibility:** Turtle WoW 1.18.0  
 **Optional DLLs:** SuperWoW, Nampower, UnitXP_SP3 (enhanced features when available)
 
 ---
 
-## Installation (Vanilla)
-1. Download **[Latest Version](https://github.com/shagu/pfUI/archive/master.zip)**
+## Installation
+1. Download **[Latest Version](https://github.com/me0wg4ming/pfUI/archive/master.zip)**
 2. Unpack the Zip file
 3. Rename the folder "pfUI-master" to "pfUI"
 4. Copy "pfUI" into Wow-Directory\Interface\AddOns
 5. Restart Wow
 
-## Installation (The Burning Crusade)
-1. Download **[Latest Version](https://github.com/shagu/pfUI/archive/master.zip)**
-2. Unpack the Zip file
-3. Rename the folder "pfUI-master" to "pfUI-tbc"
-4. Copy "pfUI-tbc" into Wow-Directory\Interface\AddOns
-5. Restart Wow
-
 ## Optional DLL Enhancements
 
-pfUI 6.0.0 includes optional integrations with client-side DLLs for enhanced functionality:
+pfUI 6.0.0 includes optional integrations with client-side DLLs for enhanced functionality. These DLLs are fully supported on Turtle WoW:
 
 ### SuperWoW
 **Repository:** [https://github.com/balakethelock/SuperWoW](https://github.com/balakethelock/SuperWoW)
@@ -234,14 +234,14 @@ big fan of creating configuration UI's, especially not via the Wow-API
 You can donate via [GitHub](https://github.com/sponsors/shagu) or [Ko-fi](https://ko-fi.com/shagu)
 
 **How do I report a Bug?**  
-Please provide as much information as possible in the [Bugtracker](https://github.com/shagu/pfUI/issues).
+Please provide as much information as possible in the [Bugtracker](https://github.com/me0wg4ming/pfUI/issues).
 If there is an error message, provide the full content of it. Just telling that "there is an error" won't help any of us.
 Please consider adding additional information such as: since when did you got the error,
 does it still happen using a clean configuration, what other addons are loaded and which version you're running.
 When playing with a non-english client, the language might be relevant too. If possible, explain how people can reproduce the issue.
 
 **How can I contribute?**
-Report errors and issues in the [Bugtracker](https://github.com/shagu/pfUI/issues).
+Report errors and issues in the [Bugtracker](https://github.com/me0wg4ming/pfUI/issues).
 Please make sure to have the latest version installed and check for conflicting addons beforehand.
 
 **I have bad performance, what can I do?**  
@@ -249,7 +249,7 @@ Version 6.0.0 includes significant performance optimizations. If you still exper
 1. Disable "Frame Shadows" in Settings → Appearance → Enable Frame Shadows
 2. Check `/pfdll` to see which DLLs are active (some features require DLLs)
 3. Disable all AddOns but pfUI and enable one-by-one to identify conflicts
-4. Report issues via the [Bugtracker](https://github.com/shagu/pfUI/issues)
+4. Report issues via the [Bugtracker](https://github.com/me0wg4ming/pfUI/issues)
 
 **Where is the happiness indicator for pets?**  
 The pet happiness is shown as the color of your pet's frame. Depending on your skin, this can either be the text or the background color of your pet's healthbar:
@@ -274,10 +274,7 @@ This happens if "Simple Chat" is enabled in blizzards interface settings (Advanc
 Paste the following command into your chat to disable that option: `/run SIMPLE_CHAT="0"; pfUI.chat.SetupPositions(); ReloadUI()`
 
 **How can I enable mouseover cast?**  
-On Vanilla, create a macro with "/pfcast SPELLNAME". If you also want to see the cooldown, You might want to add "/run if nil then CastSpellByName("SPELLNAME") end" on top of the macro. For The Burning Crusade, just use the regular mouseover macros.
-
-**Will there be pfUI for Activision's "Classic" remakes?**  
-No, it would require an entire rewrite of the AddOn since the game is now a different one. The AddOn-API has evolved during the last 15 years and the new "Classic" versions are based on a current retail gameclient. I don't plan to play any of those new versions, so I won't be porting any of my addons to it.
+On Vanilla, create a macro with "/pfcast SPELLNAME". If you also want to see the cooldown, You might want to add "/run if nil then CastSpellByName("SPELLNAME") end" on top of the macro.
 
 **Everything from scratch?! Are you insane?**  
 Most probably, yes.
@@ -287,10 +284,11 @@ Most probably, yes.
 ## 🤝 Credits & Acknowledgments
 
 - **Shagu** - Original pfUI creator ([https://github.com/shagu/pfUI](https://github.com/shagu/pfUI))
-- **me0wg4ming** - pfUI fork maintainer and enhancements
+- **me0wg4ming** - pfUI fork maintainer and Turtle WoW enhancements
 - **SuperWoW Team** - SuperWoW framework development
 - **avitasia** - Nampower DLL development
 - **konaka** - UnitXP_SP3 DLL development
+- **Turtle WoW Team** - For the amazing Vanilla+ experience
 - **Community** - Bug reports, feature suggestions, and testing
 
 ---
@@ -303,5 +301,5 @@ Same as original pfUI - free to use and modify.
 
 **Version:** 6.0.0  
 **Release Date:** January 5, 2026  
-**Compatibility:** World of Warcraft 1.12.1 (Vanilla)
+**Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable & Production-Ready
