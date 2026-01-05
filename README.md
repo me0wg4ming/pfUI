@@ -7,14 +7,6 @@
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
 [![UnitXP](https://img.shields.io/badge/UnitXP__SP3-Optional-yellow.svg)](https://codeberg.org/konaka/UnitXP_SP3)
 
-An AddOn for World of Warcraft: Vanilla (1.12.1) and The Burning Crusade (2.4.3), which aims to be a full replacement for the original interface. The design is inspired by several screenshots I've seen from TukUI, ElvUI and others. This addon delivers modern features and a minimalistic style that's easy to use right from the start. It is entirely written from scratch without any inclusion of third-party addons or libraries.
-
-This is **not** an addon-pack like [ShaguUI](http://shagu.org/ShaguUI/), however, there is support for external addons like MobHealth3, DPSMate and others, but they will never be shipped within the package.
-
-**Please do not re-upload or distribute outdated versions of this project. However, you are more than welcome to fork or link to the official github page.**
-
----
-
 ## What's New in Version 6.0.0 (January 5, 2026)
 
 ### 🚀 Major Performance Improvements
