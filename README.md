@@ -6,7 +6,7 @@
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
 [![UnitXP](https://img.shields.io/badge/UnitXP__SP3-Optional-yellow.svg)](https://codeberg.org/konaka/UnitXP_SP3)
 
-**A pfUI fork specifically optimized for [Turtle WoW](https://turtle-wow.org/) with full SuperWoW, Nampower, and UnitXP_SP3 DLL integration.**
+**A pfUI fork specifically optimized for [Turtle WoW](https://turtlecraft.gg/) with full SuperWoW, Nampower, and UnitXP_SP3 DLL integration.**
 
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
