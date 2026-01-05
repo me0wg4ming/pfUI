@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![WoW](https://img.shields.io/badge/WoW-1.12.1%20Vanilla-orange.svg)](#)
-[![TBC](https://img.shields.io/badge/WoW-2.4.3%20TBC-green.svg)](#)
+[![TBC](https://img.shields.io/badge/WoW-2.4.3%20TBC-green.svg)](https://github.com/shagu/pfUI/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
 [![UnitXP](https://img.shields.io/badge/UnitXP__SP3-Optional-yellow.svg)](https://codeberg.org/konaka/UnitXP_SP3)
@@ -318,5 +318,5 @@ Same as original pfUI - free to use and modify.
 
 **Version:** 6.0.0  
 **Release Date:** January 5, 2026  
-**Compatibility:** World of Warcraft 1.12.1 (Vanilla) & 2.4.3 (TBC)  
+**Compatibility:** World of Warcraft 1.12.1 (Vanilla)
 **Status:** Stable & Production-Ready
