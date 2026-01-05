@@ -82,7 +82,6 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 - ✅ **/pfdll** - Shows DLL status for SuperWoW, Nampower, and UnitXP with detailed diagnostics
 - ✅ **/pfbehind** - Test command for Behind/LOS detection on current target
-- ✅ **/clickthrough** or **/ct** - Toggle clickthrough mode (click through corpses)
 
 ### 🎮 SuperWoW API Wrappers
 
