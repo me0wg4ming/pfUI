@@ -1,9 +1,11 @@
 # pfUI
 
-[![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/me0wg4ming/pfUI#)
+[![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![WoW](https://img.shields.io/badge/WoW-1.12.1%20Vanilla-orange.svg)](#)
 [![TBC](https://img.shields.io/badge/WoW-2.4.3%20TBC-green.svg)](#)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
+[![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
+[![UnitXP](https://img.shields.io/badge/UnitXP__SP3-Optional-yellow.svg)](https://codeberg.org/konaka/UnitXP_SP3)
 
 An AddOn for World of Warcraft: Vanilla (1.12.1) and The Burning Crusade (2.4.3), which aims to be a full replacement for the original interface. The design is inspired by several screenshots I've seen from TukUI, ElvUI and others. This addon delivers modern features and a minimalistic style that's easy to use right from the start. It is entirely written from scratch without any inclusion of third-party addons or libraries.
 
@@ -60,7 +62,7 @@ This is **not** an addon-pack like [ShaguUI](http://shagu.org/ShaguUI/), however
   - Behind Indicator on target frame
   - OS Notifications for combat events
   - Distance-based features
-  - Requires [UnitXP_SP3 DLL](https://github.com/allfoxwy/UnitXP_SP3)
+  - Requires [UnitXP_SP3 DLL](https://codeberg.org/konaka/UnitXP_SP3)
 
 - ✅ **bgscore.lua** - Battleground Score frame positioning:
   - Movable BG score frame
@@ -145,6 +147,13 @@ All TBC-specific features remain intact:
 
 ---
 
+## Screenshots
+
+<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/config.jpg" align="right" width="48.5%">
+<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/unlock.jpg" width="48.5%">
+<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/contrib.jpg" align="right" width="48.5%">
+<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/maraudon.jpg" width="48.5%">
+
 ## Installation (Vanilla)
 1. Download **[Latest Version](https://github.com/shagu/pfUI/archive/master.zip)**
 2. Unpack the Zip file
@@ -182,7 +191,7 @@ Provides:
 - Enhanced cast information
 
 ### UnitXP_SP3
-**Repository:** [https://github.com/allfoxwy/UnitXP_SP3](https://github.com/allfoxwy/UnitXP_SP3)
+**Repository:** [https://codeberg.org/konaka/UnitXP_SP3](https://codeberg.org/konaka/UnitXP_SP3)
 
 Provides:
 - Line of Sight detection
@@ -292,10 +301,11 @@ Most probably, yes.
 
 ## 🤝 Credits & Acknowledgments
 
-- **Shagu** - Original pfUI creator and maintainer
+- **Shagu** - Original pfUI creator ([https://github.com/shagu/pfUI](https://github.com/shagu/pfUI))
+- **me0wg4ming** - pfUI fork maintainer and enhancements
 - **SuperWoW Team** - SuperWoW framework development
-- **Nampower Team** - Nampower DLL development
-- **UnitXP Team** - UnitXP_SP3 DLL development
+- **avitasia** - Nampower DLL development
+- **konaka** - UnitXP_SP3 DLL development
 - **Community** - Bug reports, feature suggestions, and testing
 
 ---
@@ -308,4 +318,5 @@ Same as original pfUI - free to use and modify.
 
 **Version:** 6.0.0  
 **Release Date:** January 5, 2026  
-**Compatibility:** World of Warcraft 1.12.1 (Vanilla)
+**Compatibility:** World of Warcraft 1.12.1 (Vanilla) & 2.4.3 (TBC)  
+**Status:** Stable & Production-Ready
