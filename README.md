@@ -139,13 +139,6 @@ All TBC-specific features remain intact:
 
 ---
 
-## Screenshots
-
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/config.jpg" align="right" width="48.5%">
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/unlock.jpg" width="48.5%">
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/contrib.jpg" align="right" width="48.5%">
-<img src="https://raw.githubusercontent.com/shagu/ShaguAddons/master/_img/pfUI/maraudon.jpg" width="48.5%">
-
 ## Installation (Vanilla)
 1. Download **[Latest Version](https://github.com/shagu/pfUI/archive/master.zip)**
 2. Unpack the Zip file
