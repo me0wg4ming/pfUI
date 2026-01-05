@@ -308,5 +308,4 @@ Same as original pfUI - free to use and modify.
 
 **Version:** 6.0.0  
 **Release Date:** January 5, 2026  
-**Compatibility:** World of Warcraft 1.12.1 (Vanilla) & 2.4.3 (TBC)  
-**Status:** Stable & Production-Ready
+**Compatibility:** World of Warcraft 1.12.1 (Vanilla)
