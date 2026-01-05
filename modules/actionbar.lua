@@ -395,6 +395,14 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
         for line in gfind(body, "[^%\n]+") do
           _, _, match = string.find(line, '^#showtooltip (.+)')
 
+          -- skip any further manual macro scanning on
+          -- gameclients with native macro spell detection
+          if pfUI.client > 11200 and match then
+            self.spellslot = nil
+            self.booktype = nil
+            return
+          end
+
           -- allow the user to disable the scan
           if match and strfind(match, "disable") then
             return
@@ -972,17 +980,25 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     pageswitch:SetScript("OnEvent", function()
       if class ~= "DRUID" then return end
       
-      -- UNIT_CASTEVENT: detect Cat Form and Prowl cast instantly
-      -- Cat Form: 768 | Prowl: 5215 (R1), 6783 (R2), 9913 (R3)
+      -- On login/reload: full scan
+      if event == "PLAYER_ENTERING_WORLD" then
+        prowling = FullScan()
+        return
+      end
+      
+      -- UNIT_CASTEVENT: detect Prowl cast instantly
+      -- Prowl Spell IDs: 5215 (Rank 1), 6783 (Rank 2), 9913 (Rank 3)
       if event == "UNIT_CASTEVENT" then
         local guid, target, cEvent, spellId = arg1, arg2, arg3, arg4
         local _, playerGuid = UnitExists("player")
         if guid == playerGuid and cEvent == "CAST" then
           if spellId == 5215 or spellId == 6783 or spellId == 9913 then
+            -- Prowl cast detected
             inCatForm = true
             prowlActive = true
             prowling = true
           elseif spellId == 768 then
+            -- Cat Form cast (Spell ID 768)
             inCatForm = true
           end
         end
@@ -1294,26 +1310,40 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     if enable == "1" then
       -- handle pet bar
       if i == 12 then
-        -- only show when pet actions exists
-        if PetHasActionBar() or pfUI.unlock and pfUI.unlock:IsShown() then
-          bars[i]:Show()
-        else
-          bars[i]:Hide()
-        end
-
-        -- show/hide petbar on petbar updates
-        if init then
-          bars[i]:RegisterEvent("PET_BAR_UPDATE")
-          bars[i]:SetScript("OnEvent", function()
-            -- hide obsolete buttons
-            for i=1, NUM_PET_ACTION_SLOTS do
-             if not PetHasActionBar() and bars[12][i] then
-               bars[12][i]:Hide()
-             end
+        if pfUI.client > 11200 then
+          if InCombatLockdown and InCombatLockdown() then
+            -- don't process those events during combat
+          else
+            -- set state driver for pet bars
+            bars[i]:SetAttribute("unit", "pet")
+            local visibility = pfUI.unlock and pfUI.unlock:IsShown() and "show" or petvisibility
+            if bars[i].visibility ~= visibility then
+              RegisterStateDriver(bars[i], 'visibility', visibility)
+              bars[i].visibility = visibility
             end
-            -- refresh layout
-            CreateActionBar(12)
-          end)
+          end
+        else
+          -- only show when pet actions exists
+          if PetHasActionBar() or pfUI.unlock and pfUI.unlock:IsShown() then
+            bars[i]:Show()
+          else
+            bars[i]:Hide()
+          end
+
+          -- show/hide petbar on petbar updates
+          if init then
+            bars[i]:RegisterEvent("PET_BAR_UPDATE")
+            bars[i]:SetScript("OnEvent", function()
+              -- hide obsolete buttons
+              for i=1, NUM_PET_ACTION_SLOTS do
+               if not PetHasActionBar() and bars[12][i] then
+                 bars[12][i]:Hide()
+               end
+              end
+              -- refresh layout
+              CreateActionBar(12)
+            end)
+          end
         end
 
       -- handle shapeshift bar
