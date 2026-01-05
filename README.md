@@ -49,6 +49,8 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ### 🆕 New Modules
 
+*Modules by [jrc13245](https://github.com/jrc13245/)*
+
 - ✅ **nampower.lua** - Nampower DLL integration module:
   - Spell Queue Indicator (shows queued spell icon near castbar)
   - GCD Indicator
