@@ -216,7 +216,7 @@ pfUI supports and contains language specific code for the following gameclients.
 
 ## Recommended Addons
 * [pfQuest](https://shagu.org/pfQuest) A simple database and quest helper
-* [WIM](http://addons.us.to/addon/wim), [WIM (continued)](https://github.com/me0wg4ming/WIM/) Give whispers an instant messenger feel
+* [WIM (continued)](https://github.com/me0wg4ming/WIM/) Give whispers an instant messenger feel
 
 ## Plugins
 * [pfUI-eliteoverlay](https://shagu.org/pfUI-eliteoverlay) Add elite dragons to unitframes
