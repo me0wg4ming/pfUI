@@ -1,6 +1,6 @@
 # pfUI
 
-[![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/shagu/pfUI)
+[![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/me0wg4ming/pfUI#)
 [![WoW](https://img.shields.io/badge/WoW-1.12.1%20Vanilla-orange.svg)](#)
 [![TBC](https://img.shields.io/badge/WoW-2.4.3%20TBC-green.svg)](#)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
