@@ -304,4 +304,4 @@ Same as original pfUI - free to use and modify.
 **Version:** 6.0.0  
 **Release Date:** January 5, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
-**Status:** Stable & Production-Ready
+**Status:** Stable
