@@ -1,9 +1,21 @@
-pfUI:RegisterSkin("Merchant", "vanilla", function ()
+pfUI:RegisterSkin("Merchant", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
-  MerchantRepairAllButton:ClearAllPoints()
-  MerchantRepairAllButton:SetPoint("RIGHT", MerchantBuyBackItemItemButton, "LEFT", -6, 0)
+  -- Compatibility
+  if MerchantGuildBankRepairButton then -- tbc
+    SkinButton(MerchantGuildBankRepairButton, nil, nil, nil, MerchantGuildBankRepairButtonIcon)
+    MerchantGuildBankRepairButtonIcon:SetTexCoord(.59, .82, .06, .54)
+    hooksecurefunc("MerchantFrame_UpdateRepairButtons", function()
+      MerchantGuildBankRepairButton:ClearAllPoints()
+      MerchantGuildBankRepairButton:SetPoint("RIGHT", MerchantBuyBackItemItemButton, "LEFT", -14, 0)
+      MerchantRepairAllButton:ClearAllPoints()
+      MerchantRepairAllButton:SetPoint("RIGHT", MerchantGuildBankRepairButton, "LEFT", -6, 0)
+    end)
+  else -- vanilla
+    MerchantRepairAllButton:ClearAllPoints()
+    MerchantRepairAllButton:SetPoint("RIGHT", MerchantBuyBackItemItemButton, "LEFT", -6, 0)
+  end
 
   StripTextures(MerchantFrame)
   CreateBackdrop(MerchantFrame, nil, nil, .75)

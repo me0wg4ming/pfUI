@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Spellbook", "vanilla", function ()
+pfUI:RegisterSkin("Spellbook", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 

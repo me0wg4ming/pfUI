@@ -1,4 +1,4 @@
-pfUI:RegisterModule("addons", "vanilla", function ()
+pfUI:RegisterModule("addons", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
 
   -- add main menu button

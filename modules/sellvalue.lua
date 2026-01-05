@@ -1,4 +1,4 @@
-pfUI:RegisterModule("sellvalue", "vanilla", function ()
+pfUI:RegisterModule("sellvalue", "vanilla:tbc", function ()
   local function AddVendorPrices(frame, id, count)
     if pfSellData[id] then
       local _, _, sell, buy = strfind(pfSellData[id], "(.*),(.*)")

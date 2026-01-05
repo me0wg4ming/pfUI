@@ -1,10 +1,53 @@
-pfUI:RegisterSkin("Mailbox", "vanilla", function ()
+pfUI:RegisterSkin("Mailbox", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
+  -- Compatibility
   local StationeryBackgroundLeft, StationeryBackgroundRight
+  if ATTACHMENTS_MAX_SEND then -- tbc
+    do -- SendMailFrame
+      for i = 1, ATTACHMENTS_MAX_SEND do
+        local btn = _G["SendMailAttachment"..i]
+        StripTextures(btn)
+        SkinButton(btn, nil, nil, nil, nil, true)
+      end
 
-  do -- SendMailFrame
+      hooksecurefunc("SendMailFrame_Update", function()
+        for i = 1, ATTACHMENTS_MAX_SEND do
+          local btn = _G["SendMailAttachment"..i]
+          HandleIcon(btn, btn:GetNormalTexture())
+
+          local link = GetSendMailItemLink(i)
+          if link then
+            local r,g,b = GetItemQualityColor(select(3, GetItemInfo(link)))
+            btn:SetBackdropBorderColor(r,g,b,1)
+            else
+            btn:SetBackdropBorderColor(GetStringColor(pfUI_config.appearance.border.color))
+          end
+        end
+      end)
+
+      StationeryBackgroundLeft, StationeryBackgroundRight = SendStationeryBackgroundLeft, SendStationeryBackgroundRight
+    end
+
+    do -- OpenMailFrame
+      for i = 1, ATTACHMENTS_MAX_RECEIVE do
+        SkinButton(_G["OpenMailAttachmentButton"..i], nil, nil, nil, _G["OpenMailAttachmentButton"..i.."IconTexture"], true)
+      end
+
+      hooksecurefunc("InboxFrame_OnClick", function(index)
+        for i=1, ATTACHMENTS_MAX_RECEIVE do
+          local link = GetInboxItemLink(index, i)
+          if not link then return end
+          local r,g,b = GetItemQualityColor(select(3, GetItemInfo(link)))
+          _G["OpenMailAttachmentButton"..i]:SetBackdropBorderColor(r,g,b,1)
+        end
+      end)
+
+      SkinButton(OpenMailReportSpamButton)
+    end
+  else -- vanilla
+    do -- SendMailFrame
       local skin = CreateFrame("Frame")
       skin:SetScript("OnEvent", function()
         this:UnregisterEvent("MAIL_SHOW")
@@ -79,6 +122,7 @@ pfUI:RegisterSkin("Mailbox", "vanilla", function ()
         end
       end)
     end
+  end
 
   StripTextures(MailFrame, true)
   CreateBackdrop(MailFrame, nil, nil, .75)

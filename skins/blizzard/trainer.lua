@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Trainer", "vanilla", function ()
+pfUI:RegisterSkin("Trainer", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 

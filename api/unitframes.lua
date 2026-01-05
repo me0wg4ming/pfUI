@@ -2405,6 +2405,8 @@ function pfUI.uf:SetupBuffIndicators(config)
     if myclass == "WARRIOR" then
       -- Battle Shout
       table.insert(indicators, "interface\\icons\\ability_warrior_battleshout")
+      -- Commanding Shout (TBC)
+      table.insert(indicators, "interface\\icons\\ability_warrior_rallyingcry")
     end
 
     if myclass == "MAGE" then
@@ -2423,6 +2425,14 @@ function pfUI.uf:SetupBuffIndicators(config)
 
       -- Aspect of the Pack
       table.insert(indicators, "interface\\icons\\ability_mount_whitetiger")
+
+      -- Misdirection (TBC)
+      table.insert(indicators, "interface\\icons\\ability_hunter_misdirection")
+    end
+
+    if myclass == "SHAMAN" then
+      -- Earth Shield (TBC)
+      table.insert(indicators, "interface\\icons\\spell_nature_skinofearth")
     end
   end
 
@@ -2451,6 +2461,8 @@ function pfUI.uf:SetupBuffIndicators(config)
       table.insert(indicators, "interface\\icons\\spell_holy_renew")
       -- Power Word: Shield
       table.insert(indicators, "interface\\icons\\spell_holy_powerwordshield")
+      -- Prayer of Mending (TBC)
+      table.insert(indicators, "interface\\icons\\spell_holy_prayerofmendingtga")
     end
 
     if myclass == "DRUID" or config.all_hots == "1" then

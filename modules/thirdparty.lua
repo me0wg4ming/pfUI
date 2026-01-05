@@ -1,7 +1,10 @@
-pfUI:RegisterModule("thirdparty", "vanilla", function()
+pfUI:RegisterModule("thirdparty", "vanilla:tbc", function()
   -- This module includes the core logic of thirdparty modules.
   -- Right now, in particular the functions to register addons to the
   -- dockframe of the chat panel aswell as the thirdparty root-table.
+  -- This module is supposed to be loaded on all expansions, so only
+  -- addons that can share the same glue code across expansions will go here.
+  -- For expansion related code, see: thirdparty-vanilla and thirdparty-tbc.
 
   pfUI.thirdparty = {}
 
@@ -193,7 +196,8 @@ pfUI:RegisterModule("thirdparty", "vanilla", function()
   end
 
   -- MrPlow Bag Sorting Addon.
-  -- https://www.wowace.com/projects/mr-plow/files/288059
+  -- Vanilla: https://www.wowace.com/projects/mr-plow/files/288059
+  -- TBC: https://www.wowace.com/projects/mr-plow/files/136162
   HookAddonOrVariable("MrPlow", function()
     if C.thirdparty.mrplow.enable == "0" then return end
 
@@ -228,7 +232,8 @@ pfUI:RegisterModule("thirdparty", "vanilla", function()
   end)
 
   -- ShaguDPS Damage Meter
-  -- https://github.com/shagu/ShaguDPS
+  -- Vanilla: https://github.com/shagu/ShaguDPS
+  -- TBC: https://github.com/shagu/ShaguDPS
   HookAddonOrVariable("ShaguDPS", function()
     local docktable = { "shagudps", "ShaguDPS", "ShaguDPSWindow",
       function() -- single
@@ -328,7 +333,8 @@ pfUI:RegisterModule("thirdparty", "vanilla", function()
   end)
 
   -- DPSMate Damage Meter
-  -- https://github.com/Geigerkind/DPSMate
+  -- Vanilla: https://github.com/Geigerkind/DPSMate
+  -- TBC: https://github.com/Geigerkind/DPSMateTBC
   HookAddonOrVariable("DPSMate_DPSMate", function()
     local docktable = { "dpsmate", "DPSMate", "DPSMate_DPSMate",
       function() -- single

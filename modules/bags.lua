@@ -1,4 +1,4 @@
-pfUI:RegisterModule("bags", "vanilla", function ()
+pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   local rawborder, default_border = GetBorderSize("bags")
 
   local knownInventorySpellTextures = {
@@ -573,8 +573,8 @@ pfUI:RegisterModule("bags", "vanilla", function ()
           SlotLeave()
         end)
 
-        -- The OnEvent function of the template scans for framenames,
-        -- and doesn't know the pf-Names. Therefore, triggering
+        -- On TBC, the OnEvent function of the template scans for framenames,
+        -- and obviously doesn't know the pf-Names. Therefore, triggering
         -- the update function on each frame manually
         if frame == pfUI.bag.left and BankFrameItemButton_Update then
           local SlotUpdate = frame.bagslots.slots[slot].frame:GetScript("OnUpdate")

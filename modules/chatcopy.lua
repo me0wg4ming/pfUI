@@ -1,4 +1,4 @@
-pfUI:RegisterModule("chatcopy", "vanilla", function ()
+pfUI:RegisterModule("chatcopy", "vanilla:tbc", function ()
   local limit = 100
   local f = CreateFrame("Frame")
   f:RegisterEvent("PLAYER_ENTERING_WORLD")

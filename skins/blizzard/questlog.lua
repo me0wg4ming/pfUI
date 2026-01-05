@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Quest Log", "vanilla", function ()
+pfUI:RegisterSkin("Quest Log", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
@@ -6,10 +6,23 @@ pfUI:RegisterSkin("Quest Log", "vanilla", function ()
   _G.MAX_WATCHABLE_QUESTS = 20 -- TODO
 
   do -- quest log frame
-    local QUEST_COUNT = QuestLogQuestCount
+    -- Compatibility
+    local QUEST_COUNT
+    if QuestLogCount then -- tbc
+      QUEST_COUNT = QuestLogCount
 
-    QUEST_COUNT:ClearAllPoints()
-    QUEST_COUNT:SetPoint("TOPRIGHT", -10, -30)
+      StripTextures(QUEST_COUNT)
+      QUEST_COUNT:ClearAllPoints()
+      hooksecurefunc("QuestLogUpdateQuestCount", function(numQuests)
+        QUEST_COUNT:ClearAllPoints()
+        QUEST_COUNT:SetPoint("BOTTOMRIGHT", QuestLogFrame, "TOPRIGHT", 0, -50)
+      end)
+    else -- vanilla
+      QUEST_COUNT = QuestLogQuestCount
+
+      QUEST_COUNT:ClearAllPoints()
+      QUEST_COUNT:SetPoint("TOPRIGHT", -10, -30)
+    end
 
     hooksecurefunc("QuestLog_OnShow", function()
       QuestLogFrame:ClearAllPoints()

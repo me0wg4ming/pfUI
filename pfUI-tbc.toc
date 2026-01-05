@@ -1,4 +1,4 @@
-## Interface: 11200
+## Interface: 20400
 ## Title: |cff33ffccpf|cffffffffUI
 ## Author: Shagu
 ## Notes: A complete user interface replacement.

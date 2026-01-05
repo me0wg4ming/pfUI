@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("KeyBindings", "vanilla", function ()
+pfUI:RegisterSkin("KeyBindings", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
