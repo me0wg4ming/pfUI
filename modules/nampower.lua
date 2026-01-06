@@ -111,7 +111,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         if SpellInfo then
           spellName, spellRank, texture = SpellInfo(spellId)
         end
-        if GetSpellNameAndRankForId then
+        if not spellName and GetSpellNameAndRankForId then
           spellName, spellRank = GetSpellNameAndRankForId(spellId)
         end
 
@@ -123,9 +123,9 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
           end
 
           -- Try GetSpellRec for duration if libdebuff doesn't have it
-          if duration == 0 and GetSpellRec then
-            local spellRec = GetSpellRec(spellId)
-            if spellRec and spellRec.durationIndex and spellRec.durationIndex > 0 then
+          if duration == 0 and GetSpellRec and spellId then
+            local success, spellRec = pcall(GetSpellRec, spellId)
+            if success and spellRec and spellRec.durationIndex and spellRec.durationIndex > 0 then
               -- Duration index maps to spell duration - common values:
               -- This is a rough approximation since we don't have the duration table
               duration = 30 -- Default fallback
@@ -170,21 +170,25 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local effect, rank, texture, stacks, dtype, duration, timeleft, caster = originalUnitDebuff(self, unit, id)
 
       -- If we have Nampower data for this unit, try to enhance it
-      local _, guid = UnitExists(unit)
-      if guid and debuffdb[guid] then
-        -- Find the debuff by slot
-        for spellId, data in pairs(debuffdb[guid]) do
-          if data.slot == id then
-            -- Use Nampower data for more accurate timing
-            if data.duration and data.duration > 0 and data.start then
-              duration = data.duration
-              timeleft = data.duration + data.start - GetTime()
-              if timeleft < 0 then timeleft = 0 end
-              caster = data.caster
-              stacks = data.stacks or stacks
-            end
-            break
+      if not UnitExists then return effect, rank, texture, stacks, dtype, duration, timeleft, caster end
+      
+      local exists, guid = UnitExists(unit)
+      if not exists or not guid or not debuffdb[guid] then
+        return effect, rank, texture, stacks, dtype, duration, timeleft, caster
+      end
+
+      -- Find the debuff by slot
+      for spellId, data in pairs(debuffdb[guid]) do
+        if data.slot == id then
+          -- Use Nampower data for more accurate timing
+          if data.duration and data.duration > 0 and data.start then
+            duration = data.duration
+            timeleft = data.duration + data.start - GetTime()
+            if timeleft < 0 then timeleft = 0 end
+            caster = data.caster
+            stacks = data.stacks or stacks
           end
+          break
         end
       end
 
@@ -222,20 +226,22 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         if SpellInfo then
           spellName, spellRank, texture = SpellInfo(spellId)
         end
-        if GetSpellNameAndRankForId then
+        if not spellName and GetSpellNameAndRankForId then
           spellName, spellRank = GetSpellNameAndRankForId(spellId)
         end
 
-        buffdb[guid][spellId] = {
-          spellId = spellId,
-          name = spellName,
-          rank = spellRank,
-          texture = texture,
-          stacks = stackCount or 1,
-          start = GetTime(),
-          slot = slot,
-          auraLevel = auraLevel
-        }
+        if spellName then
+          buffdb[guid][spellId] = {
+            spellId = spellId,
+            name = spellName,
+            rank = spellRank,
+            texture = texture,
+            stacks = stackCount or 1,
+            start = GetTime(),
+            slot = slot,
+            auraLevel = auraLevel
+          }
+        end
       elseif event == "BUFF_REMOVED_OTHER" or event == "BUFF_REMOVED_SELF" then
         if buffdb[guid] and buffdb[guid][spellId] then
           buffdb[guid][spellId] = nil
@@ -294,13 +300,13 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local res = GetUnitField(unit, "resistances")
       if not res then return nil end
       return {
-        armor = res[1],
-        holy = res[2],
-        fire = res[3],
-        nature = res[4],
-        frost = res[5],
-        shadow = res[6],
-        arcane = res[7]
+        armor = res[1] or 0,
+        holy = res[2] or 0,
+        fire = res[3] or 0,
+        nature = res[4] or 0,
+        frost = res[5] or 0,
+        shadow = res[6] or 0,
+        arcane = res[7] or 0
       }
     end
   end
@@ -389,13 +395,13 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local cd = GetSpellIdCooldown(spellId)
       if not cd then return nil end
       return {
-        onCooldown = cd.isOnCooldown == 1,
-        remaining = cd.cooldownRemainingMs / 1000,
-        remainingMs = cd.cooldownRemainingMs,
-        gcdRemaining = cd.gcdCategoryRemainingMs / 1000,
-        gcdRemainingMs = cd.gcdCategoryRemainingMs,
-        individualRemaining = cd.individualRemainingMs / 1000,
-        categoryRemaining = cd.categoryRemainingMs / 1000,
+        onCooldown = (cd.isOnCooldown or 0) == 1,
+        remaining = (cd.cooldownRemainingMs or 0) / 1000,
+        remainingMs = cd.cooldownRemainingMs or 0,
+        gcdRemaining = (cd.gcdCategoryRemainingMs or 0) / 1000,
+        gcdRemainingMs = cd.gcdCategoryRemainingMs or 0,
+        individualRemaining = (cd.individualRemainingMs or 0) / 1000,
+        categoryRemaining = (cd.categoryRemainingMs or 0) / 1000,
       }
     end
 
@@ -405,9 +411,9 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local cd = GetItemIdCooldown(itemId)
       if not cd then return nil end
       return {
-        onCooldown = cd.isOnCooldown == 1,
-        remaining = cd.cooldownRemainingMs / 1000,
-        remainingMs = cd.cooldownRemainingMs,
+        onCooldown = (cd.isOnCooldown or 0) == 1,
+        remaining = (cd.cooldownRemainingMs or 0) / 1000,
+        remainingMs = cd.cooldownRemainingMs or 0,
       }
     end
   end
@@ -433,9 +439,10 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
   if GetTrinkets then
     pfUI.api.GetEquippedTrinkets = function()
       local trinkets = GetTrinkets()
+      if not trinkets then return {} end
       local equipped = {}
       for _, trinket in pairs(trinkets) do
-        if trinket.bagIndex == nil then -- nil bagIndex = equipped
+        if trinket and trinket.bagIndex == nil then -- nil bagIndex = equipped
           table.insert(equipped, trinket)
         end
       end
@@ -445,11 +452,11 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
     pfUI.api.GetTrinketCooldown = function(slot)
       if not GetTrinketCooldown then return nil end
       local cd = GetTrinketCooldown(slot)
-      if cd == -1 then return nil end
+      if cd == -1 or not cd then return nil end
       return {
-        onCooldown = cd.isOnCooldown == 1,
-        remaining = cd.cooldownRemainingMs / 1000,
-        remainingMs = cd.cooldownRemainingMs,
+        onCooldown = (cd.isOnCooldown or 0) == 1,
+        remaining = (cd.cooldownRemainingMs or 0) / 1000,
+        remainingMs = cd.cooldownRemainingMs or 0,
       }
     end
 
@@ -473,7 +480,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         return GetItemLevel(itemId)
       end
       local success, stats = pcall(GetItemStats, itemId, true)
-      if success and stats then
+      if success and stats and stats.itemLevel then
         return stats.itemLevel
       end
       return nil
@@ -587,41 +594,41 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
   -- Spell Database Access via GetSpellRec
   if GetSpellRec then
     pfUI.api.GetSpellRecord = function(spellId)
-      local rec = GetSpellRec(spellId)
-      if not rec then return nil end
+      local success, rec = pcall(GetSpellRec, spellId)
+      if not success or not rec then return nil end
       return {
         spellId = spellId,
-        name = rec.name,
-        rank = rec.rank,
-        description = rec.description,
-        manaCost = rec.manaCost,
-        baseLevel = rec.baseLevel,
-        spellLevel = rec.spellLevel,
-        maxLevel = rec.maxLevel,
-        maxTargetLevel = rec.maxTargetLevel,
-        maxTargets = rec.maxTargets,
-        durationIndex = rec.durationIndex,
-        powerType = rec.powerType,
-        rangeIndex = rec.rangeIndex,
-        speed = rec.speed,
-        schoolMask = rec.schoolMask,
-        runeCostID = rec.runeCostID,
-        spellMissileID = rec.spellMissileID,
-        iconID = rec.iconID,
-        activeIconID = rec.activeIconID,
-        nameSubtext = rec.nameSubtext,
-        castingTimeIndex = rec.castingTimeIndex,
-        categoryRecoveryTime = rec.categoryRecoveryTime,
-        recoveryTime = rec.recoveryTime,
-        startRecoveryCategory = rec.startRecoveryCategory,
-        startRecoveryTime = rec.startRecoveryTime,
+        name = rec.name or "",
+        rank = rec.rank or "",
+        description = rec.description or "",
+        manaCost = rec.manaCost or 0,
+        baseLevel = rec.baseLevel or 0,
+        spellLevel = rec.spellLevel or 0,
+        maxLevel = rec.maxLevel or 0,
+        maxTargetLevel = rec.maxTargetLevel or 0,
+        maxTargets = rec.maxTargets or 0,
+        durationIndex = rec.durationIndex or 0,
+        powerType = rec.powerType or 0,
+        rangeIndex = rec.rangeIndex or 0,
+        speed = rec.speed or 0,
+        schoolMask = rec.schoolMask or 0,
+        runeCostID = rec.runeCostID or 0,
+        spellMissileID = rec.spellMissileID or 0,
+        iconID = rec.iconID or 0,
+        activeIconID = rec.activeIconID or 0,
+        nameSubtext = rec.nameSubtext or "",
+        castingTimeIndex = rec.castingTimeIndex or 0,
+        categoryRecoveryTime = rec.categoryRecoveryTime or 0,
+        recoveryTime = rec.recoveryTime or 0,
+        startRecoveryCategory = rec.startRecoveryCategory or 0,
+        startRecoveryTime = rec.startRecoveryTime or 0,
       }
     end
 
     -- Get spell school (fire, frost, nature, etc.)
     pfUI.api.GetSpellSchool = function(spellId)
-      local rec = GetSpellRec(spellId)
-      if not rec then return nil end
+      local success, rec = pcall(GetSpellRec, spellId)
+      if not success or not rec or not rec.schoolMask then return nil end
       local schools = {
         [1] = "Physical",
         [2] = "Holy",
