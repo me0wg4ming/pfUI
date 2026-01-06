@@ -31,17 +31,21 @@ pfUI.uf.RebuildUnitmap = function()
   if pfUI.uf.raid then
     for i = 1, 40 do
       local frame = pfUI.uf.raid[i]
-      if frame and frame.id and frame.id ~= 0 then
-        pfUI.uf.unitmap["raid" .. frame.id] = frame
+      if frame and frame.id and frame.id ~= 0 and frame.label then
+        -- ✅ Jetzt auch party-Frames in Raid-Frames unterstützen
+        local unitstr = frame.label .. frame.id
+        pfUI.uf.unitmap[unitstr] = frame
       end
     end
   end
   
-  -- Rebuild party mappings
-  for i = 1, 4 do
-    local frame = _G["pfGroup" .. i]
-    if frame and frame.label == "party" then
-      pfUI.uf.unitmap["party" .. frame.id] = frame
+  -- Rebuild party mappings (nur wenn nicht als Raid verwendet)
+  if C.unitframes.raidforgroup ~= "1" then
+    for i = 1, 4 do
+      local frame = _G["pfGroup" .. i]
+      if frame and frame.label == "party" then
+        pfUI.uf.unitmap["party" .. frame.id] = frame
+      end
     end
   end
 end
