@@ -878,12 +878,19 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end
 
   nameplates.OnUpdate = function(frame)
-    local update
     local frame = frame or this
     local nameplate = frame.nameplate
+    
+    -- Throttle: Update target more frequently than other nameplates
+    local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
+    local throttle = target and 0.05 or 0.2
+    
+    if (nameplate.lasttick or 0) + throttle > GetTime() then return end
+    nameplate.lasttick = GetTime()
+    
+    local update
     local original = nameplate.original
     local name = original.name:GetText()
-    local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
     local mouseover = UnitExists("mouseover") and original.glow:IsShown() or nil
     local namefightcolor = C.nameplates.namefightcolor == "1"
 
