@@ -1,4 +1,4 @@
-pfUI:RegisterModule("pet", "vanilla", function ()
+pfUI:RegisterModule("pet", "vanilla:tbc", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
   pfUI.uf.pet = pfUI.uf:CreateUnitFrame("Pet", nil, C.unitframes.pet)

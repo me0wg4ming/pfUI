@@ -1,4 +1,4 @@
-pfUI:RegisterModule("infight", "vanilla", function ()
+pfUI:RegisterModule("infight", "vanilla:tbc", function ()
   local function OnUpdate()
     if not this.infight and not this.aggro and not this.health then return end
     if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end

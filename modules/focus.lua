@@ -1,4 +1,4 @@
-pfUI:RegisterModule("focus", "vanilla", function ()
+pfUI:RegisterModule("focus", "vanilla:tbc", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
 

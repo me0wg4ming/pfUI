@@ -1,4 +1,4 @@
-pfUI:RegisterModule("cooldown", "vanilla", function ()
+pfUI:RegisterModule("cooldown", "vanilla:tbc", function ()
   -- cache values
   local lowcolor    = {strsplit(",", C.appearance.cd.lowcolor)}
   local normalcolor = {strsplit(",", C.appearance.cd.normalcolor)}
@@ -134,7 +134,14 @@ pfUI:RegisterModule("cooldown", "vanilla", function ()
     end
   end
 
-  -- vanilla does not have a cooldown frame type, so we hook the
-  -- regular SetTimer function that each one is calling.
-  hooksecurefunc("CooldownFrame_SetTimer", SetCooldown)
+  if pfUI.expansion == "vanilla" then
+    -- vanilla does not have a cooldown frame type, so we hook the
+    -- regular SetTimer function that each one is calling.
+    hooksecurefunc("CooldownFrame_SetTimer", SetCooldown)
+  else
+    -- tbc and later expansion have a cooldown frametype, so we can
+    -- hook directly into the frame creation and add our function there.
+    local methods = getmetatable(CreateFrame('Cooldown', nil, nil, 'CooldownFrameTemplate')).__index
+    hooksecurefunc(methods, 'SetCooldown', SetCooldown)
+  end
 end)

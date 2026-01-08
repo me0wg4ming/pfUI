@@ -1,4 +1,4 @@
-pfUI:RegisterModule("totems", "vanilla", function ()
+pfUI:RegisterModule("totems", "vanilla:tbc", function ()
   local _, class = UnitClass("player")
 
   local slots = {
@@ -42,6 +42,9 @@ pfUI:RegisterModule("totems", "vanilla", function ()
       -- Try to recast totem on left click in vanilla
       local active, name, start, duration, icon = GetTotemInfo(this.id)
       if name then CastSpellByName(name) end
+    elseif pfUI.client > 11200 and this.id and arg1 and arg1 == "RightButton" then
+      -- Try to cancel totem on right click in tbc+
+      DestroyTotem(this.id)
     end
   end
 

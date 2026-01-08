@@ -1,4 +1,4 @@
-pfUI:RegisterModule("minimap", "vanilla", function ()
+pfUI:RegisterModule("minimap", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local size = tonumber(C.appearance.minimap.size) or 140
 
@@ -39,7 +39,7 @@ pfUI:RegisterModule("minimap", "vanilla", function ()
     Minimap:SetWidth(size)
     Minimap:SetHeight(size)
 
-    -- do the best to detect the minimap arrow
+    -- vanilla+tbc: do the best to detect the minimap arrow
     local arrowscale = tonumber(C.appearance.minimap.arrowscale)
     local minimaparrow = ({Minimap:GetChildren()})[9]
     for k, v in pairs({Minimap:GetChildren()}) do

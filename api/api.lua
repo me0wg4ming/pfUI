@@ -3,10 +3,6 @@ pfUI.api = { }
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
--- Client API shortcuts
-gfind = string.gmatch or string.gfind
-mod = math.mod or mod
-
 -- [ DLL Detection Helpers ]
 -- Detects presence of various DLL extensions for enhanced functionality
 
@@ -82,6 +78,10 @@ function pfUI.api.UnitIsBehind(unit1, unit2)
   if success then return behind end
   return nil
 end
+
+-- Client API shortcuts
+gfind = string.gmatch or string.gfind
+mod = math.mod or mod
 
 -- [ strsplit ]
 -- Splits a string using a delimiter.
@@ -1260,6 +1260,10 @@ function pfUI.api.EnableAutohide(frame, timeout, combat)
   end
 
   frame.hover:SetScript("OnUpdate", function()
+    -- throttle to 0.05s
+    if (this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + 0.05
+
     if this.activeTo == "keep" then return end
 
     if MouseIsOver(this, 10, -10, -10, 10) then

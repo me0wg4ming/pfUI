@@ -2,6 +2,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
+  -- check for SuperWoW support (use SUPERWOW_VERSION global)
+  local superwow_active = SUPERWOW_VERSION ~= nil
+  --print("pfUI Nameplates: SuperWoW " .. (superwow_active and "ACTIVE" or "INACTIVE"))
+
   local unitcolors = {
     ["ENEMY_NPC"] = { .9, .2, .3, .8 },
     ["NEUTRAL_NPC"] = { 1, 1, .3, .8 },
@@ -37,6 +41,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local registry = {}
   local debuffdurations = C.appearance.cd.debuffs == "1" and true or nil
 
+  -- NEW: Cast event cache like Overhead.lua
+  local CastEvents = {}
+  local _, PlayerGUID = UnitExists("player")
+
   -- cache default border color
   local er, eg, eb, ea = GetStringColor(pfUI_config.appearance.border.color)
 
@@ -65,6 +73,15 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
   local function DoNothing()
     return
+  end
+
+  local function wipe(table)
+    if type(table) ~= "table" then
+      return
+    end
+    for k in pairs(table) do
+      table[k] = nil
+    end
   end
 
   local function IsNamePlate(frame)
@@ -311,18 +328,65 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   nameplates:RegisterEvent("UNIT_COMBO_POINTS")
   nameplates:RegisterEvent("PLAYER_COMBO_POINTS")
   nameplates:RegisterEvent("UNIT_AURA")
+  
+  -- NEW: Register cast events like Overhead.lua
+  if superwow_active then
+    nameplates:RegisterEvent("UNIT_CASTEVENT")
+  end
 
   nameplates:SetScript("OnEvent", function()
     if event == "PLAYER_ENTERING_WORLD" then
       this:SetGameVariables()
+    elseif event == "UNIT_CASTEVENT" then
+      -- NEW: Event-based cast handling from Overhead.lua
+      local casterGUID = arg1
+      if casterGUID == PlayerGUID then return end
+      
+      local eventType = arg3 -- "START", "CAST", "FAIL", "CHANNEL"
+      local spellID = arg4
+      local castDuration = arg5
+      local spellName, _, icon = SpellInfo(spellID)
+      
+      if eventType == "MAINHAND" or eventType == "OFFHAND" then
+        return
+      end
+      
+      if eventType == "CAST" then
+        if not CastEvents[casterGUID] or spellID ~= CastEvents[casterGUID].spell then
+          return
+        end
+      end
+      
+      if eventType == "START" or eventType == "CHANNEL" then
+        if not CastEvents[casterGUID] then
+          CastEvents[casterGUID] = {}
+        end
+        wipe(CastEvents[casterGUID])
+        CastEvents[casterGUID].event = eventType
+        CastEvents[casterGUID].spellID = spellID
+        CastEvents[casterGUID].spellName = spellName
+        CastEvents[casterGUID].icon = icon
+        CastEvents[casterGUID].startTime = GetTime()
+        CastEvents[casterGUID].endTime = castDuration and GetTime() + castDuration / 1000
+        CastEvents[casterGUID].duration = castDuration and castDuration / 1000 or nil
+      elseif eventType == "FAIL" then
+        if CastEvents[casterGUID] then
+          wipe(CastEvents[casterGUID])
+        end
+      end
+      
+      -- Propagate cast event to all nameplates
+      for plate in pairs(registry) do
+        plate.eventcache = true
+      end
     else
       this.eventcache = true
     end
   end)
 
   nameplates:SetScript("OnUpdate", function()
-    -- throttle to 10 updates per second instead of every frame
-    if (this.tick or 0.1) > GetTime() then return else this.tick = GetTime() + 0.1 end
+    -- Throttle main scanner to reasonable rate
+    if (this.tick or 0) > GetTime() then return else this.tick = GetTime() + 0.05 end
 
     -- propagate events to all nameplates
     if this.eventcache then
@@ -631,6 +695,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
 
     if player and unittype == "ENEMY_NPC" then unittype = "ENEMY_PLAYER" end
+    if player and unittype == "FRIENDLY_NPC" then unittype = "FRIENDLY_PLAYER" end
     elite = plate.original.levelicon:IsShown() and not player and "boss" or elite
     if not class then plate.wait_for_scan = true end
 
@@ -874,12 +939,19 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end
 
   nameplates.OnUpdate = function(frame)
-    local update
     local frame = frame or this
     local nameplate = frame.nameplate
+    
+    -- OPTIMIZED: Minimal throttle - only skip if very recent update
+    local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
+    local throttle = target and 0.02 or 0.02
+    
+    if (nameplate.lasttick or 0) + throttle > GetTime() then return end
+    nameplate.lasttick = GetTime()
+    
+    local update
     local original = nameplate.original
     local name = original.name:GetText()
-    local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
     local mouseover = UnitExists("mouseover") and original.glow:IsShown() or nil
     local namefightcolor = C.nameplates.namefightcolor == "1"
 
@@ -889,12 +961,11 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       nameplate.eventcache = nil
     end
 
-    -- reset strata cache on target change
+    -- OPTIMIZED: Cache strata changes
     if nameplate.istarget ~= target then
       nameplate.target_strata = nil
     end
 
-    -- keep target nameplate above others
     if target and nameplate.target_strata ~= 1 then
       nameplate:SetFrameStrata("LOW")
       nameplate.target_strata = 1
@@ -903,15 +974,22 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       nameplate.target_strata = 0
     end
 
-    -- cache target value
     nameplate.istarget = target
 
-    -- set non-target plate alpha
+    -- OPTIMIZED: Cache alpha changes
+    local newAlpha
     if target or not UnitExists("target") then
-      nameplate:SetAlpha(1)
+      newAlpha = 1
     else
-      frame:SetAlpha(.95)
-      nameplate:SetAlpha(tonumber(C.nameplates.notargalpha))
+      newAlpha = tonumber(C.nameplates.notargalpha)
+    end
+    
+    if nameplate.cachedAlpha ~= newAlpha then
+      if not target and UnitExists("target") then
+        frame:SetAlpha(.95)
+      end
+      nameplate:SetAlpha(newAlpha)
+      nameplate.cachedAlpha = newAlpha
     end
 
     -- queue update on visual target update
@@ -939,7 +1017,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
       if namefightcolor then
         if r > .9 and g < .2 and b < .2 then
-          nameplate.name:SetTextColor(1,0.4,0.2,1) -- infight
+          nameplate.name:SetTextColor(1,0.4,0.2,1)
         else
           nameplate.name:SetTextColor(r,g,b,1)
         end
@@ -979,97 +1057,136 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       nameplate.tick = GetTime() + .5
     end
 
-    -- target zoom
-    local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
+    -- OPTIMIZED: Cache zoom dimensions
     if target and C.nameplates.targetzoom == "1" then
-      local zoomval = tonumber(C.nameplates.targetzoomval)+1
-      local wc = tonumber(C.nameplates.width)*zoomval
-      local hc = tonumber(C.nameplates.heighthealth)*(zoomval*.9)
-      local animation = false
-
+      if not nameplate.health.zoomed then
+        local zoomval = tonumber(C.nameplates.targetzoomval)+1
+        local wc = tonumber(C.nameplates.width)*zoomval
+        local hc = tonumber(C.nameplates.heighthealth)*(zoomval*.9)
+        nameplate.health.targetWidth = wc
+        nameplate.health.targetHeight = hc
+      end
+      
+      local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
+      local wc, hc = nameplate.health.targetWidth, nameplate.health.targetHeight
+      
       if wc >= w then
-        wc = w*1.05
-        nameplate.health:SetWidth(wc)
+        nameplate.health:SetWidth(w*1.05)
         nameplate.health.zoomTransition = true
-        animation = true
-      end
-
-      if hc >= h then
-        hc = h*1.05
-        nameplate.health:SetHeight(hc)
+      elseif hc >= h then
+        nameplate.health:SetHeight(h*1.05)
         nameplate.health.zoomTransition = true
-        animation = true
-      end
-
-      if animation == false and not nameplate.health.zoomed then
-        nameplate.health:SetWidth(wc)
-        nameplate.health:SetHeight(hc)
-        nameplate.health.zoomTransition = nil
+      else
+        if nameplate.health.zoomTransition then
+          nameplate.health:SetWidth(wc)
+          nameplate.health:SetHeight(hc)
+          nameplate.health.zoomTransition = nil
+        end
         nameplate.health.zoomed = true
       end
     elseif nameplate.health.zoomed or nameplate.health.zoomTransition then
+      local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
       local wc = tonumber(C.nameplates.width)
       local hc = tonumber(C.nameplates.heighthealth)
-      local animation = false
 
       if wc <= w then
-        wc = w*.95
-        nameplate.health:SetWidth(wc)
-        animation = true
-      end
-
-      if hc <= h then
-        hc = h*0.95
-        nameplate.health:SetHeight(hc)
-        animation = true
-      end
-
-      if animation == false then
+        nameplate.health:SetWidth(w*.95)
+      elseif hc <= h then
+        nameplate.health:SetHeight(h*0.95)
+      else
         nameplate.health:SetWidth(wc)
         nameplate.health:SetHeight(hc)
         nameplate.health.zoomTransition = nil
         nameplate.health.zoomed = nil
+        nameplate.health.targetWidth = nil
+        nameplate.health.targetHeight = nil
       end
     end
 
-    -- castbar update
+    -- OPTIMIZED: UNIT_CASTEVENT implementation
     if C.nameplates["showcastbar"] == "1" and ( C.nameplates["targetcastbar"] == "0" or target ) then
-      local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
-
-      -- detect cast or channel bars
-      cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(target and "target" or name)
-      if not cast then channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(target and "target" or name) end
-
-      -- read enemy casts from SuperWoW if enabled
-      if superwow_active then
-        cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(nameplate.parent:GetName(1))
-        if not cast then channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(nameplate.parent:GetName(1)) end
+      local unitstr = target and "target" or nil
+      
+      -- Use SuperWoW GUID if available
+      if superwow_active and not unitstr then
+        unitstr = nameplate.parent:GetName(1)
       end
-
-      if not cast and not channel then
-        nameplate.castbar:Hide()
-      elseif cast or channel then
-        local effect = cast or channel
-        local duration = endTime - startTime
-        local max = duration / 1000
-        local cur = GetTime() - startTime / 1000
-
-        -- invert castbar values while channeling
-        if channel then cur = max + startTime/1000 - GetTime() end
-
-        nameplate.castbar:SetMinMaxValues(0,  duration/1000)
-        nameplate.castbar:SetValue(cur)
-        nameplate.castbar.text:SetText(round(cur,1))
-        if C.nameplates.spellname == "1" then
-          nameplate.castbar.spell:SetText(effect)
+      
+      -- Check event-based cast cache first
+      local castInfo = unitstr and CastEvents[unitstr]
+      
+      if castInfo and castInfo.spellID then
+        -- Check if cast is still valid
+        if castInfo.startTime + castInfo.duration < GetTime() then
+          wipe(castInfo)
+          nameplate.castbar:Hide()
+        elseif castInfo.event == "CAST" or castInfo.event == "FAIL" then
+          wipe(castInfo)
+          nameplate.castbar:Hide()
         else
-          nameplate.castbar.spell:SetText("")
+          -- Update from cached event data
+          nameplate.castbar:SetMinMaxValues(castInfo.startTime, castInfo.endTime)
+          
+          local barValue
+          if castInfo.event == "CHANNEL" then
+            barValue = castInfo.startTime + (castInfo.endTime - GetTime())
+          else
+            barValue = GetTime()
+          end
+          
+          nameplate.castbar:SetValue(barValue)
+          nameplate.castbar.text:SetText(round(GetTime() - castInfo.startTime, 1))
+          
+          if C.nameplates.spellname == "1" then
+            nameplate.castbar.spell:SetText(castInfo.spellName)
+          else
+            nameplate.castbar.spell:SetText("")
+          end
+          
+          if castInfo.icon then
+            nameplate.castbar.icon.tex:SetTexture(castInfo.icon)
+            nameplate.castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
+          end
+          
+          nameplate.castbar:Show()
         end
-        nameplate.castbar:Show()
+      else
+        -- Fallback to API calls if no event data (for non-SuperWoW or target)
+        local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
+        
+        if target then
+          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
+          if not cast then 
+            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
+          end
+        end
+        
+        if not cast and not channel then
+          nameplate.castbar:Hide()
+        else
+          local effect = cast or channel
+          local duration = endTime - startTime
+          local max = duration / 1000
+          local cur = GetTime() - startTime / 1000
 
-        if texture then
-          nameplate.castbar.icon.tex:SetTexture(texture)
-          nameplate.castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
+          if channel then cur = max + startTime/1000 - GetTime() end
+
+          nameplate.castbar:SetMinMaxValues(0, duration/1000)
+          nameplate.castbar:SetValue(cur)
+          nameplate.castbar.text:SetText(round(cur,1))
+          
+          if C.nameplates.spellname == "1" then
+            nameplate.castbar.spell:SetText(effect)
+          else
+            nameplate.castbar.spell:SetText("")
+          end
+          
+          nameplate.castbar:Show()
+
+          if texture then
+            nameplate.castbar.icon.tex:SetTexture(texture)
+            nameplate.castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
+          end
         end
       end
     else

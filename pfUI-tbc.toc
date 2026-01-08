@@ -1,0 +1,17 @@
+## Interface: 20400
+## Title: |cff33ffccpf|cffffffffUI
+## Author: Shagu
+## Notes: A complete user interface replacement.
+## Notes-ruRU: Полная замена пользовательского интерфейса.
+## Version: 6.0.0
+## SavedVariables: pfUI_profiles, pfUI_addon_profiles, pfUI_cache
+## SavedVariablesPerCharacter: pfUI_config, pfUI_init, pfUI_playerDB
+
+pfUI.lua
+
+init\env.xml
+init\compat.xml
+init\api.xml
+init\libs.xml
+init\skins.xml
+init\modules.xml

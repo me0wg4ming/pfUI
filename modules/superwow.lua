@@ -316,6 +316,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     -- assign all required data
     local unit = UnitName(target)
     local unitlevel = UnitLevel(target)
+    if not SpellInfo then return end
     local effect, rank = SpellInfo(spell)
     local duration = libdebuff:GetDuration(effect, rank)
     local caster = "player"
@@ -439,70 +440,6 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
   end
 
-  -- Config Import/Export API using ImportFile/ExportFile
-  if ImportFile and ExportFile then
-    pfUI.api.ExportConfig = function(filename)
-      filename = filename or "pfUI_config_backup.txt"
-      local configStr = ""
-
-      -- Serialize config to string
-      local function serialize(tbl, indent)
-        indent = indent or ""
-        local result = "{\n"
-        for k, v in pairs(tbl) do
-          local keyStr = type(k) == "string" and '["' .. k .. '"]' or "[" .. tostring(k) .. "]"
-          if type(v) == "table" then
-            result = result .. indent .. "  " .. keyStr .. " = " .. serialize(v, indent .. "  ") .. ",\n"
-          elseif type(v) == "string" then
-            result = result .. indent .. "  " .. keyStr .. ' = "' .. v .. '",\n'
-          else
-            result = result .. indent .. "  " .. keyStr .. " = " .. tostring(v) .. ",\n"
-          end
-        end
-        return result .. indent .. "}"
-      end
-
-      if pfUI_config then
-        configStr = "pfUI_config = " .. serialize(pfUI_config)
-        ExportFile(filename, configStr)
-        DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpfUI|r: Config exported to imports/" .. filename)
-        return true
-      end
-      return false
-    end
-
-    pfUI.api.ImportConfig = function(filename)
-      filename = filename or "pfUI_config_backup.txt"
-      local content = ImportFile(filename)
-      if content and content ~= "" then
-        -- Load the config string
-        local func, err = loadstring(content)
-        if func then
-          func()
-          DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpfUI|r: Config imported from imports/" .. filename)
-          DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpfUI|r: Please /reload to apply changes")
-          return true
-        else
-          DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpfUI|r: Error parsing config: " .. (err or "unknown"))
-        end
-      else
-        DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpfUI|r: Could not read imports/" .. filename)
-      end
-      return false
-    end
-
-    -- Slash commands for config backup
-    SLASH_PFEXPORT1 = "/pfexport"
-    SlashCmdList["PFEXPORT"] = function(msg)
-      pfUI.api.ExportConfig(msg ~= "" and msg or nil)
-    end
-
-    SLASH_PFIMPORT1 = "/pfimport"
-    SlashCmdList["PFIMPORT"] = function(msg)
-      pfUI.api.ImportConfig(msg ~= "" and msg or nil)
-    end
-  end
-
   -- GetPlayerBuffID wrapper
   if GetPlayerBuffID then
     pfUI.api.GetPlayerBuffSpellId = function(buffIndex)
@@ -559,7 +496,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
   end
 
-  -- Enhance libcast with SuperWoW data for NPCs and other players only
+  -- Enhance libcast with SuperWoW data for NPCs and other players
   -- Player casts use SPELLCAST_* events for proper pushback handling
   local supercast = CreateFrame("Frame")
   local playerGuid = nil
@@ -622,6 +559,9 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
       -- skip on buff procs during cast
       if event_type == "CAST" then
         if not libcast.db[guid] or libcast.db[guid].cast ~= spell then
+          -- ignore casts without 'START' event, while there is already another cast.
+          -- those events can be for example a frost shield proc while casting frostbolt.
+          -- we want to keep the cast itself, so we simply skip those.
           return
         end
       end
@@ -639,7 +579,10 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
       libcast.db[dbKey].icon = icon
       libcast.db[dbKey].channel = event_type == "CHANNEL" or false
     elseif arg3 == "FAIL" then
+      -- For player: use playerName, for others: use GUID
       local dbKey = isPlayer and UnitName("player") or guid
+      
+      -- delete all cast entries
       if libcast.db[dbKey] then
         libcast.db[dbKey].cast = nil
         libcast.db[dbKey].rank = nil

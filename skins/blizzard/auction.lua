@@ -1,11 +1,16 @@
-pfUI:RegisterSkin("Auctionhouse", "vanilla", function ()
+pfUI:RegisterSkin("Auctionhouse", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
   HookAddonOrVariable("Blizzard_AuctionUI", function()
-    SkinArrowButton(BidPrevPageButton, "left", 18)
-    SkinArrowButton(BidNextPageButton, "right", 18)
-    SkinArrowButton(AuctionsPrevPageButton, "left", 18)
-    SkinArrowButton(AuctionsNextPageButton, "right", 18)
+    -- Compatibility
+    if BrowseResetButton then -- tbc
+      SkinButton(BrowseResetButton)
+    else -- vanilla
+      SkinArrowButton(BidPrevPageButton, "left", 18)
+      SkinArrowButton(BidNextPageButton, "right", 18)
+      SkinArrowButton(AuctionsPrevPageButton, "left", 18)
+      SkinArrowButton(AuctionsNextPageButton, "right", 18)
+    end
 
     hooksecurefunc("AuctionFrame_OnShow", function()
       AuctionFrame:ClearAllPoints()

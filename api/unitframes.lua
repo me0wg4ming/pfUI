@@ -1,6 +1,8 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
+local superwow_active = HasSuperWoW()
+
 pfUI.uf = CreateFrame("Frame", nil, UIParent)
 pfUI.uf:SetScript("OnUpdate", function()
   if InCombatLockdown and not InCombatLockdown() then
@@ -29,17 +31,21 @@ pfUI.uf.RebuildUnitmap = function()
   if pfUI.uf.raid then
     for i = 1, 40 do
       local frame = pfUI.uf.raid[i]
-      if frame and frame.id and frame.id ~= 0 then
-        pfUI.uf.unitmap["raid" .. frame.id] = frame
+      if frame and frame.id and frame.id ~= 0 and frame.label then
+        -- ✅ Jetzt auch party-Frames in Raid-Frames unterstützen
+        local unitstr = frame.label .. frame.id
+        pfUI.uf.unitmap[unitstr] = frame
       end
     end
   end
   
-  -- Rebuild party mappings
-  for i = 1, 4 do
-    local frame = _G["pfGroup" .. i]
-    if frame and frame.label == "party" then
-      pfUI.uf.unitmap["party" .. frame.id] = frame
+  -- Rebuild party mappings (nur wenn nicht als Raid verwendet)
+  if C.unitframes.raidforgroup ~= "1" then
+    for i = 1, 4 do
+      local frame = _G["pfGroup" .. i]
+      if frame and frame.label == "party" then
+        pfUI.uf.unitmap["party" .. frame.id] = frame
+      end
     end
   end
 end
@@ -242,7 +248,8 @@ end)
 
 local aggrodata = { }
 function pfUI.api.UnitHasAggro(unit)
-  if aggrodata[unit] and GetTime() < aggrodata[unit].check + 1 then
+  -- Only cache positive results (has aggro) - allows fast detection when aggro changes
+  if aggrodata[unit] and aggrodata[unit].state > 0 and GetTime() < aggrodata[unit].check + 1 then
     return aggrodata[unit].state
   end
 
@@ -984,8 +991,8 @@ function pfUI.uf.OnUpdate()
   -- Throttle for raid/party frames: only process updates every 0.1s
   -- This reduces OnUpdate calls from 5760/sec (40 frames * 144fps) to ~400/sec
   if this.label == "raid" or this.label == "party" then
-    if (this.tick or 0) > GetTime() then return end
-    this.tick = GetTime() + 0.1
+    if (this.throttleTick or 0) > GetTime() then return end
+    this.throttleTick = GetTime() + 0.1
   end
 
   -- process indicator update events
@@ -1259,6 +1266,9 @@ function pfUI.uf:EnableEvents()
     f:RegisterEvent("RAID_ROSTER_UPDATE")
     f:RegisterEvent("PARTY_LOOT_METHOD_CHANGED")
     f:RegisterEvent("RAID_TARGET_UPDATE")
+    f:RegisterEvent("PARTY_MEMBER_ENABLE")
+    f:RegisterEvent("PARTY_MEMBER_DISABLE")
+    f:RegisterEvent("PLAYER_UPDATE_RESTING")
     
     -- Unitmap aktualisieren
     pfUI.uf.RebuildUnitmap()
@@ -2403,6 +2413,8 @@ function pfUI.uf:SetupBuffIndicators(config)
     if myclass == "WARRIOR" then
       -- Battle Shout
       table.insert(indicators, "interface\\icons\\ability_warrior_battleshout")
+      -- Commanding Shout (TBC)
+      table.insert(indicators, "interface\\icons\\ability_warrior_rallyingcry")
     end
 
     if myclass == "MAGE" then
@@ -2421,6 +2433,14 @@ function pfUI.uf:SetupBuffIndicators(config)
 
       -- Aspect of the Pack
       table.insert(indicators, "interface\\icons\\ability_mount_whitetiger")
+
+      -- Misdirection (TBC)
+      table.insert(indicators, "interface\\icons\\ability_hunter_misdirection")
+    end
+
+    if myclass == "SHAMAN" then
+      -- Earth Shield (TBC)
+      table.insert(indicators, "interface\\icons\\spell_nature_skinofearth")
     end
   end
 
@@ -2449,6 +2469,8 @@ function pfUI.uf:SetupBuffIndicators(config)
       table.insert(indicators, "interface\\icons\\spell_holy_renew")
       -- Power Word: Shield
       table.insert(indicators, "interface\\icons\\spell_holy_powerwordshield")
+      -- Prayer of Mending (TBC)
+      table.insert(indicators, "interface\\icons\\spell_holy_prayerofmendingtga")
     end
 
     if myclass == "DRUID" or config.all_hots == "1" then

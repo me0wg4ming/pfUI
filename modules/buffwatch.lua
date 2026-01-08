@@ -1,4 +1,4 @@
-pfUI:RegisterModule("buffwatch", "vanilla", function ()
+pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize("panels")
   local scanner = libtipscan:GetScanner("buffwatch")
 

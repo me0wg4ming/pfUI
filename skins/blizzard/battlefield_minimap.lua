@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Battlefield Minimap", "vanilla", function ()
+pfUI:RegisterSkin("Battlefield Minimap", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
 
   HookAddonOrVariable("Blizzard_BattlefieldMinimap", function()

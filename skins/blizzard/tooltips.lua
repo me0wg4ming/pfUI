@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Tooltips", "vanilla", function ()
+pfUI:RegisterSkin("Tooltips", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
   local alpha = tonumber(C.tooltip.alpha)
 
