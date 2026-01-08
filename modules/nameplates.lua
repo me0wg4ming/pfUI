@@ -944,7 +944,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     
     -- OPTIMIZED: Minimal throttle - only skip if very recent update
     local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
-    local throttle = target and 0.02 or 0.10
+    local throttle = target and 0.02 or 0.02
     
     if (nameplate.lasttick or 0) + throttle > GetTime() then return end
     nameplate.lasttick = GetTime()
