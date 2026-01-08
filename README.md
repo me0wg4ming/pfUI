@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-6.1.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-6.1.1-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
@@ -14,11 +14,24 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ---
 
+## What's New in Version 6.1.1 (January 8, 2026)
+
+### 🐛 Bugfixes
+
+- ✅ **Chat Level Display Fix** - Fixed targeting high-level players overwriting known level with -1. Now shows "??" for unknown levels instead of -1
+- ✅ **Nameplate Level Fix** - Nameplates now use stored level from database after reload instead of showing "??"
+- ✅ **Nameplate Level Color** - Level color now correctly uses difficulty color when loaded from database
+
+### ⚙️ Config Changes
+
+- ✅ **Chat Player Levels** - Now disabled by default (was enabled)
+
+---
+
 ## What's New in Version 6.1.0 (January 8, 2026)
 
 ### 🐛 Bugfixes
 
-- ✅ **Performance improvement for visible Nameplates**
 - ✅ **40-Yard Range Check Fix** - Fixed range check not working for raid/party frames due to throttle variable conflict (`this.tick` vs `this.throttleTick`)
 - ✅ **Aggro Indicator Fix** - Fixed aggro indicator not displaying properly on raid/party frames (same throttle issue)
 - ✅ **Aggro Detection Cache** - Improved aggro cache to only cache positive results, allowing instant detection when aggro changes while maintaining performance
@@ -159,7 +172,7 @@ Turtle WoW includes TBC spells in the Vanilla client. This version includes all 
 
 ---
 
-**Version:** 6.1.0  
+**Version:** 6.1.1  
 **Release Date:** January 8, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Optional DLLs:** SuperWoW, Nampower, UnitXP_SP3 (enhanced features when available)

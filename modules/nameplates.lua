@@ -664,6 +664,14 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local name = plate.original.name:GetText()
     local level = plate.original.level:IsShown() and plate.original.level:GetObjectType() == "FontString" and tonumber(plate.original.level:GetText()) or "??"
     local class, ulevel, elite, player, guild = GetUnitData(name, true)
+    
+    -- Use database level if available and valid (fixes ?? after reload)
+    local levelFromDB = false
+    if ulevel and ulevel > 0 then
+      level = ulevel
+      levelFromDB = true
+    end
+    
     local target = plate.istarget
     local mouseover = UnitExists("mouseover") and plate.original.glow:IsShown() or nil
     local unitstr = target and "target" or mouseover and "mouseover" or nil
@@ -787,6 +795,12 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
     plate.name:SetText(GetNameString(name))
     plate.level:SetText(string.format("%s%s", level, (elitestrings[elite] or "")))
+    
+    -- Set level color from GetDifficultyColor when using DB level
+    if levelFromDB and type(level) == "number" then
+      local color = GetDifficultyColor(level)
+      plate.level:SetTextColor(color.r + 0.3, color.g + 0.3, color.b + 0.3, 1)
+    end
 
     if guild and C.nameplates.showguildname == "1" then
       plate.guild:SetText(guild)

@@ -797,11 +797,15 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
         local real, _ = strsplit(":", name)
         local level = GetPlayerLevel(real)
 
-        if level then
+        if level and level > 0 then
           local levelcolor = rgbhex(GetDifficultyColor(level))
           -- Add level after the player name, before the closing bracket
           text = string.gsub(text, "(|Hplayer:" .. name .. "|h.-|h|r)" .. right,
             "%1 " .. levelcolor .. level .. "|r" .. right)
+        elseif level and level <= 0 then
+          -- Show ?? for unknown levels (e.g. -1 from UnitLevel)
+          text = string.gsub(text, "(|Hplayer:" .. name .. "|h.-|h|r)" .. right,
+            "%1 |cffff0000??|r" .. right)
         end
       end
     end

@@ -131,6 +131,8 @@ libunitscan:SetScript("OnEvent", function()
     if UnitIsPlayer(scan) then
       _, class = UnitClass(scan)
       level = UnitLevel(scan)
+      -- UnitLevel returns -1 for unknown levels, don't overwrite known values
+      level = level > 0 and level or nil
       name = UnitName(scan)
       guild = GetGuildInfo(scan)
       AddData("players", name, class, level, nil, guild)
@@ -138,6 +140,8 @@ libunitscan:SetScript("OnEvent", function()
       _, class = UnitClass(scan)
       elite = UnitClassification(scan)
       level = UnitLevel(scan)
+      -- UnitLevel returns -1 for unknown levels, don't overwrite known values
+      level = level > 0 and level or nil
       name = UnitName(scan)
       AddData("mobs", name, class, level, elite)
     end
