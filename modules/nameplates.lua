@@ -6,6 +6,28 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local superwow_active = SUPERWOW_VERSION ~= nil
   --print("pfUI Nameplates: SuperWoW " .. (superwow_active and "ACTIVE" or "INACTIVE"))
 
+  -- Local function references for performance
+  local GetTime = GetTime
+  local UnitExists = UnitExists
+  local UnitName = UnitName
+  local UnitClass = UnitClass
+  local UnitLevel = UnitLevel
+  local UnitIsPlayer = UnitIsPlayer
+  local UnitIsDead = UnitIsDead
+  local UnitAffectingCombat = UnitAffectingCombat
+  local UnitIsUnit = UnitIsUnit
+  local UnitCanAssist = UnitCanAssist
+  local UnitCastingInfo = UnitCastingInfo
+  local UnitChannelInfo = UnitChannelInfo
+  local pairs = pairs
+  local tonumber = tonumber
+  local strlower = strlower
+  local strfind = strfind
+  local strlen = strlen
+  local floor = floor
+  local ceil = ceil
+  local abs = abs
+
   local unitcolors = {
     ["ENEMY_NPC"] = { .9, .2, .3, .8 },
     ["NEUTRAL_NPC"] = { 1, 1, .3, .8 },
@@ -955,13 +977,14 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   nameplates.OnUpdate = function(frame)
     local frame = frame or this
     local nameplate = frame.nameplate
+    local now = GetTime()  -- Cache GetTime() once per update
     
     -- OPTIMIZED: Minimal throttle - only skip if very recent update
     local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
     local throttle = target and 0.025 or 0.025
     
-    if (nameplate.lasttick or 0) + throttle > GetTime() then return end
-    nameplate.lasttick = GetTime()
+    if (nameplate.lasttick or 0) + throttle > now then return end
+    nameplate.lasttick = now
     
     local update
     local original = nameplate.original
@@ -1053,7 +1076,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     -- scan for debuff timeouts
     if nameplate.debuffcache then
       for id, data in pairs(nameplate.debuffcache) do
-        if ( not data.stop or data.stop < GetTime() ) and not data.empty then
+        if ( not data.stop or data.stop < now ) and not data.empty then
           data.empty = true
           update = true
         end
@@ -1061,14 +1084,14 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
 
     -- use timer based updates
-    if not nameplate.tick or nameplate.tick < GetTime() then
+    if not nameplate.tick or nameplate.tick < now then
       update = true
     end
 
     -- run full updates if required
     if update then
       nameplates:OnDataChanged(nameplate)
-      nameplate.tick = GetTime() + .5
+      nameplate.tick = now + .5
     end
 
     -- OPTIMIZED: Cache zoom dimensions
@@ -1131,7 +1154,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       
       if castInfo and castInfo.spellID then
         -- Check if cast is still valid
-        if castInfo.startTime + castInfo.duration < GetTime() then
+        if castInfo.startTime + castInfo.duration < now then
           wipe(castInfo)
           nameplate.castbar:Hide()
         elseif castInfo.event == "CAST" or castInfo.event == "FAIL" then
@@ -1143,13 +1166,13 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
           
           local barValue
           if castInfo.event == "CHANNEL" then
-            barValue = castInfo.startTime + (castInfo.endTime - GetTime())
+            barValue = castInfo.startTime + (castInfo.endTime - now)
           else
-            barValue = GetTime()
+            barValue = now
           end
           
           nameplate.castbar:SetValue(barValue)
-          nameplate.castbar.text:SetText(round(GetTime() - castInfo.startTime, 1))
+          nameplate.castbar.text:SetText(round(now - castInfo.startTime, 1))
           
           if C.nameplates.spellname == "1" then
             nameplate.castbar.spell:SetText(castInfo.spellName)
