@@ -1103,7 +1103,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       end
     end
 
-    -- OPTIMIZED: Event-based castbar from Overhead.lua
+    -- OPTIMIZED: UNIT_CASTEVENT implementation
     if C.nameplates["showcastbar"] == "1" and ( C.nameplates["targetcastbar"] == "0" or target ) then
       local unitstr = target and "target" or nil
       
