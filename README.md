@@ -18,7 +18,7 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ### 🐛 Bugfixes
 
-- ✅ **Performance improvement for visible Nameplates
+- ✅ **Performance improvement for visible Nameplates**
 - ✅ **40-Yard Range Check Fix** - Fixed range check not working for raid/party frames due to throttle variable conflict (`this.tick` vs `this.throttleTick`)
 - ✅ **Aggro Indicator Fix** - Fixed aggro indicator not displaying properly on raid/party frames (same throttle issue)
 - ✅ **Aggro Detection Cache** - Improved aggro cache to only cache positive results, allowing instant detection when aggro changes while maintaining performance
