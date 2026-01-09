@@ -112,7 +112,10 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
           spellName, spellRank, texture = SpellInfo(spellId)
         end
         if not spellName and GetSpellNameAndRankForId then
-          spellName, spellRank = GetSpellNameAndRankForId(spellId)
+          local success, name, rank = pcall(GetSpellNameAndRankForId, spellId)
+          if success then
+            spellName, spellRank = name, rank
+          end
         end
 
         if spellName then

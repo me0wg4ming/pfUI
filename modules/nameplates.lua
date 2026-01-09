@@ -237,6 +237,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
   local function PlateCacheDebuffs(self, unitstr, verify)
     if not self.debuffcache then self.debuffcache = {} end
+    if not libdebuff then return end  -- Safety check
 
     for id = 1, 16 do
       local effect, _, texture, stacks, _, duration, timeleft
@@ -923,9 +924,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       for i = 1, 16 do
         local effect, rank, texture, stacks, dtype, duration, timeleft
 
-        if unitstr and C.nameplates.selfdebuff == "1" then
+        if unitstr and C.nameplates.selfdebuff == "1" and libdebuff then
           effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, i)
-        elseif unitstr then
+        elseif unitstr and libdebuff then
           effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
         elseif plate.verify == verify then
           effect, rank, texture, stacks, dtype, duration, timeleft = plate:UnitDebuff(i)
@@ -1141,16 +1142,26 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
 
     -- OPTIMIZED: UNIT_CASTEVENT implementation
-    if C.nameplates["showcastbar"] == "1" and ( C.nameplates["targetcastbar"] == "0" or target ) then
-      local unitstr = target and "target" or nil
+    -- Use multiple checks for target detection (target variable, istarget flag, or zoomed state)
+    local isTargetPlate = target or nameplate.istarget or (nameplate.health and nameplate.health.zoomed)
+    if C.nameplates["showcastbar"] == "1" and ( C.nameplates["targetcastbar"] == "0" or isTargetPlate ) then
+      local unitstr = nil
+      local targetGUID = nil
       
-      -- Use SuperWoW GUID if available
-      if superwow_active and not unitstr then
+      -- Get GUID for CastEvents lookup
+      if isTargetPlate and superwow_active then
+        -- Get target's GUID for event cache lookup
+        local _, guid = UnitExists("target")
+        targetGUID = guid
+      end
+      
+      -- Use SuperWoW GUID for non-target plates
+      if superwow_active and not isTargetPlate then
         unitstr = nameplate.parent:GetName(1)
       end
       
-      -- Check event-based cast cache first
-      local castInfo = unitstr and CastEvents[unitstr]
+      -- Check event-based cast cache first (use GUID)
+      local castInfo = (targetGUID and CastEvents[targetGUID]) or (unitstr and CastEvents[unitstr])
       
       if castInfo and castInfo.spellID then
         -- Check if cast is still valid
@@ -1191,7 +1202,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         -- Fallback to API calls if no event data (for non-SuperWoW or target)
         local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
         
-        if target then
+        if isTargetPlate and UnitExists("target") then
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
           if not cast then 
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
