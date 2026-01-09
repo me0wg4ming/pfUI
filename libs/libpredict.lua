@@ -79,10 +79,31 @@ do -- Regrowth
   REGROWTH = locales[GetLocale()] or locales["enUS"]
 end
 
+-- SuperWoW detection
+local superwow_active = SpellInfo ~= nil
+
+-- Spell IDs für UNIT_CASTEVENT (SuperWoW)
+local SPELL_IDS = {
+  -- Rejuvenation (alle Ränge)
+  [774] = "Reju", [1058] = "Reju", [1430] = "Reju", [2090] = "Reju", [2091] = "Reju",
+  [3627] = "Reju", [8910] = "Reju", [9839] = "Reju", [9840] = "Reju", [9841] = "Reju",
+  [25299] = "Reju", [26981] = "Reju", [26982] = "Reju",
+  -- Renew (alle Ränge)
+  [139] = "Renew", [6074] = "Renew", [6075] = "Renew", [6076] = "Renew", [6077] = "Renew",
+  [6078] = "Renew", [10927] = "Renew", [10928] = "Renew", [10929] = "Renew", [25315] = "Renew",
+  [25221] = "Renew", [25222] = "Renew",
+}
+
 local libpredict = CreateFrame("Frame")
 libpredict:RegisterEvent("UNIT_HEALTH")
 libpredict:RegisterEvent("CHAT_MSG_ADDON")
 libpredict:RegisterEvent("PLAYER_TARGET_CHANGED")
+
+-- SuperWoW: Registriere UNIT_CASTEVENT für akkurate Instant-HoT Detection
+if superwow_active then
+  libpredict:RegisterEvent("UNIT_CASTEVENT")
+end
+
 libpredict:SetScript("OnEvent", function()
   if event == "CHAT_MSG_ADDON" and (arg1 == "HealComm" or arg1 == "CTRA") then
     this:ParseChatMessage(arg4, arg2, arg1)
@@ -91,17 +112,98 @@ libpredict:SetScript("OnEvent", function()
     if ress[name] and not UnitIsDeadOrGhost(arg1) then
       ress[UnitName(arg1)] = nil
     end
+  elseif event == "UNIT_CASTEVENT" and superwow_active then
+    -- arg1 = casterGUID, arg2 = targetGUID, arg3 = event type, arg4 = spellId, arg5 = castTime
+    local casterGUID, targetGUID, castEvent, spellId = arg1, arg2, arg3, arg4
+    
+    -- Nur eigene Casts (player)
+    local _, playerGUID = UnitExists("player")
+    if casterGUID ~= playerGUID then return end
+    
+    -- Nur "CAST" events (erfolgreiche Instant-Casts)
+    if castEvent ~= "CAST" then return end
+    
+    -- Prüfe ob es ein Instant-HoT ist
+    local hotType = SPELL_IDS[spellId]
+    if not hotType then return end
+    
+    -- Finde Target Name
+    local targetName
+    for i = 1, 40 do
+      local unit = "raid" .. i
+      if UnitExists(unit) then
+        local _, guid = UnitExists(unit)
+        if guid == targetGUID then
+          targetName = UnitName(unit)
+          break
+        end
+      end
+    end
+    if not targetName then
+      for i = 1, 4 do
+        local unit = "party" .. i
+        if UnitExists(unit) then
+          local _, guid = UnitExists(unit)
+          if guid == targetGUID then
+            targetName = UnitName(unit)
+            break
+          end
+        end
+      end
+    end
+    if not targetName then
+      local _, guid = UnitExists("player")
+      if guid == targetGUID then
+        targetName = UnitName("player")
+      end
+    end
+    if not targetName then
+      local _, guid = UnitExists("target")
+      if guid == targetGUID then
+        targetName = UnitName("target")
+      end
+    end
+    
+    if not targetName then return end
+    
+    -- Duration bestimmen
+    local duration
+    if hotType == "Reju" then
+      duration = rejuvDuration or 12
+    elseif hotType == "Renew" then
+      duration = renewDuration or 15
+    end
+    
+    if libpredict.debug then
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ffff[UNIT_CASTEVENT]|r spell=%s target=%s dur=%s", hotType, targetName, tostring(duration)))
+    end
+    
+    -- Sende HoT
+    local playerName = UnitName("player")
+    libpredict:Hot(playerName, targetName, hotType, duration, nil, "UNIT_CASTEVENT")
+    
+    -- Sende HealComm Nachricht (sender könnte noch nicht existieren bei sehr frühem Event)
+    if libpredict.sender and libpredict.sender.SendHealCommMsg then
+      libpredict.sender:SendHealCommMsg(hotType .. "/" .. targetName .. "/" .. duration .. "/")
+    else
+      -- Fallback: direkt senden
+      local msg = hotType .. "/" .. targetName .. "/" .. duration .. "/"
+      SendAddonMessage("HealComm", msg, "PARTY")
+      SendAddonMessage("HealComm", msg, "RAID")
+      SendAddonMessage("HealComm", msg, "BATTLEGROUND")
+    end
   end
 end)
 
 libpredict:SetScript("OnUpdate", function()
   -- throttle cleanup to 0.1s - no need to check every frame
-  if (this.tick or 0) > GetTime() then return end
-  this.tick = GetTime() + 0.1
+  local now = pfUI.uf.now or GetTime()
+  if (this.tick or 0) > now then return end
+  this.tick = now + 0.1
 
   -- update on timeout events
   for timestamp, targets in pairs(events) do
-    if GetTime() >= timestamp then
+    if now >= timestamp then
       events[timestamp] = nil
     end
   end
@@ -172,6 +274,10 @@ function libpredict:ParseComm(sender, msg)
   return msgtype, target, heal, time
 end
 
+-- Duplikat-Erkennung für HoT Nachrichten
+local recentHots = {}
+local DUPLICATE_WINDOW = 0.5  -- Ignoriere gleiche Nachricht innerhalb 0.5s
+
 function libpredict:ParseChatMessage(sender, msg, comm)
   local msgtype, target, heal, time
 
@@ -204,7 +310,44 @@ function libpredict:ParseChatMessage(sender, msg, comm)
   elseif msgtype == "Ress" then
     libpredict:Ress(sender, target)
   elseif msgtype == "Hot" then
-    libpredict:Hot(sender, target, heal, time)
+    -- Duplikat-Check: gleicher sender+target+spell innerhalb DUPLICATE_WINDOW ignorieren
+    local now = pfUI.uf.now or GetTime()
+    local key = sender .. target .. heal
+    if recentHots[key] and (now - recentHots[key]) < DUPLICATE_WINDOW then
+      if libpredict.debug then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[DUPLICATE IGNORED]|r " .. key)
+      end
+      return
+    end
+    recentHots[key] = now
+    
+    -- Cleanup alte Einträge (alle 10s)
+    if not libpredict.lastCleanup or (now - libpredict.lastCleanup) > 10 then
+      for k, v in pairs(recentHots) do
+        if (now - v) > DUPLICATE_WINDOW then
+          recentHots[k] = nil
+        end
+      end
+      libpredict.lastCleanup = now
+    end
+    
+    -- Für eigene HoTs: Korrigiere die startTime
+    if sender == UnitName("player") then
+      local existing = hots[target] and hots[target][heal]
+      
+      -- Wenn bereits ein aktiver Timer existiert, nicht überschreiben
+      if existing and (existing.start + existing.duration) > now then
+        return
+      end
+      
+      -- Kompensiere HealComm Verzögerung
+      local delay = (heal == "Regr") and 0.3 or 0
+      local correctedStart = now - delay
+      
+      libpredict:Hot(sender, target, heal, time, correctedStart, "ParseComm-Self")
+      return
+    end
+    libpredict:Hot(sender, target, heal, time, nil, "ParseComm")
   end
 end
 
@@ -218,24 +361,49 @@ function libpredict:Heal(sender, target, amount, duration)
     return
   end
 
-  local timeout = duration/1000 + GetTime()
+  local now = pfUI.uf.now or GetTime()
+  local timeout = duration/1000 + now
   heals[target] = heals[target] or {}
   heals[target][sender] = { amount, timeout }
   libpredict:AddEvent(timeout, target)
 end
 
-function libpredict:Hot(sender, target, spell, duration)
+-- Debug flag
+libpredict.debug = false
+
+function libpredict:Hot(sender, target, spell, duration, startTime, source)
   hots[target] = hots[target] or {}
   hots[target][spell] = hots[target][spell] or {}
 
+  -- Korrigiere Regrowth Duration (Server gibt 21 zurück, sollte aber 20 sein)
+  if spell == "Regr" then
+    duration = 20
+  end
+  
+  -- Sicherstellen dass duration eine Zahl ist
+  duration = tonumber(duration) or duration
+
+  local now = pfUI.uf.now or GetTime()
   hots[target][spell].duration = duration
-  hots[target][spell].start = GetTime()
+  hots[target][spell].start = startTime or now
+  
+  -- Debug
+  if libpredict.debug then
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ffcc[Hot]|r src=" .. (source or "?") .. 
+      " | sender=" .. (sender or "nil") ..
+      " | target=" .. (target or "nil") .. 
+      " | spell=" .. (spell or "nil") ..
+      " | dur=" .. tostring(duration) .. " (" .. type(duration) .. ")")
+  end
 
   -- update aura events of relevant unitframes
   if pfUI and pfUI.uf and pfUI.uf.frames then
     for _, frame in pairs(pfUI.uf.frames) do
       if frame.namecache == target then
         frame.update_aura = true
+        if libpredict.debug then
+          DEFAULT_CHAT_FRAME:AddMessage("  |cff00ff00-> Frame update triggered for " .. (frame:GetName() or "?") .. "|r")
+        end
       end
     end
   end
@@ -287,8 +455,9 @@ function libpredict:UnitGetIncomingHeals(unit)
   if not heals[name] then
     return sumheal
   else
+    local now = pfUI.uf.now or GetTime()
     for sender, amount in pairs(heals[name]) do
-      if amount[2] <= GetTime() then
+      if amount[2] <= now then
         heals[name][sender] = nil
       else
         sumheal = sumheal + amount[1]
@@ -392,6 +561,23 @@ local function UpdateCache(spell, heal, crit)
   end
 end
 
+-- Cooldown für lokale Instant-HoT Hooks (verhindert Spam bei Click-to-Cast)
+local instantHotCooldown = {}
+local INSTANT_HOT_COOLDOWN = 1.0  -- 1 Sekunde Cooldown (GCD ist 1.5s)
+
+-- Pending HoTs Queue - wird nach Delay verifiziert
+local pendingHots = {}
+
+-- Hilfsfunktion: Prüfe ob Buff auf Unit vorhanden ist
+local function UnitHasBuff(unit, buffName)
+  for i = 1, 32 do
+    local name = UnitBuff(unit, i)
+    if not name then break end
+    if name == buffName then return true end
+  end
+  return false
+end
+
 -- Gather Data by User Actions
 hooksecurefunc("CastSpell", function(id, bookType)
   if not libpredict.sender.enabled then return end
@@ -400,6 +586,44 @@ hooksecurefunc("CastSpell", function(id, bookType)
   spell_queue[1] = effect
   spell_queue[2] = effect.. ( rank or "" )
   spell_queue[3] = UnitName("target") and UnitCanAssist("player", "target") and UnitName("target") or UnitName("player")
+  
+  -- Instant-HoTs: Mit SuperWoW nutzen wir UNIT_CASTEVENT (akkurater)
+  -- Ohne SuperWoW: Fallback auf Hook-Methode mit Cooldown
+  if superwow_active then return end
+  
+  if effect == REJUVENATION then
+    local target = spell_queue[3]
+    local now = pfUI.uf.now or GetTime()
+    local key = "Reju" .. target
+    
+    -- Cooldown-Check
+    if instantHotCooldown[key] and (now - instantHotCooldown[key]) < INSTANT_HOT_COOLDOWN then
+      return
+    end
+    instantHotCooldown[key] = now
+    
+    if libpredict.debug then
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[CastSpell REJU INSTANT]|r target=%s (Fallback)", target))
+    end
+    libpredict:Hot(player, target, "Reju", rejuvDuration, nil, "CastSpell-Instant")
+    libpredict.sender:SendHealCommMsg("Reju/"..target.."/"..rejuvDuration.."/")
+  elseif effect == RENEW then
+    local target = spell_queue[3]
+    local now = pfUI.uf.now or GetTime()
+    local key = "Renew" .. target
+    
+    -- Cooldown-Check
+    if instantHotCooldown[key] and (now - instantHotCooldown[key]) < INSTANT_HOT_COOLDOWN then
+      return
+    end
+    instantHotCooldown[key] = now
+    
+    if libpredict.debug then
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[CastSpell RENEW INSTANT]|r target=%s (Fallback)", target))
+    end
+    libpredict:Hot(player, target, "Renew", renewDuration, nil, "CastSpell-Instant")
+    libpredict.sender:SendHealCommMsg("Renew/"..target.."/"..renewDuration.."/")
+  end
 end)
 
 hooksecurefunc("CastSpellByName", function(effect, target)
@@ -415,9 +639,51 @@ hooksecurefunc("CastSpellByName", function(effect, target)
   target = target and target == true and UnitName("player") or target
   target = target and target == 1 and UnitName("player") or target
 
-  spell_queue[1] = effect
-  spell_queue[2] = effect.. ( rank or "" )
-  spell_queue[3] = target or mouseover or default
+  -- Nur spell_queue überschreiben wenn kein Cast läuft
+  -- (verhindert dass Instant-Spam während Regrowth-Cast die Queue zerstört)
+  if not libpredict.sender.current_cast then
+    spell_queue[1] = effect
+    spell_queue[2] = effect.. ( rank or "" )
+    spell_queue[3] = target or mouseover or default
+  end
+  
+  -- Instant-HoTs: Mit SuperWoW nutzen wir UNIT_CASTEVENT (akkurater)
+  -- Ohne SuperWoW: Fallback auf Hook-Methode mit Cooldown
+  if superwow_active then return end
+  
+  if effect == REJUVENATION then
+    local hotTarget = target or mouseover or default
+    local now = pfUI.uf.now or GetTime()
+    local key = "Reju" .. hotTarget
+    
+    -- Cooldown-Check
+    if instantHotCooldown[key] and (now - instantHotCooldown[key]) < INSTANT_HOT_COOLDOWN then
+      return
+    end
+    instantHotCooldown[key] = now
+    
+    if libpredict.debug then
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[CastSpellByName REJU INSTANT]|r target=%s (Fallback)", hotTarget))
+    end
+    libpredict:Hot(player, hotTarget, "Reju", rejuvDuration, nil, "CastSpellByName-Instant")
+    libpredict.sender:SendHealCommMsg("Reju/"..hotTarget.."/"..rejuvDuration.."/")
+  elseif effect == RENEW then
+    local hotTarget = target or mouseover or default
+    local now = pfUI.uf.now or GetTime()
+    local key = "Renew" .. hotTarget
+    
+    -- Cooldown-Check
+    if instantHotCooldown[key] and (now - instantHotCooldown[key]) < INSTANT_HOT_COOLDOWN then
+      return
+    end
+    instantHotCooldown[key] = now
+    
+    if libpredict.debug then
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[CastSpellByName RENEW INSTANT]|r target=%s (Fallback)", hotTarget))
+    end
+    libpredict:Hot(player, hotTarget, "Renew", renewDuration, nil, "CastSpellByName-Instant")
+    libpredict.sender:SendHealCommMsg("Renew/"..hotTarget.."/"..renewDuration.."/")
+  end
 end)
 
 local scanner = libtipscan:GetScanner("prediction")
@@ -430,28 +696,75 @@ hooksecurefunc("UseAction", function(slot, target, selfcast)
   spell_queue[1] = effect
   spell_queue[2] = effect.. ( rank or "" )
   spell_queue[3] = selfcast and UnitName("player") or UnitName("target") and UnitCanAssist("player", "target") and UnitName("target") or UnitName("player")
+  
+  -- Instant-HoTs: Mit SuperWoW nutzen wir UNIT_CASTEVENT (akkurater)
+  -- Ohne SuperWoW: Fallback auf Hook-Methode mit Cooldown
+  if superwow_active then return end
+  
+  if effect == REJUVENATION then
+    local hotTarget = spell_queue[3]
+    local now = pfUI.uf.now or GetTime()
+    local key = "Reju" .. hotTarget
+    
+    -- Cooldown-Check
+    if instantHotCooldown[key] and (now - instantHotCooldown[key]) < INSTANT_HOT_COOLDOWN then
+      return
+    end
+    instantHotCooldown[key] = now
+    
+    if libpredict.debug then
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[UseAction REJU INSTANT]|r target=%s (Fallback)", hotTarget))
+    end
+    libpredict:Hot(player, hotTarget, "Reju", rejuvDuration, nil, "UseAction-Instant")
+    libpredict.sender:SendHealCommMsg("Reju/"..hotTarget.."/"..rejuvDuration.."/")
+  elseif effect == RENEW then
+    local hotTarget = spell_queue[3]
+    local now = pfUI.uf.now or GetTime()
+    local key = "Renew" .. hotTarget
+    
+    -- Cooldown-Check
+    if instantHotCooldown[key] and (now - instantHotCooldown[key]) < INSTANT_HOT_COOLDOWN then
+      return
+    end
+    instantHotCooldown[key] = now
+    
+    if libpredict.debug then
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[UseAction RENEW INSTANT]|r target=%s (Fallback)", hotTarget))
+    end
+    libpredict:Hot(player, hotTarget, "Renew", renewDuration, nil, "UseAction-Instant")
+    libpredict.sender:SendHealCommMsg("Renew/"..hotTarget.."/"..renewDuration.."/")
+  end
 end)
 
 libpredict.sender = CreateFrame("Frame", "pfPredictionSender", UIParent)
 libpredict.sender.enabled = true
 libpredict.sender.SendHealCommMsg = function(self, msg)
+  SendAddonMessage("HealComm", msg, "PARTY")
   SendAddonMessage("HealComm", msg, "RAID")
   SendAddonMessage("HealComm", msg, "BATTLEGROUND")
 end
 libpredict.sender.SendResCommMsg = function(self, msg)
+  SendAddonMessage("CTRA", msg, "PARTY")
   SendAddonMessage("CTRA", msg, "RAID")
   SendAddonMessage("CTRA", msg, "BATTLEGROUND")
 end
 
 libpredict.sender:SetScript("OnUpdate", function()
   -- trigger delayed regrowth timers
-  if this.regrowth_timer and GetTime() > this.regrowth_timer  then
+  local now = pfUI.uf.now or GetTime()
+  if this.regrowth_timer and now > this.regrowth_timer then
     local target = this.regrowth_target or player
-    local duration = 21
+    local duration = 20
+    local startTime = this.regrowth_start
 
-    libpredict:Hot(player, target, "Regr", duration)
+    libpredict:Hot(player, target, "Regr", duration, startTime, "OnUpdate")
     libpredict.sender:SendHealCommMsg("Regr/"..target.."/"..duration.."/")
+    
+    -- Übernehme nächsten Regrowth falls vorhanden
     this.regrowth_target = this.regrowth_target_next
+    this.regrowth_start = this.regrowth_start_next
+    this.regrowth_target_next = nil
+    this.regrowth_start_next = nil
     this.regrowth_timer = nil
   end
 end)
@@ -494,6 +807,10 @@ libpredict.sender:SetScript("OnEvent", function()
     end
   elseif event == "SPELLCAST_START" then
     local spell, time = arg1, arg2
+    
+    -- Speichere aktuellen Cast (wird nicht von Instant-Hooks überschrieben)
+    this.current_cast = spell
+    this.current_cast_target = senttarget or spell_queue[3]
 
     if spell_queue[1] == spell and cache[spell_queue[2]] then
       local sender = player
@@ -544,9 +861,16 @@ libpredict.sender:SetScript("OnEvent", function()
       libpredict.sender:SendResCommMsg("RESNO " .. target)
       libpredict.sender.resurrecting = nil
     end
-    if spell_queue[1] == REGROWTH then
+    -- Nutze current_cast für Regrowth cleanup
+    if this.current_cast == REGROWTH then
       this.regrowth_timer = nil
+      this.regrowth_start = nil
+      this.regrowth_target_next = nil
+      this.regrowth_start_next = nil
     end
+    -- Cleanup
+    this.current_cast = nil
+    this.current_cast_target = nil
   elseif event == "SPELLCAST_DELAYED" then
     if libpredict.sender.healing then
       libpredict:HealDelay(player, arg1)
@@ -554,15 +878,23 @@ libpredict.sender:SetScript("OnEvent", function()
     end
   elseif event == "SPELLCAST_STOP" then
     libpredict:HealStop(player)
-    if spell_queue[1] == REJUVENATION then
-      libpredict:Hot(player, spell_queue[3], "Reju", rejuvDuration)
-      libpredict.sender:SendHealCommMsg("Reju/"..spell_queue[3].."/"..rejuvDuration.."/")
-    elseif spell_queue[1] == RENEW then
-      libpredict:Hot(player, spell_queue[3], "Renew", renewDuration)
-      libpredict.sender:SendHealCommMsg("Renew/"..spell_queue[3].."/"..renewDuration.."/")
-    elseif spell_queue[1] == REGROWTH then
-      this.regrowth_timer = GetTime() + 0.1
+    
+    -- Nur Regrowth wird hier verarbeitet (hat Cast-Zeit)
+    -- Nutze this.current_cast (wird bei SPELLCAST_START gesetzt, nicht von Instant-Hooks überschrieben)
+    if this.current_cast == REGROWTH then
+      local now = pfUI.uf.now or GetTime()
+      if this.regrowth_timer then
+        -- Bereits ein Regrowth aktiv, speichere für den nächsten
+        this.regrowth_start_next = now
+      else
+        this.regrowth_start = now
+      end
+      this.regrowth_timer = now + 0.1
     end
+    
+    -- Cleanup
+    this.current_cast = nil
+    this.current_cast_target = nil
   end
 end)
 
@@ -570,12 +902,21 @@ function libpredict:GetHotDuration(unit, spell)
   if unit == UNKNOWNOBJECT or unit == UNKOWNBEING then return end
 
   local start, duration, timeleft
-
-  local unitdata = hots[UnitName(unit)]
-  if unitdata and unitdata[spell] and (unitdata[spell].start + unitdata[spell].duration) > GetTime() - 1 then
-    start = unitdata[spell].start
-    duration = unitdata[spell].duration
-    timeleft = (start + duration) - GetTime()
+  local now = pfUI.uf.now or GetTime()
+  
+  local unitName = UnitName(unit)
+  local unitdata = hots[unitName]
+  
+  if unitdata and unitdata[spell] then
+    local spellData = unitdata[spell]
+    if spellData.start and spellData.duration then
+      local endTime = spellData.start + spellData.duration
+      if endTime > now - 1 then
+        start = spellData.start
+        duration = spellData.duration
+        timeleft = endTime - now
+      end
+    end
   end
 
   return start, duration, timeleft

@@ -981,7 +981,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local now = GetTime()  -- Cache GetTime() once per update
     
     -- OPTIMIZED: Minimal throttle - only skip if very recent update
-    local target = UnitExists("target") and frame:GetAlpha() == 1 or nil
+    -- Nutze Alpha >= 0.99 statt == 1 um Flackern durch Fließkomma-Ungenauigkeiten zu verhindern
+    -- (Nicht-Targets werden explizit auf 0.95 gesetzt, Targets auf 1.0)
+    local target = UnitExists("target") and frame:GetAlpha() >= 0.99 or nil
     local throttle = target and 0.025 or 0.025
     
     if (nameplate.lasttick or 0) + throttle > now then return end
@@ -1108,10 +1110,11 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
       local wc, hc = nameplate.health.targetWidth, nameplate.health.targetHeight
       
-      if wc >= w then
+      -- Nutze kleine Toleranz um Fließkomma-Schwankungen zu vermeiden
+      if wc > w + 0.5 then
         nameplate.health:SetWidth(w*1.05)
         nameplate.health.zoomTransition = true
-      elseif hc >= h then
+      elseif hc > h + 0.5 then
         nameplate.health:SetHeight(h*1.05)
         nameplate.health.zoomTransition = true
       else
@@ -1127,9 +1130,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       local wc = tonumber(C.nameplates.width)
       local hc = tonumber(C.nameplates.heighthealth)
 
-      if wc <= w then
+      -- Nutze kleine Toleranz um Fließkomma-Schwankungen zu vermeiden
+      if w > wc + 0.5 then
         nameplate.health:SetWidth(w*.95)
-      elseif hc <= h then
+      elseif h > hc + 0.5 then
         nameplate.health:SetHeight(h*0.95)
       else
         nameplate.health:SetWidth(wc)
