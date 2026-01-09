@@ -120,7 +120,8 @@ local glow2 = {
 
 local maxdurations = {}
 local function BuffOnUpdate()
-  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
+  local now = GetTime()
+  if ( this.tick or 1) > now then return else this.tick = now + .2 end
   local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
   local texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
   local start = 0
@@ -131,7 +132,7 @@ local function BuffOnUpdate()
     elseif maxdurations[texture] and maxdurations[texture] < timeleft then
       maxdurations[texture] = timeleft
     end
-    start = GetTime() + timeleft - maxdurations[texture]
+    start = now + timeleft - maxdurations[texture]
   end
 
   CooldownFrame_SetTimer(this.cd, start, maxdurations[texture], timeleft > 0 and 1 or 0)
@@ -139,13 +140,48 @@ end
 
 local function TargetBuffOnUpdate()
   -- throttle to 0.1s
-  if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
+  local now = GetTime()
+  if ( this.tick or .1) > now then return else this.tick = now + .1 end
 
   local name, rank, icon, count, duration, timeleft = _G.UnitBuff("target", this.id)
   if duration and timeleft then
-    CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - duration, duration, 1)
+    CooldownFrame_SetTimer(this.cd, now + timeleft - duration, duration, 1)
   else
     CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+  end
+end
+
+local function TargetDebuffOnUpdate()
+  -- throttle to 0.1s
+  local now = GetTime()
+  if ( this.tick or .1) > now then return else this.tick = now + .1 end
+  
+  local parent = this:GetParent()
+  local unitstr = parent.label .. (parent.id or "")
+  
+  -- Use libdebuff for timer info if available
+  if libdebuff then
+    local selfdebuff = parent.config and parent.config.selfdebuff == "1"
+    local name, rank, texture, stacks, dtype, duration, timeleft
+    if selfdebuff then
+      name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, this.id)
+    else
+      name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, this.id)
+    end
+    
+    if duration and timeleft then
+      CooldownFrame_SetTimer(this.cd, now + timeleft - duration, duration, 1)
+    else
+      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    end
+  elseif pfUI.client > 11200 then
+    -- TBC+ has native timer support
+    local name, rank, icon, count, dtype, duration, timeleft = _G.UnitDebuff(unitstr, this.id)
+    if duration and timeleft then
+      CooldownFrame_SetTimer(this.cd, now + timeleft - duration, duration, 1)
+    else
+      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    end
   end
 end
 
@@ -209,7 +245,8 @@ local function BuffOnClick()
 end
 
 local function DebuffOnUpdate()
-  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
+  local now = GetTime()
+  if ( this.tick or 1) > now then return else this.tick = now + .2 end
   local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
   local texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
   local start = 0
@@ -220,7 +257,7 @@ local function DebuffOnUpdate()
     elseif maxdurations[texture] and maxdurations[texture] < timeleft then
       maxdurations[texture] = timeleft
     end
-    start = GetTime() + timeleft - maxdurations[texture]
+    start = now + timeleft - maxdurations[texture]
   end
 
   CooldownFrame_SetTimer(this.cd, start, maxdurations[texture], timeleft > 0 and 1 or 0)
@@ -918,6 +955,8 @@ function pfUI.uf:UpdateConfig()
 
       if f:GetName() == "pfPlayer" then
         f.debuffs[i]:SetScript("OnUpdate", DebuffOnUpdate)
+      elseif f:GetName() == "pfTarget" or f:GetName() == "pfTargetTarget" or f:GetName() == "pfTargetTargetTarget" or f:GetName() == "pfFocus" or f:GetName() == "pfFocusTarget" then
+        f.debuffs[i]:SetScript("OnUpdate", TargetDebuffOnUpdate)
       end
 
       f.debuffs[i]:SetScript("OnEnter", DebuffOnEnter)
@@ -995,8 +1034,12 @@ end
 -- Local function references for performance
 local _GetTime = GetTime
 
+-- Global cached time for synchronized timer calculations
+pfUI.uf.now = 0
+
 function pfUI.uf.OnUpdate()
   local now = _GetTime()
+  pfUI.uf.now = now  -- Cache for other functions to use
   
   -- update combat feedback
   if this.feedbackText then CombatFeedback_OnUpdate(arg1) end
@@ -1007,6 +1050,13 @@ function pfUI.uf.OnUpdate()
   if this.label == "raid" or this.label == "party" then
     if (this.throttleTick or 0) > now then return end
     this.throttleTick = now + 0.1
+    
+    -- Periodic buff scan for raid/party frames (every 0.2s)
+    -- This catches buffs that expire without firing UNIT_AURA
+    if (this.buffScanTick or 0) < now then
+      this.buffScanTick = now + 0.2
+      this.update_aura = true
+    end
   elseif this.label then
     if (this.throttleTick or 0) > now then return end
     this.throttleTick = now + 0.025
@@ -1740,19 +1790,20 @@ function pfUI.uf:RefreshUnit(unit, component)
 
       if texture then
         unit.debuffs[i]:Show()
-
+        
+        local now = pfUI.uf.now or GetTime()
         if unit:GetName() == "pfPlayer" then
           local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+unit.debuffs[i].id, "HARMFUL"),"HARMFUL")
-          CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime(), timeleft, 1)
+          CooldownFrame_SetTimer(unit.debuffs[i].cd, now, timeleft, 1)
         elseif libdebuff and selfdebuff == "1" then
           local name, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitOwnDebuff(unitstr, i)
           if duration and timeleft then
-            CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime() + timeleft - duration, duration, 1)
+            CooldownFrame_SetTimer(unit.debuffs[i].cd, now + timeleft - duration, duration, 1)
           end
         elseif libdebuff then
           local name, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitDebuff(unitstr, i)
           if duration and timeleft then
-            CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime() + timeleft - duration, duration, 1)
+            CooldownFrame_SetTimer(unit.debuffs[i].cd, now + timeleft - duration, duration, 1)
           end
         end
 
@@ -2291,12 +2342,13 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks, start, duration)
   end
 
   -- show remaining time if config is set
+  local now = pfUI.uf.now or GetTime()
   if showtime and start and duration and timeleft < 100 and iconsize > 9 then
     CooldownFrame_SetTimer(frame.icon[pos].cd, start, duration, 1)
   elseif showtime and timeleft and timeleft < 100 and iconsize > 9 then
-    CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), timeleft, 1)
+    CooldownFrame_SetTimer(frame.icon[pos].cd, now, timeleft, 1)
   else
-    CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), 0, 1)
+    CooldownFrame_SetTimer(frame.icon[pos].cd, now, 0, 1)
   end
 
   -- show stacks if config is set
