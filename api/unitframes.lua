@@ -17,7 +17,7 @@ pfUI.uf.frames = {}
 pfUI.uf.delayed = {}
 
 -- =====================================================
--- CENTRAL EVENT-HANDLER for Raid/Party Performance
+-- ZENTRALER EVENT-HANDLER für Raid/Party Performance
 -- =====================================================
 pfUI.uf.unitmap = {}  -- Maps "raid1" -> frame, "party2" -> frame, etc.
 
@@ -31,23 +31,15 @@ pfUI.uf.RebuildUnitmap = function()
   if pfUI.uf.raid then
     for i = 1, 40 do
       local frame = pfUI.uf.raid[i]
-      if frame and frame.label then
-        -- Always map by raid index for event handling
-        if frame.cache_raid and frame.cache_raid > 0 then
-          pfUI.uf.unitmap["raid" .. frame.cache_raid] = frame
-        end
-        -- Also map by current label for direct access
-        if frame.id and frame.id ~= 0 and frame.id ~= "" then
-          local unitstr = frame.label .. frame.id
-          pfUI.uf.unitmap[unitstr] = frame
-        elseif frame.label == "player" then
-          pfUI.uf.unitmap["player"] = frame
-        end
+      if frame and frame.id and frame.id ~= 0 and frame.label then
+        -- ✅ Jetzt auch party-Frames in Raid-Frames unterstützen
+        local unitstr = frame.label .. frame.id
+        pfUI.uf.unitmap[unitstr] = frame
       end
     end
   end
   
-  -- Rebuild party mappings (only if not used as raid)
+  -- Rebuild party mappings (nur wenn nicht als Raid verwendet)
   if C.unitframes.raidforgroup ~= "1" then
     for i = 1, 4 do
       local frame = _G["pfGroup" .. i]
@@ -76,7 +68,7 @@ pfUI.uf.eventframe:RegisterEvent("RAID_ROSTER_UPDATE")
 pfUI.uf.eventframe:RegisterEvent("PARTY_MEMBERS_CHANGED")
 
 pfUI.uf.eventframe:SetScript("OnEvent", function()
-  -- Rebuild unitmap on roster changes
+  -- Unitmap neu aufbauen bei Roster-Änderungen
   if event == "RAID_ROSTER_UPDATE" or event == "PARTY_MEMBERS_CHANGED" then
     pfUI.uf.RebuildUnitmap()
     return
@@ -84,11 +76,11 @@ pfUI.uf.eventframe:SetScript("OnEvent", function()
 
   if not arg1 then return end
   
-  -- Find the correct frame directly
+  -- Direkt den richtigen Frame finden
   local frame = pfUI.uf.unitmap[arg1]
   if not frame then return end
   
-  -- Process event (same logic as before)
+  -- Event verarbeiten (gleiche Logik wie vorher)
   if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
     frame.update_portrait = true
   elseif event == "UNIT_AURA" then
@@ -992,24 +984,15 @@ function pfUI.uf.OnEvent()
   end
 end
 
--- Local function references for performance
-local _GetTime = GetTime
-
 function pfUI.uf.OnUpdate()
-  local now = _GetTime()
-  
   -- update combat feedback
   if this.feedbackText then CombatFeedback_OnUpdate(arg1) end
 
-  -- Throttle unit frames for performance
-  -- Raid/Party: 10 updates/sec (no castbars, just HP/Mana/Buffs)
-  -- Others: 40 updates/sec (need faster updates for castbars, combat)
+  -- Throttle for raid/party frames: only process updates every 0.1s
+  -- This reduces OnUpdate calls from 5760/sec (40 frames * 144fps) to ~400/sec
   if this.label == "raid" or this.label == "party" then
-    if (this.throttleTick or 0) > now then return end
-    this.throttleTick = now + 0.1
-  elseif this.label then
-    if (this.throttleTick or 0) > now then return end
-    this.throttleTick = now + 0.025
+    if (this.throttleTick or 0) > GetTime() then return end
+    this.throttleTick = GetTime() + 0.1
   end
 
   -- process indicator update events
@@ -1166,11 +1149,11 @@ function pfUI.uf.OnUpdate()
   end
 
   -- trigger eventless actions (online/offline/range)
-  if not this.lastTick then this.lastTick = now + (this.tick or .2) end
-  if this.lastTick and this.lastTick < now then
+  if not this.lastTick then this.lastTick = GetTime() + (this.tick or .2) end
+  if this.lastTick and this.lastTick < GetTime() then
     local unitstr = this.label .. this.id
 
-    this.lastTick = now + (this.tick or .2)
+    this.lastTick = GetTime() + (this.tick or .2)
 
     -- target target has a huge delay, make sure to not tick during range checks
     -- by waiting for a stable name over three ticks otherwise aborting the update.
@@ -1274,9 +1257,9 @@ function pfUI.uf:EnableEvents()
   local f = self
   local unitstr = f.label .. f.id
 
-  -- Raid/Party Frames: Register in central handler instead of self
+  -- Raid/Party Frames: Registriere im zentralen Handler statt selbst
   if f.label == "raid" or f.label == "party" then
-    -- Only register non-UNIT_* events ourselves
+    -- Nur nicht-UNIT_* Events selbst registrieren
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
     f:RegisterEvent("PARTY_MEMBERS_CHANGED")
     f:RegisterEvent("PARTY_LEADER_CHANGED")
@@ -1290,7 +1273,7 @@ function pfUI.uf:EnableEvents()
     -- Unitmap aktualisieren
     pfUI.uf.RebuildUnitmap()
   else
-    -- All other frames: Normal event registration
+    -- Alle anderen Frames: Normale Event-Registrierung
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
     f:RegisterEvent("UNIT_DISPLAYPOWER")
     f:RegisterEvent("UNIT_HEALTH")
