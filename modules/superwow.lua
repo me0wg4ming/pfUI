@@ -300,30 +300,10 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
   end
 
-  -- Enhance libdebuff with SuperWoW data
-  local superdebuff = CreateFrame("Frame")
-  superdebuff:RegisterEvent("UNIT_CASTEVENT")
-  superdebuff:SetScript("OnEvent", function()
-    -- variable assignments
-    local caster, target, event, spell, duration = arg1, arg2, arg3, arg4
-
-    -- skip other caster and empty target events
-    local _, guid = UnitExists("player")
-    if caster ~= guid then return end
-    if event ~= "CAST" then return end
-    if not target or target == "" then return end
-
-    -- assign all required data
-    local unit = UnitName(target)
-    local unitlevel = UnitLevel(target)
-    if not SpellInfo then return end
-    local effect, rank = SpellInfo(spell)
-    local duration = libdebuff:GetDuration(effect, rank)
-    local caster = "player"
-
-    -- add effect to current debuff data
-    libdebuff:AddEffect(unit, unitlevel, effect, duration, caster)
-  end)
+  -- NOTE: SuperWoW libdebuff enhancement removed.
+  -- UNIT_CASTEVENT fires before resist/miss/dodge events arrive,
+  -- which breaks the failed spell detection system in libdebuff.
+  -- DoT timers use the standard hook-based fallback instead.
 
   -- TrackUnit API for adding group members to minimap
   -- Tracks friendly units on the minimap for easier group coordination

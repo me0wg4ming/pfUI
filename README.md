@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-6.2.1-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-6.2.2-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
@@ -11,6 +11,33 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+
+## What's New in Version 6.2.2 (January 10, 2026)
+
+### 🎯 Failed Spell Detection (libdebuff.lua)
+
+- ✅ **Resist/Miss/Dodge/Parry Detection** - Spells that fail to land no longer create or update timers
+  - Detects: Miss, Resist, Dodge, Parry, Evade, Deflect, Reflect, Block, Absorb, Immune
+  - Timer is either blocked before creation or reverted if fail event arrives late
+- ✅ **Public API: `libdebuff:DidSpellFail(spell)`** - Other modules can check if a spell recently failed
+  - Returns true if spell failed within the last 1 second
+  - Used by turtle-wow.lua for refresh mechanics
+
+### 🐱 Druid/Warlock Refresh Fixes (turtle-wow.lua)
+
+- ✅ **Ferocious Bite Refresh Fix** - Rip/Rake timers only refresh when Ferocious Bite actually hits
+  - Previously: Timer refreshed even on dodge/parry/miss
+  - Now: Uses `DidSpellFail()` to verify hit before refreshing
+- ✅ **Conflagrate Refresh Fix** - Immolate duration only reduced when Conflagrate actually hits
+- ✅ **Caster Inheritance** - Refresh mechanics preserve existing caster info when not explicitly provided
+
+### ⚡ SuperWoW Compatibility (superwow.lua)
+
+- ✅ **Removed UNIT_CASTEVENT for DoT Timers** - SuperWoW's instant event fires before resist/miss detection
+  - DoT timers now use standard hook-based fallback (compatible with resist detection)
+  - HoT timers (Rejuvenation, Renew, etc.) still use SuperWoW for instant detection (buffs can't be resisted)
 
 ---
 
@@ -399,7 +426,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 6.2.1  
+**Version:** 6.2.2  
 **Release Date:** January 10, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable

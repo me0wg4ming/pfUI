@@ -29,6 +29,19 @@ local lastspell
 -- Speichert die Ranks der zuletzt gecasteten Spells (bleibt länger als pending)
 local lastCastRanks = {}
 
+-- Speichert Spells die gefailed sind (miss/dodge/parry/etc.) für 1 Sekunde
+local lastFailedSpells = {}
+
+-- Prüft ob ein Spell kürzlich gefailed ist (öffentliche Funktion für andere Module)
+function libdebuff:DidSpellFail(spell)
+  if not spell then return false end
+  local data = lastFailedSpells[spell]
+  if data and (GetTime() - data.time) < 1 then
+    return true
+  end
+  return false
+end
+
 -- Shared Debuffs: Diese werden von allen Spielern geteilt (nur einer kann drauf sein)
 -- Timer darf von anderen Spielern aktualisiert werden
 local sharedDebuffs = {
@@ -166,6 +179,8 @@ function libdebuff:PersistPending(effect)
 end
 
 function libdebuff:RevertLastAction()
+  if lastspell and lastspell.effect then
+  end
   lastspell.start = lastspell.start_old
   lastspell.start_old = nil
   libdebuff:UpdateUnits()
@@ -184,6 +199,13 @@ function libdebuff:AddEffect(unit, unitlevel, effect, duration, caster, rank)
   end
   
   if not unit or not effect then return end
+  
+  -- SCHUTZ: Wenn der Spell gerade gefailed ist (miss/dodge/parry/etc.), nicht anwenden
+  -- Nur für eigene Spells prüfen, nicht für andere Spieler
+  if caster == "player" and libdebuff:DidSpellFail(effect) then
+    return  -- Spell hat nicht getroffen, keinen Timer setzen
+  end
+  
   unitlevel = unitlevel or 0
   if not libdebuff.objects[unit] then libdebuff.objects[unit] = {} end
   if not libdebuff.objects[unit][unitlevel] then libdebuff.objects[unit][unitlevel] = {} end
@@ -306,19 +328,24 @@ libdebuff:SetScript("OnEvent", function()
       end
     end
 
-  -- Update Pending Spells
+  -- Update Pending Spells und tracke failed spells
   elseif event == "CHAT_MSG_SPELL_FAILED_LOCALPLAYER" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" then
-    -- Remove pending spell
+    -- Prüfe ob ein Spell gefailed ist und speichere ihn
     for _, msg in pairs(libdebuff.rp) do
       local effect = cmatch(arg1, msg)
-      if effect and libdebuff.pending[3] == effect then
-        -- instant removal of the pending spell
-        libdebuff:RemovePending()
-        return
-      elseif effect and lastspell and lastspell.start_old and lastspell.effect == effect then
-        -- late removal of debuffs (e.g hunter arrows as they hit late)
-        libdebuff:RevertLastAction()
-        return
+      if effect then
+        -- Speichere den failed spell für 1 Sekunde
+        lastFailedSpells[effect] = { time = GetTime() }
+        
+        -- Bestehende Logik: Remove pending spell
+        if libdebuff.pending[3] == effect then
+          libdebuff:RemovePending()
+          return
+        elseif lastspell and lastspell.start_old and lastspell.effect == effect then
+          -- late removal of debuffs (e.g hunter arrows as they hit late)
+          libdebuff:RevertLastAction()
+          return
+        end
       end
     end
   elseif event == "SPELLCAST_STOP" then
