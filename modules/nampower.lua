@@ -6,6 +6,16 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
   -- Only load if Nampower is available
   if not GetNampowerVersion then return end
 
+  -- Safe wrapper for SuperWoW's GetSpellNameAndRankForId (may not be available)
+  local function SafeGetSpellNameAndRank(spellId)
+    if not GetSpellNameAndRankForId then return nil, nil end
+    local success, name, rank = pcall(GetSpellNameAndRankForId, spellId)
+    if success then
+      return name, rank
+    end
+    return nil, nil
+  end
+
   local rawborder, border = GetBorderSize()
 
   -- Spell Queue Indicator
@@ -111,11 +121,8 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         if SpellInfo then
           spellName, spellRank, texture = SpellInfo(spellId)
         end
-        if not spellName and GetSpellNameAndRankForId then
-          local success, name, rank = pcall(GetSpellNameAndRankForId, spellId)
-          if success then
-            spellName, spellRank = name, rank
-          end
+        if not spellName then
+          spellName, spellRank = SafeGetSpellNameAndRank(spellId)
         end
 
         if spellName then
@@ -229,8 +236,8 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         if SpellInfo then
           spellName, spellRank, texture = SpellInfo(spellId)
         end
-        if not spellName and GetSpellNameAndRankForId then
-          spellName, spellRank = GetSpellNameAndRankForId(spellId)
+        if not spellName then
+          spellName, spellRank = SafeGetSpellNameAndRank(spellId)
         end
 
         if spellName then
@@ -270,8 +277,9 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
           local name, rank, texture
           if SpellInfo then
             name, rank, texture = SpellInfo(spellId)
-          elseif GetSpellNameAndRankForId then
-            name, rank = GetSpellNameAndRankForId(spellId)
+          end
+          if not name then
+            name, rank = SafeGetSpellNameAndRank(spellId)
           end
 
           result[i] = {
@@ -677,8 +685,9 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local spellName
       if SpellInfo then
         spellName = SpellInfo(spellId)
-      elseif GetSpellNameAndRankForId then
-        spellName = GetSpellNameAndRankForId(spellId)
+      end
+      if not spellName then
+        spellName = SafeGetSpellNameAndRank(spellId)
       end
 
       if not spellName then return end
