@@ -89,7 +89,7 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
   pfUI.uf.raid:SetScript("OnUpdate", function()
     -- Throttle raid roster updates to 5 FPS
     if (this.tick or 0) > GetTime() then return end
-    this.tick = GetTime() + 0.2
+    this.tick = GetTime() + 0.25
 
     -- don't proceed without raid or during combat
     if not UnitInRaid("player") or (InCombatLockdown and InCombatLockdown()) then return end

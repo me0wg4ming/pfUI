@@ -11,6 +11,16 @@ pfUI:RegisterModule("player", "vanilla:tbc", function ()
   pfUI.uf.player:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOM", -75, 125)
   UpdateMovable(pfUI.uf.player)
 
+  -- Add throttle to player frame OnUpdate
+  if pfUI.uf.player:GetScript("OnUpdate") then
+    local originalOnUpdate = pfUI.uf.player:GetScript("OnUpdate")
+    pfUI.uf.player:SetScript("OnUpdate", function()
+      if (this.tick or 0) > GetTime() then return end
+      this.tick = GetTime() + 0.1
+      originalOnUpdate()
+    end)
+  end
+
   -- Replace default's RESET_INSTANCES button with an always working one
   UnitPopupButtons["RESET_INSTANCES_FIX"] = { text = RESET_INSTANCES, dist = 0 }
   for id, text in pairs(UnitPopupMenus["SELF"]) do

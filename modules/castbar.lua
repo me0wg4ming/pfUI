@@ -66,7 +66,12 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
     cb.bar.lag:SetPoint("BOTTOMRIGHT", cb.bar, "BOTTOMRIGHT", 0, 0)
     cb.bar.lag:SetTexture(1,.2,.2,.2)
 
+    -- OnUpdate script with throttle for performance optimization
     cb:SetScript("OnUpdate", function()
+      -- Throttle for performance
+      if (this.tick or 0) > GetTime() then return end
+      this.tick = GetTime() + 0.025 -- ~60 FPS for smooth castbar
+      
       if this.drag and this.drag:IsShown() then
         this:SetAlpha(1)
         return
