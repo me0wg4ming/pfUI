@@ -59,6 +59,10 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
   end)
 
   energytick:SetScript("OnUpdate", function()
+    -- Throttle for performance
+    if (this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + 0.020
+    
     if this.target then
       this.start, this.max = GetTime(), this.target
       this.target = nil
