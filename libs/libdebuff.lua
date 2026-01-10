@@ -192,6 +192,11 @@ function libdebuff:AddEffect(unit, unitlevel, effect, duration, caster, rank)
   local existing = libdebuff.objects[unit][unitlevel][effect]
   local now = GetTime()
   
+  -- Wenn kein Caster übergeben wurde, behalte den existierenden (wichtig für Refresh-Mechaniken wie Ferocious Bite)
+  if not caster and existing.caster then
+    caster = existing.caster
+  end
+  
   -- Wenn kein Rank übergeben wurde, behalte den existierenden
   if not rank and existing.rank then
     rank = existing.rank
