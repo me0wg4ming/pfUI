@@ -755,8 +755,13 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
   end
 
   local self, button, unlock
+  -- Main update loop with throttle for performance optimization
   local function BarsUpdate(self)
     self = self or this
+
+    -- Throttle for performance
+    if (this.tick_main or 0) > GetTime() then return end
+    this.tick_main = GetTime() + 0.025
 
     -- update buttons whenever a button drag is assumed
     AssumeButtonDrag()
@@ -1695,9 +1700,13 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       end
     end)
 
-    -- limit events to one per second and smoothen action scanning
+    -- Reagent counter update with throttle for performance optimization
     reagentcounter:SetScript("OnUpdate", function()
-      -- scan one action slot per frame
+      -- Throttle entire function to 10 FPS for smooth scanning
+      if (this.tick_update or 0) > GetTime() then return end
+      this.tick_update = GetTime() + 0.1
+      
+      -- scan one action slot per update
       if this.scan and this.scan <= 120 then
         UpdateSlot(this.scan)
         this.scan = this.scan + 1

@@ -134,8 +134,11 @@ pfUI:RegisterModule("minimap", "vanilla:tbc", function ()
   -- Create coordinates text frame with location configurable
   pfUI.minimapCoordinates = CreateFrame("Frame", "pfMinimapCoord", pfUI.minimap)
   pfUI.minimapCoordinates:SetScript("OnUpdate", function()
-    -- update coords every 0.1 seconds
-    if C.appearance.minimap.coordstext ~= "off" and ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
+    -- Throttle to update coords every 0.1 seconds
+    if ( this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + .1
+    
+    if C.appearance.minimap.coordstext == "off" then return end
 
     this.posX, this.posY = GetPlayerMapPosition("player")
     if this.posX ~= 0 and this.posY ~= 0 then
