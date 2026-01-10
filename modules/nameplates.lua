@@ -984,7 +984,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     -- Nutze Alpha >= 0.99 statt == 1 um Flackern durch Fließkomma-Ungenauigkeiten zu verhindern
     -- (Nicht-Targets werden explizit auf 0.95 gesetzt, Targets auf 1.0)
     local target = UnitExists("target") and frame:GetAlpha() >= 0.99 or nil
-    local throttle = target and 0.025 or 0.025
+    local throttle = target and 0.020 or 0.020
     
     if (nameplate.lasttick or 0) + throttle > now then return end
     nameplate.lasttick = now

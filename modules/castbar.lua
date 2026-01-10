@@ -70,7 +70,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
     cb:SetScript("OnUpdate", function()
       -- Throttle for performance
       if (this.tick or 0) > GetTime() then return end
-      this.tick = GetTime() + 0.025 -- ~60 FPS for smooth castbar
+      this.tick = GetTime() + 0.020 -- ~60 FPS for smooth castbar
       
       if this.drag and this.drag:IsShown() then
         this:SetAlpha(1)
