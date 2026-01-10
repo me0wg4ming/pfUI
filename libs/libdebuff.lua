@@ -38,6 +38,10 @@ function libdebuff:GetDuration(effect, rank)
     elseif effect == L["dyndebuffs"]["Kidney Shot"] then
       -- Kidney Shot: +1 sec per combo point
       duration = duration + GetComboPoints()*1
+    elseif effect == "Rip" or effect == L["dyndebuffs"]["Rip"] then
+      -- Rip (Turtle WoW): 10s base + 2s per additional combo point
+      -- Base in table is 8, so: 8 + CP*2 = 10/12/14/16/18
+      duration = 8 + GetComboPoints()*2
     elseif effect == L["dyndebuffs"]["Demoralizing Shout"] then
       -- Booming Voice: 10% per talent
       local _,_,_,_,count = GetTalentInfo(2,1)

@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-6.1.1-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-6.2.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
@@ -11,6 +11,48 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+
+## What's New in Version 6.2.0 (January 10, 2026)
+
+### 🔮 HoT Timer System (libpredict.lua)
+
+- ✅ **Regrowth Duration Fix** - Corrected duration from 21 to 20 seconds (matching actual Turtle WoW spell duration)
+- ✅ **GetTime() Synchronization** - All timing calls now use `pfUI.uf.now or GetTime()` for consistent timing across all UI elements
+- ✅ **Instant-HoT Detection Fix** - Fixed Rejuvenation/Renew not being detected when cast quickly after Regrowth
+  - Problem: `spell_queue` was overwritten before processing
+  - Solution: Instant HoTs now processed immediately at cast hooks with `current_cast` tracking
+- ✅ **SuperWoW UNIT_CASTEVENT Support** - Precise Instant-HoT detection using UNIT_CASTEVENT
+  - Only fires on successful casts (not attempts), eliminating false triggers from GCD/range failures
+  - Graceful fallback to hook-based detection for players without SuperWoW
+- ✅ **HealComm Compatibility** - Full compatibility with standalone HealComm addon users
+  - 0.3s delay compensation for Regrowth messages
+  - Duplicate detection (0.5s window) prevents double timers
+- ✅ **PARTY Channel Support** - HoT messages now sent to PARTY channel for 5-man dungeons
+
+### 🎯 Nameplate Improvements (nameplates.lua)
+
+- ✅ **Target Castbar Zoom Fix** - Fixed current target castbar not showing when zoom factor is enabled
+  - Multi-method target detection: alpha check, `istarget` flag, and `zoomed` state
+  - Proper GUID lookup for target castbar info (was incorrectly using string "target")
+- ✅ **Flicker/Vibration Fix** - Eliminated nameplate flicker near zoom boundaries
+  - Alpha check changed from `== 1` to `>= 0.99` (floating-point fix)
+  - Zoom tolerance changed from `>= w` to `> w + 0.5` (prevents oscillation)
+- ✅ **libdebuff Nil-Checks** - Added safety checks to prevent errors when libdebuff data is unavailable
+
+### ⚡ Spell Queue (nampower.lua)
+
+- ✅ **Error Handling** - Added pcall wrapper for `GetSpellNameAndRankForId` to prevent error spam when spell ID not found
+
+### 🐱 Druid Improvements
+
+- ✅ **Rip Duration** (libdebuff.lua) - Now dynamically calculated based on combo points (10/12/14/16/18 seconds for 1-5 CP)
+- ✅ **Ferocious Bite Refresh** (turtle-wow.lua) - Now refreshes both Rip AND Rake (previously only Rip), preserving existing duration
+
+### ⚡ Energy Tick (energytick.lua)
+
+- ✅ **Talent/Buff Energy Filter** - Ignores energy gains from talents/buffs (e.g., Ancient Brutality and Tiger's Fury) to prevent tick timer reset from non-natural energy gains
 
 ---
 
@@ -172,8 +214,8 @@ Turtle WoW includes TBC spells in the Vanilla client. This version includes all 
 
 ---
 
-**Version:** 6.1.1  
-**Release Date:** January 8, 2026  
+**Version:** 6.2.0  
+**Release Date:** January 10, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Optional DLLs:** SuperWoW, Nampower, UnitXP_SP3 (enhanced features when available)
 
@@ -333,7 +375,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 6.0.0  
-**Release Date:** January 5, 2026  
+**Version:** 6.2.0  
+**Release Date:** January 10, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable
