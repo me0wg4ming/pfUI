@@ -330,7 +330,11 @@ end)
 hooksecurefunc("CastSpell", function(id, bookType)
   local rawEffect, rank = libspell.GetSpellInfo(id, bookType)
   local duration = libdebuff:GetDuration(rawEffect, rank)
-  local rankNum = rank and tonumber(string.match(rank, "(%d+)")) or 0
+  local rankNum = 0
+  if rank then
+    local _, _, num = string.find(rank, "(%d+)")
+    rankNum = num and tonumber(num) or 0
+  end
   
   -- Speichere rank für später (bleibt 2 Sekunden)
   if rawEffect and rankNum > 0 then
@@ -343,7 +347,11 @@ end)
 hooksecurefunc("CastSpellByName", function(effect, target)
   local rawEffect, rank = libspell.GetSpellInfo(effect)
   local duration = libdebuff:GetDuration(rawEffect, rank)
-  local rankNum = rank and tonumber(string.match(rank, "(%d+)")) or 0
+  local rankNum = 0
+  if rank then
+    local _, _, num = string.find(rank, "(%d+)")
+    rankNum = num and tonumber(num) or 0
+  end
   
   -- Speichere rank für später (bleibt 2 Sekunden)
   if rawEffect and rankNum > 0 then
@@ -358,7 +366,11 @@ hooksecurefunc("UseAction", function(slot, target, button)
   scanner:SetAction(slot)
   local rawEffect, rank = scanner:Line(1)
   local duration = libdebuff:GetDuration(rawEffect, rank)
-  local rankNum = rank and tonumber(string.match(rank, "(%d+)")) or 0
+  local rankNum = 0
+  if rank then
+    local _, _, num = string.find(rank, "(%d+)")
+    rankNum = num and tonumber(num) or 0
+  end
   
   -- Speichere rank für später (bleibt 2 Sekunden)
   if rawEffect and rankNum > 0 then
