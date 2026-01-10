@@ -1050,13 +1050,7 @@ function pfUI.uf.OnUpdate()
   if this.label == "raid" or this.label == "party" then
     if (this.throttleTick or 0) > now then return end
     this.throttleTick = now + 0.1
-    
-    -- Periodic buff scan for raid/party frames (every 0.2s)
-    -- This catches buffs that expire without firing UNIT_AURA
-    if (this.buffScanTick or 0) < now then
-      this.buffScanTick = now + 0.2
-      this.update_aura = true
-    end
+    -- NOTE: buffScanTick removed for performance testing
   elseif this.label then
     if (this.throttleTick or 0) > now then return end
     this.throttleTick = now + 0.025
