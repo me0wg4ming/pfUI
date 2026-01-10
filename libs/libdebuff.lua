@@ -26,6 +26,49 @@ local scanner = libtipscan:GetScanner("libdebuff")
 local _, class = UnitClass("player")
 local lastspell
 
+-- Speichert die Ranks der zuletzt gecasteten Spells (bleibt länger als pending)
+local lastCastRanks = {}
+
+-- Shared Debuffs: Diese werden von allen Spielern geteilt (nur einer kann drauf sein)
+-- Timer darf von anderen Spielern aktualisiert werden
+local sharedDebuffs = {
+  -- Warrior
+  ["Sunder Armor"] = true,
+  ["Demoralizing Shout"] = true,
+  ["Thunder Clap"] = true,
+  
+  -- Rogue
+  ["Expose Armor"] = true,
+  
+  -- Druid
+  ["Faerie Fire"] = true,
+  ["Faerie Fire (Feral)"] = true,
+  
+  -- Hunter
+  ["Hunter's Mark"] = true,
+  
+  -- Warlock Curses (nur eine pro Typ kann auf Target sein)
+  ["Curse of Weakness"] = true,
+  ["Curse of Recklessness"] = true,
+  ["Curse of the Elements"] = true,
+  ["Curse of Shadow"] = true,
+  ["Curse of Tongues"] = true,
+  ["Curse of Exhaustion"] = true,
+  -- NICHT: Curse of Agony, Curse of Doom (jeder Warlock hat seinen eigenen!)
+  
+  -- Priest
+  ["Shadow Weaving"] = true,
+  
+  -- Mage
+  ["Winter's Chill"] = true,
+  
+  -- Paladin Judgements
+  ["Judgement of Wisdom"] = true,
+  ["Judgement of Light"] = true,
+  ["Judgement of the Crusader"] = true,
+  ["Judgement of Justice"] = true,
+}
+
 function libdebuff:GetDuration(effect, rank)
   if L["debuffs"][effect] then
     local rank = rank and tonumber((string.gsub(rank, RANK, ""))) or 0
@@ -87,7 +130,7 @@ function libdebuff:UpdateUnits()
   pfUI.uf:RefreshUnit(pfUI.uf.target, "aura")
 end
 
-function libdebuff:AddPending(unit, unitlevel, effect, duration, caster)
+function libdebuff:AddPending(unit, unitlevel, effect, duration, caster, rank)
   if not unit or duration <= 0 then return end
   if not L["debuffs"][effect] then return end
   if libdebuff.pending[3] then return end
@@ -95,8 +138,9 @@ function libdebuff:AddPending(unit, unitlevel, effect, duration, caster)
   libdebuff.pending[1] = unit
   libdebuff.pending[2] = unitlevel or 0
   libdebuff.pending[3] = effect
-  libdebuff.pending[4] = duration -- or libdebuff:GetDuration(effect)
+  libdebuff.pending[4] = duration
   libdebuff.pending[5] = caster
+  libdebuff.pending[6] = rank
 
   QueueFunction(libdebuff.PersistPending)
 end
@@ -107,13 +151,15 @@ function libdebuff:RemovePending()
   libdebuff.pending[3] = nil
   libdebuff.pending[4] = nil
   libdebuff.pending[5] = nil
+  libdebuff.pending[6] = nil
 end
 
 function libdebuff:PersistPending(effect)
   if not libdebuff.pending[3] then return end
 
   if libdebuff.pending[3] == effect or ( effect == nil and libdebuff.pending[3] ) then
-    libdebuff:AddEffect(libdebuff.pending[1], libdebuff.pending[2], libdebuff.pending[3], libdebuff.pending[4], libdebuff.pending[5])
+    local p1, p2, p3, p4, p5, p6 = libdebuff.pending[1], libdebuff.pending[2], libdebuff.pending[3], libdebuff.pending[4], libdebuff.pending[5], libdebuff.pending[6]
+    libdebuff.AddEffect(libdebuff, p1, p2, p3, p4, p5, p6)
   end
 
   libdebuff:RemovePending()
@@ -125,21 +171,61 @@ function libdebuff:RevertLastAction()
   libdebuff:UpdateUnits()
 end
 
-function libdebuff:AddEffect(unit, unitlevel, effect, duration, caster)
+function libdebuff:AddEffect(unit, unitlevel, effect, duration, caster, rank)
+  -- WORKAROUND: Wenn rank nil ist und wir einen eigenen Cast haben, hole rank aus lastCastRanks
+  if not rank and caster == "player" and effect then
+    -- Erst aus pending versuchen
+    if libdebuff.pending[3] == effect and libdebuff.pending[6] then
+      rank = libdebuff.pending[6]
+    -- Dann aus lastCastRanks (bleibt länger)
+    elseif lastCastRanks[effect] and (GetTime() - lastCastRanks[effect].time) < 2 then
+      rank = lastCastRanks[effect].rank
+    end
+  end
+  
   if not unit or not effect then return end
   unitlevel = unitlevel or 0
   if not libdebuff.objects[unit] then libdebuff.objects[unit] = {} end
   if not libdebuff.objects[unit][unitlevel] then libdebuff.objects[unit][unitlevel] = {} end
   if not libdebuff.objects[unit][unitlevel][effect] then libdebuff.objects[unit][unitlevel][effect] = {} end
 
-  -- save current effect as lastspell
-  lastspell = libdebuff.objects[unit][unitlevel][effect]
+  local existing = libdebuff.objects[unit][unitlevel][effect]
+  local now = GetTime()
+  
+  -- Wenn kein Rank übergeben wurde, behalte den existierenden
+  if not rank and existing.rank then
+    rank = existing.rank
+  end
+  
+  -- Prüfe ob ein existierender Debuff noch aktiv ist
+  local existingIsActive = existing.start and existing.duration and (existing.start + existing.duration) > now
+  
+  -- SCHUTZ: Wenn MEIN Debuff aktiv ist, darf ein anderer Spieler ihn NICHT überschreiben
+  -- AUSNAHME: Shared Debuffs (Sunder Armor, Curses, etc.) dürfen aktualisiert werden
+  if existingIsActive and existing.caster == "player" and caster ~= "player" then
+    if not sharedDebuffs[effect] then
+      return  -- Blockiere das Update
+    end
+  end
+  
+  -- Rank-Prüfung wenn beide vom Player sind und beide Ranks bekannt sind
+  if existingIsActive and existing.rank and rank and existing.caster == "player" and caster == "player" then
+    -- Niedrigerer Rank darf höheren NICHT überschreiben
+    if rank < existing.rank then
+      return  -- Blockiere das Update
+    end
+    -- Gleicher oder höherer Rank darf überschreiben (Timer erneuern)
+  end
 
-  libdebuff.objects[unit][unitlevel][effect].effect = effect
-  libdebuff.objects[unit][unitlevel][effect].start_old = libdebuff.objects[unit][unitlevel][effect].start
-  libdebuff.objects[unit][unitlevel][effect].start = GetTime()
-  libdebuff.objects[unit][unitlevel][effect].duration = duration or libdebuff:GetDuration(effect)
-  libdebuff.objects[unit][unitlevel][effect].caster = caster
+  -- save current effect as lastspell
+  lastspell = existing
+
+  existing.effect = effect
+  existing.start_old = existing.start
+  existing.start = now
+  existing.duration = duration or libdebuff:GetDuration(effect)
+  existing.caster = caster
+  existing.rank = rank
 
   libdebuff:UpdateUnits()
 end
@@ -193,7 +279,7 @@ libdebuff:SetScript("OnEvent", function()
     if unit and effect then
       local unitlevel = UnitName("target") == unit and UnitLevel("target") or 0
       if not libdebuff.objects[unit] or not libdebuff.objects[unit][unitlevel] or not libdebuff.objects[unit][unitlevel][effect] then
-        libdebuff:AddEffect(unit, unitlevel, effect)
+        libdebuff:AddEffect(unit, unitlevel, effect, nil, nil, nil)  -- Explizit nil für rank
       end
     end
 
@@ -210,7 +296,7 @@ libdebuff:SetScript("OnEvent", function()
         local unitlevel = UnitLevel("target") or 0
         local unit = UnitName("target")
         if not libdebuff.objects[unit] or not libdebuff.objects[unit][unitlevel] or not libdebuff.objects[unit][unitlevel][effect] then
-          libdebuff:AddEffect(unit, unitlevel, effect)
+          libdebuff:AddEffect(unit, unitlevel, effect, nil, nil, nil)  -- Explizit nil für rank
         end
       end
     end
@@ -239,13 +325,27 @@ end)
 hooksecurefunc("CastSpell", function(id, bookType)
   local rawEffect, rank = libspell.GetSpellInfo(id, bookType)
   local duration = libdebuff:GetDuration(rawEffect, rank)
-  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player")
+  local rankNum = rank and tonumber(string.match(rank, "(%d+)")) or 0
+  
+  -- Speichere rank für später (bleibt 2 Sekunden)
+  if rawEffect and rankNum > 0 then
+    lastCastRanks[rawEffect] = { rank = rankNum, time = GetTime() }
+  end
+  
+  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player", rankNum)
 end)
 
 hooksecurefunc("CastSpellByName", function(effect, target)
   local rawEffect, rank = libspell.GetSpellInfo(effect)
   local duration = libdebuff:GetDuration(rawEffect, rank)
-  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player")
+  local rankNum = rank and tonumber(string.match(rank, "(%d+)")) or 0
+  
+  -- Speichere rank für später (bleibt 2 Sekunden)
+  if rawEffect and rankNum > 0 then
+    lastCastRanks[rawEffect] = { rank = rankNum, time = GetTime() }
+  end
+  
+  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player", rankNum)
 end)
 
 hooksecurefunc("UseAction", function(slot, target, button)
@@ -253,7 +353,14 @@ hooksecurefunc("UseAction", function(slot, target, button)
   scanner:SetAction(slot)
   local rawEffect, rank = scanner:Line(1)
   local duration = libdebuff:GetDuration(rawEffect, rank)
-  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player")
+  local rankNum = rank and tonumber(string.match(rank, "(%d+)")) or 0
+  
+  -- Speichere rank für später (bleibt 2 Sekunden)
+  if rawEffect and rankNum > 0 then
+    lastCastRanks[rawEffect] = { rank = rankNum, time = GetTime() }
+  end
+  
+  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player", rankNum)
 end)
 
 function libdebuff:UnitDebuff(unit, id)

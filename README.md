@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-6.2.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-6.2.1-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
@@ -11,6 +11,30 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+
+## What's New in Version 6.2.1 (January 10, 2026)
+
+### 🎯 Debuff Timer Protection System (libdebuff.lua)
+
+- ✅ **Spell Rank Tracking** - Tracks spell rank for all your DoTs/debuffs
+  - Uses `lastCastRanks` table to preserve rank information across multiple event sources
+  - Fixes race condition where SuperWoW UNIT_CASTEVENT fired before QueueFunction processed pending data
+- ✅ **Lower Rank Protection** - Lower rank spells cannot overwrite higher rank timers
+  - Example: If Moonfire Rank 10 is active, casting Rank 5 will be blocked
+- ✅ **Other Player Protection** - Other players' casts cannot overwrite your debuff timers
+  - Your DoTs are tracked separately from other players' DoTs
+  - Multiple players can have their own Moonfire/Corruption on the same target
+- ✅ **Shared Debuff Whitelist** - Debuffs that are shared by all players update correctly:
+  - Warrior: Sunder Armor, Demoralizing Shout, Thunder Clap
+  - Rogue: Expose Armor
+  - Druid: Faerie Fire, Faerie Fire (Feral)
+  - Hunter: Hunter's Mark
+  - Warlock: Curse of Weakness/Recklessness/Elements/Shadow/Tongues/Exhaustion
+  - Priest: Shadow Weaving
+  - Mage: Winter's Chill
+  - Paladin: All Judgements
 
 ---
 
@@ -375,7 +399,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 6.2.0  
+**Version:** 6.2.1  
 **Release Date:** January 10, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable
