@@ -13,6 +13,15 @@ This version includes significant performance improvements, DLL-enhanced feature
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
 
 ---
+## What's New in Version 6.2.3 (January 11, 2026)
+
+### 🎯 Unit and Raidframes fix (unitframes.lua)
+- Fixed lag spikes in raids, raid frames should be now butter smooth and cause no lags
+- Fixed a bug not updating hp/mana and buffs/debuffs properly.
+- Removed a scan system that scanned always all 40 raid frames 10 times per second (worked out a better solution to track those)
+- debuff tracking on enemys (for your own abilitys/spells) should be working properly too now
+
+---
 
 ## What's New in Version 6.2.2 (January 10, 2026)
 
