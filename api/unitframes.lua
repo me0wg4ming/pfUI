@@ -1,8 +1,6 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
-local superwow_active = HasSuperWoW()
-
 pfUI.uf = CreateFrame("Frame", nil, UIParent)
 pfUI.uf:SetScript("OnUpdate", function()
   if InCombatLockdown and not InCombatLockdown() then
@@ -15,91 +13,6 @@ end)
 
 pfUI.uf.frames = {}
 pfUI.uf.delayed = {}
-
--- =====================================================
--- CENTRAL EVENT-HANDLER for Raid/Party Performance
--- =====================================================
-pfUI.uf.unitmap = {}  -- Maps "raid1" -> frame, "party2" -> frame, etc.
-
-pfUI.uf.RebuildUnitmap = function()
-  -- Clear old mappings
-  for k in pairs(pfUI.uf.unitmap) do
-    pfUI.uf.unitmap[k] = nil
-  end
-  
-  -- Rebuild raid mappings
-  if pfUI.uf.raid then
-    for i = 1, 40 do
-      local frame = pfUI.uf.raid[i]
-      if frame and frame.label then
-        -- Always map by raid index for event handling
-        if frame.cache_raid and frame.cache_raid > 0 then
-          pfUI.uf.unitmap["raid" .. frame.cache_raid] = frame
-        end
-        -- Also map by current label for direct access
-        if frame.id and frame.id ~= 0 and frame.id ~= "" then
-          local unitstr = frame.label .. frame.id
-          pfUI.uf.unitmap[unitstr] = frame
-        elseif frame.label == "player" then
-          pfUI.uf.unitmap["player"] = frame
-        end
-      end
-    end
-  end
-  
-  -- Rebuild party mappings (only if not used as raid)
-  if C.unitframes.raidforgroup ~= "1" then
-    for i = 1, 4 do
-      local frame = _G["pfGroup" .. i]
-      if frame and frame.label == "party" then
-        pfUI.uf.unitmap["party" .. frame.id] = frame
-      end
-    end
-  end
-end
-
-pfUI.uf.eventframe = CreateFrame("Frame")
-pfUI.uf.eventframe:RegisterEvent("UNIT_HEALTH")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXHEALTH")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MANA")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXMANA")
-pfUI.uf.eventframe:RegisterEvent("UNIT_RAGE")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXRAGE")
-pfUI.uf.eventframe:RegisterEvent("UNIT_ENERGY")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXENERGY")
-pfUI.uf.eventframe:RegisterEvent("UNIT_AURA")
-pfUI.uf.eventframe:RegisterEvent("UNIT_PORTRAIT_UPDATE")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MODEL_CHANGED")
-pfUI.uf.eventframe:RegisterEvent("UNIT_DISPLAYPOWER")
-pfUI.uf.eventframe:RegisterEvent("UNIT_FACTION")
-pfUI.uf.eventframe:RegisterEvent("RAID_ROSTER_UPDATE")
-pfUI.uf.eventframe:RegisterEvent("PARTY_MEMBERS_CHANGED")
-
-pfUI.uf.eventframe:SetScript("OnEvent", function()
-  -- Rebuild unitmap on roster changes
-  if event == "RAID_ROSTER_UPDATE" or event == "PARTY_MEMBERS_CHANGED" then
-    pfUI.uf.RebuildUnitmap()
-    return
-  end
-
-  if not arg1 then return end
-  
-  -- Find the correct frame directly
-  local frame = pfUI.uf.unitmap[arg1]
-  if not frame then return end
-  
-  -- Process event (same logic as before)
-  if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
-    frame.update_portrait = true
-  elseif event == "UNIT_AURA" then
-    frame.update_aura = true
-  elseif event == "UNIT_FACTION" then
-    frame.update_pvp = true
-  else
-    frame.update_full = true
-  end
-end)
--- =====================================================
 
 -- slash command to toggle unitframe test mode
 _G.SLASH_PFTEST1, _G.SLASH_PFTEST2 = "/pftest", "/pfuftest"
@@ -120,8 +33,7 @@ local glow2 = {
 
 local maxdurations = {}
 local function BuffOnUpdate()
-  local now = GetTime()
-  if ( this.tick or 1) > now then return else this.tick = now + .2 end
+  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
   local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
   local texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
   local start = 0
@@ -132,56 +44,18 @@ local function BuffOnUpdate()
     elseif maxdurations[texture] and maxdurations[texture] < timeleft then
       maxdurations[texture] = timeleft
     end
-    start = now + timeleft - maxdurations[texture]
+    start = GetTime() + timeleft - maxdurations[texture]
   end
 
   CooldownFrame_SetTimer(this.cd, start, maxdurations[texture], timeleft > 0 and 1 or 0)
 end
 
 local function TargetBuffOnUpdate()
-  -- throttle to 0.1s
-  local now = GetTime()
-  if ( this.tick or .1) > now then return else this.tick = now + .1 end
-
   local name, rank, icon, count, duration, timeleft = _G.UnitBuff("target", this.id)
   if duration and timeleft then
-    CooldownFrame_SetTimer(this.cd, now + timeleft - duration, duration, 1)
+    CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - duration, duration, 1)
   else
     CooldownFrame_SetTimer(this.cd, 0, 0, 0)
-  end
-end
-
-local function TargetDebuffOnUpdate()
-  -- throttle to 0.1s
-  local now = GetTime()
-  if ( this.tick or .1) > now then return else this.tick = now + .1 end
-  
-  local parent = this:GetParent()
-  local unitstr = parent.label .. (parent.id or "")
-  
-  -- Use libdebuff for timer info if available
-  if libdebuff then
-    local selfdebuff = parent.config and parent.config.selfdebuff == "1"
-    local name, rank, texture, stacks, dtype, duration, timeleft
-    if selfdebuff then
-      name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, this.id)
-    else
-      name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, this.id)
-    end
-    
-    if duration and timeleft then
-      CooldownFrame_SetTimer(this.cd, now + timeleft - duration, duration, 1)
-    else
-      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
-    end
-  elseif pfUI.client > 11200 then
-    -- TBC+ has native timer support
-    local name, rank, icon, count, dtype, duration, timeleft = _G.UnitDebuff(unitstr, this.id)
-    if duration and timeleft then
-      CooldownFrame_SetTimer(this.cd, now + timeleft - duration, duration, 1)
-    else
-      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
-    end
   end
 end
 
@@ -245,8 +119,7 @@ local function BuffOnClick()
 end
 
 local function DebuffOnUpdate()
-  local now = GetTime()
-  if ( this.tick or 1) > now then return else this.tick = now + .2 end
+  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
   local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
   local texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
   local start = 0
@@ -257,7 +130,7 @@ local function DebuffOnUpdate()
     elseif maxdurations[texture] and maxdurations[texture] < timeleft then
       maxdurations[texture] = timeleft
     end
-    start = now + timeleft - maxdurations[texture]
+    start = GetTime() + timeleft - maxdurations[texture]
   end
 
   CooldownFrame_SetTimer(this.cd, start, maxdurations[texture], timeleft > 0 and 1 or 0)
@@ -293,8 +166,7 @@ end)
 
 local aggrodata = { }
 function pfUI.api.UnitHasAggro(unit)
-  -- Only cache positive results (has aggro) - allows fast detection when aggro changes
-  if aggrodata[unit] and aggrodata[unit].state > 0 and GetTime() < aggrodata[unit].check + 1 then
+  if aggrodata[unit] and GetTime() < aggrodata[unit].check + 1 then
     return aggrodata[unit].state
   end
 
@@ -472,7 +344,21 @@ function pfUI.uf:UpdateVisibility()
      self.visible = nil
   end
 
-  -- visibility
+  -- tbc visibility
+  if pfUI.client > 11200 then
+    self:SetAttribute("unit", unitstr)
+
+    -- update visibility condition on change
+    if self.visibilitycondition ~= visibility then
+      RegisterStateDriver(self, 'visibility', visibility)
+      self.visibilitycondition = visibility
+      self.visible = true
+    end
+
+    return
+  end
+
+  -- vanilla visibility
   if self.unitname and self.unitname ~= "focus" and self.unitname ~= "focustarget" then
     self:Show()
   elseif visibility == "hide" then
@@ -904,6 +790,8 @@ function pfUI.uf:UpdateConfig()
 
       if f:GetName() == "pfPlayer" then
         f.buffs[i]:SetScript("OnUpdate", BuffOnUpdate)
+      elseif f:GetName() == "pfTarget" and pfUI.expansion == "tbc" then
+        f.buffs[i]:SetScript("OnUpdate", TargetBuffOnUpdate)
       end
 
       f.buffs[i]:SetScript("OnEnter", BuffOnEnter)
@@ -955,8 +843,6 @@ function pfUI.uf:UpdateConfig()
 
       if f:GetName() == "pfPlayer" then
         f.debuffs[i]:SetScript("OnUpdate", DebuffOnUpdate)
-      elseif f:GetName() == "pfTarget" or f:GetName() == "pfTargetTarget" or f:GetName() == "pfTargetTargetTarget" or f:GetName() == "pfFocus" or f:GetName() == "pfFocusTarget" then
-        f.debuffs[i]:SetScript("OnUpdate", TargetDebuffOnUpdate)
       end
 
       f.debuffs[i]:SetScript("OnEnter", DebuffOnEnter)
@@ -1031,29 +917,24 @@ function pfUI.uf.OnEvent()
   end
 end
 
--- Local function references for performance
+-- Local reference for performance
 local _GetTime = GetTime
 
--- Global cached time for synchronized timer calculations
+-- Global cached time for libpredict and other functions
 pfUI.uf.now = 0
 
 function pfUI.uf.OnUpdate()
   local now = _GetTime()
-  pfUI.uf.now = now  -- Cache for other functions to use
+  pfUI.uf.now = now  -- Cache for libpredict to use
   
-  -- update combat feedback
+  -- update combat feedback (no throttle - needs immediate feedback)
   if this.feedbackText then CombatFeedback_OnUpdate(arg1) end
 
-  -- Throttle unit frames for performance
-  -- Raid/Party: 10 updates/sec (no castbars, just HP/Mana/Buffs)
-  -- Others: 40 updates/sec (need faster updates for castbars, combat)
+  -- Throttle raid/party frames for performance (10 updates/sec)
+  -- Other frames run at full speed for responsive castbars etc.
   if this.label == "raid" or this.label == "party" then
     if (this.throttleTick or 0) > now then return end
     this.throttleTick = now + 0.1
-    -- NOTE: buffScanTick removed for performance testing
-  elseif this.label then
-    if (this.throttleTick or 0) > now then return end
-    this.throttleTick = now + 0.025
   end
 
   -- process indicator update events
@@ -1210,11 +1091,11 @@ function pfUI.uf.OnUpdate()
   end
 
   -- trigger eventless actions (online/offline/range)
-  if not this.lastTick then this.lastTick = now + (this.tick or .2) end
-  if this.lastTick and this.lastTick < now then
+  if not this.lastTick then this.lastTick = GetTime() + (this.tick or .2) end
+  if this.lastTick and this.lastTick < GetTime() then
     local unitstr = this.label .. this.id
 
-    this.lastTick = now + (this.tick or .2)
+    this.lastTick = GetTime() + (this.tick or .2)
 
     -- target target has a huge delay, make sure to not tick during range checks
     -- by waiting for a stable name over three ticks otherwise aborting the update.
@@ -1261,18 +1142,6 @@ end
 
 function pfUI.uf.OnEnter()
   if not this.label then return end
-
-  -- SuperWoW: Set native mouseover unit for macro/addon compatibility
-  if SetMouseoverUnit then
-    local unitstr = this.label .. this.id
-    -- For GUID-based frames (focus), use the GUID directly
-    if this.label and string.find(this.label, "^0x") then
-      SetMouseoverUnit(this.label)
-    elseif UnitExists(unitstr) then
-      SetMouseoverUnit(unitstr)
-    end
-  end
-
   if this.config.showtooltip == "0" then return end
   GameTooltip_SetDefaultAnchor(GameTooltip, this)
   GameTooltip:SetUnit(this.label .. this.id)
@@ -1280,11 +1149,6 @@ function pfUI.uf.OnEnter()
 end
 
 function pfUI.uf.OnLeave()
-  -- SuperWoW: Clear native mouseover unit
-  if SetMouseoverUnit then
-    SetMouseoverUnit()
-  end
-
   GameTooltip:FadeOut()
 end
 
@@ -1316,52 +1180,33 @@ end
 
 function pfUI.uf:EnableEvents()
   local f = self
-  local unitstr = f.label .. f.id
 
-  -- Raid/Party Frames: Register in central handler instead of self
-  if f.label == "raid" or f.label == "party" then
-    -- Only register non-UNIT_* events ourselves
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:RegisterEvent("PARTY_MEMBERS_CHANGED")
-    f:RegisterEvent("PARTY_LEADER_CHANGED")
-    f:RegisterEvent("RAID_ROSTER_UPDATE")
-    f:RegisterEvent("PARTY_LOOT_METHOD_CHANGED")
-    f:RegisterEvent("RAID_TARGET_UPDATE")
-    f:RegisterEvent("PARTY_MEMBER_ENABLE")
-    f:RegisterEvent("PARTY_MEMBER_DISABLE")
-    f:RegisterEvent("PLAYER_UPDATE_RESTING")
-    
-    -- Unitmap aktualisieren
-    pfUI.uf.RebuildUnitmap()
-  else
-    -- All other frames: Normal event registration
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:RegisterEvent("UNIT_DISPLAYPOWER")
-    f:RegisterEvent("UNIT_HEALTH")
-    f:RegisterEvent("UNIT_MAXHEALTH")
-    f:RegisterEvent("UNIT_MANA")
-    f:RegisterEvent("UNIT_MAXMANA")
-    f:RegisterEvent("UNIT_RAGE")
-    f:RegisterEvent("UNIT_MAXRAGE")
-    f:RegisterEvent("UNIT_ENERGY")
-    f:RegisterEvent("UNIT_MAXENERGY")
-    f:RegisterEvent("UNIT_FOCUS")
-    f:RegisterEvent("UNIT_PORTRAIT_UPDATE")
-    f:RegisterEvent("UNIT_MODEL_CHANGED")
-    f:RegisterEvent("UNIT_FACTION")
-    f:RegisterEvent("UNIT_AURA")
-    f:RegisterEvent("PLAYER_AURAS_CHANGED")
-    f:RegisterEvent("UNIT_INVENTORY_CHANGED")
-    f:RegisterEvent("PARTY_MEMBERS_CHANGED")
-    f:RegisterEvent("PARTY_LEADER_CHANGED")
-    f:RegisterEvent("RAID_ROSTER_UPDATE")
-    f:RegisterEvent("PLAYER_UPDATE_RESTING")
-    f:RegisterEvent("PLAYER_TARGET_CHANGED")
-    f:RegisterEvent("PARTY_LOOT_METHOD_CHANGED")
-    f:RegisterEvent("RAID_TARGET_UPDATE")
-    f:RegisterEvent("UNIT_PET")
-    f:RegisterEvent("UNIT_HAPPINESS")
-  end
+  f:RegisterEvent("PLAYER_ENTERING_WORLD")
+  f:RegisterEvent("UNIT_DISPLAYPOWER")
+  f:RegisterEvent("UNIT_HEALTH")
+  f:RegisterEvent("UNIT_MAXHEALTH")
+  f:RegisterEvent("UNIT_MANA")
+  f:RegisterEvent("UNIT_MAXMANA")
+  f:RegisterEvent("UNIT_RAGE")
+  f:RegisterEvent("UNIT_MAXRAGE")
+  f:RegisterEvent("UNIT_ENERGY")
+  f:RegisterEvent("UNIT_MAXENERGY")
+  f:RegisterEvent("UNIT_FOCUS")
+  f:RegisterEvent("UNIT_PORTRAIT_UPDATE")
+  f:RegisterEvent("UNIT_MODEL_CHANGED")
+  f:RegisterEvent("UNIT_FACTION")
+  f:RegisterEvent("UNIT_AURA") -- frame=buff, frame=debuff
+  f:RegisterEvent("PLAYER_AURAS_CHANGED") -- label=player && frame=buff
+  f:RegisterEvent("UNIT_INVENTORY_CHANGED") -- label=player && frame=buff
+  f:RegisterEvent("PARTY_MEMBERS_CHANGED") -- label=party, frame=leaderIcon
+  f:RegisterEvent("PARTY_LEADER_CHANGED") -- frame=leaderIcon
+  f:RegisterEvent("RAID_ROSTER_UPDATE") -- label=raidIcon
+  f:RegisterEvent("PLAYER_UPDATE_RESTING") -- label=restIcon
+  f:RegisterEvent("PLAYER_TARGET_CHANGED") -- label=target
+  f:RegisterEvent("PARTY_LOOT_METHOD_CHANGED") -- frame=lootIcon
+  f:RegisterEvent("RAID_TARGET_UPDATE") -- frame=raidIcon
+  f:RegisterEvent("UNIT_PET")
+  f:RegisterEvent("UNIT_HAPPINESS")
 
   f:RegisterForClicks('LeftButtonUp', 'RightButtonUp',
     'MiddleButtonUp', 'Button4Up', 'Button5Up')
@@ -1784,20 +1629,19 @@ function pfUI.uf:RefreshUnit(unit, component)
 
       if texture then
         unit.debuffs[i]:Show()
-        
-        local now = pfUI.uf.now or GetTime()
+
         if unit:GetName() == "pfPlayer" then
           local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+unit.debuffs[i].id, "HARMFUL"),"HARMFUL")
-          CooldownFrame_SetTimer(unit.debuffs[i].cd, now, timeleft, 1)
+          CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime(), timeleft, 1)
         elseif libdebuff and selfdebuff == "1" then
           local name, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitOwnDebuff(unitstr, i)
           if duration and timeleft then
-            CooldownFrame_SetTimer(unit.debuffs[i].cd, now + timeleft - duration, duration, 1)
+            CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime() + timeleft - duration, duration, 1)
           end
         elseif libdebuff then
           local name, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitDebuff(unitstr, i)
           if duration and timeleft then
-            CooldownFrame_SetTimer(unit.debuffs[i].cd, now + timeleft - duration, duration, 1)
+            CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime() + timeleft - duration, duration, 1)
           end
         end
 
@@ -2212,8 +2056,33 @@ function pfUI.uf:EnableClickCast()
       local bconf = bid == 1 and "" or bid
       if pfUI_config.unitframes["clickcast"..bconf..mconf] ~= "" then
         -- prepare click casting
-        self.clickactions = self.clickactions or {}
-        self.clickactions[modifier..button] = pfUI_config.unitframes["clickcast"..bconf..mconf]
+        if pfUI.client > 11200 then
+          -- set attributes for tbc+
+          local prefix = modifier == "" and "" or modifier .. "-"
+
+          -- check for "/" in the beginning of the string, to detect macros
+          if string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^%/(.+)") then
+            self:SetAttribute(prefix.."type"..bid, "macro")
+            self:SetAttribute(prefix.."macrotext"..bid, pfUI_config.unitframes["clickcast"..bconf..mconf])
+            self:SetAttribute(prefix.."spell"..bid, nil)
+          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^target") then
+            self:SetAttribute(prefix.."type"..bid, "target")
+            self:SetAttribute(prefix.."macrotext"..bid, nil)
+            self:SetAttribute(prefix.."spell"..bid, nil)
+          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^menu") then
+            self:SetAttribute(prefix.."type"..bid, "showmenu")
+            self:SetAttribute(prefix.."macrotext"..bid, nil)
+            self:SetAttribute(prefix.."spell"..bid, nil)
+          else
+            self:SetAttribute(prefix.."type"..bid, "spell")
+            self:SetAttribute(prefix.."spell"..bid, pfUI_config.unitframes["clickcast"..bconf..mconf])
+            self:SetAttribute(prefix.."macro"..bid, nil)
+          end
+        else
+          -- fill clickaction table for vanillla
+          self.clickactions = self.clickactions or {}
+          self.clickactions[modifier..button] = pfUI_config.unitframes["clickcast"..bconf..mconf]
+        end
       end
     end
   end
@@ -2336,13 +2205,12 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks, start, duration)
   end
 
   -- show remaining time if config is set
-  local now = pfUI.uf.now or GetTime()
   if showtime and start and duration and timeleft < 100 and iconsize > 9 then
     CooldownFrame_SetTimer(frame.icon[pos].cd, start, duration, 1)
   elseif showtime and timeleft and timeleft < 100 and iconsize > 9 then
-    CooldownFrame_SetTimer(frame.icon[pos].cd, now, timeleft, 1)
+    CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), timeleft, 1)
   else
-    CooldownFrame_SetTimer(frame.icon[pos].cd, now, 0, 1)
+    CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), 0, 1)
   end
 
   -- show stacks if config is set
