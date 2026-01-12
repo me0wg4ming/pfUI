@@ -1,5 +1,5 @@
 -- UnitXP_SP3 integration module
--- Provides Line of Sight indicator, OS notifications, and enhanced distance API
+-- Provides Line of Sight indicator, OS notifications, and enhanced targeting
 -- Requires UnitXP_SP3 DLL: https://github.com/allfoxwy/UnitXP_SP3
 
 pfUI:RegisterModule("unitxp", "vanilla", function ()
@@ -148,6 +148,32 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
     return nil
   end
 
+  -- Smart Targeting Helpers
+  pfUI.api.TargetNearestEnemy = function()
+    local success, found = pcall(UnitXP, "target", "nearestEnemy")
+    return success and found
+  end
+
+  pfUI.api.TargetHighestHP = function()
+    local success, found = pcall(UnitXP, "target", "mostHP")
+    return success and found
+  end
+
+  pfUI.api.TargetNextEnemy = function()
+    local success, found = pcall(UnitXP, "target", "nextEnemyInCycle")
+    return success and found
+  end
+
+  pfUI.api.TargetPreviousEnemy = function()
+    local success, found = pcall(UnitXP, "target", "previousEnemyInCycle")
+    return success and found
+  end
+
+  pfUI.api.TargetNextMarked = function(order)
+    local success, found = pcall(UnitXP, "target", "nextMarkedEnemyInCycle", order)
+    return success and found
+  end
+
   pfUI.api.UnitInLineOfSight = function(unit1, unit2)
     if not unit2 then
       unit2 = unit1
@@ -166,5 +192,43 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
     local success, behind = pcall(UnitXP, "behind", unit1, unit2)
     if success then return behind end
     return nil
+  end
+
+  -- Debug command to test UnitXP indicators
+  SLASH_PFUNITXP1 = "/pfunitxp"
+  SlashCmdList["PFUNITXP"] = function()
+    local chat = DEFAULT_CHAT_FRAME
+    chat:AddMessage("|cff33ffccpfUI|r: UnitXP Indicator Debug")
+
+    -- Check if target exists
+    if not UnitExists("target") then
+      chat:AddMessage("  |cffff0000No target selected|r")
+      return
+    end
+
+    -- Test behind
+    local successB, behind = pcall(UnitXP, "behind", "player", "target")
+    chat:AddMessage("  Behind check: success=" .. tostring(successB) .. " value=" .. tostring(behind) .. " type=" .. type(behind))
+
+    -- Test LOS
+    local successL, inSight = pcall(UnitXP, "inSight", "player", "target")
+    chat:AddMessage("  LOS check: success=" .. tostring(successL) .. " value=" .. tostring(inSight) .. " type=" .. type(inSight))
+
+    -- Check if indicator frames exist
+    if pfUI.uf and pfUI.uf.target then
+      chat:AddMessage("  Target frame: |cff00ff00exists|r")
+      if pfUI.uf.target.behindIndicator then
+        chat:AddMessage("  Behind indicator: |cff00ff00created|r, visible=" .. tostring(pfUI.uf.target.behindIndicator:IsVisible()))
+      else
+        chat:AddMessage("  Behind indicator: |cffff0000NOT created|r (check settings)")
+      end
+      if pfUI.uf.target.losIndicator then
+        chat:AddMessage("  LOS indicator: |cff00ff00created|r")
+      else
+        chat:AddMessage("  LOS indicator: |cffff0000NOT created|r (check settings)")
+      end
+    else
+      chat:AddMessage("  Target frame: |cffff0000NOT found|r")
+    end
   end
 end)
