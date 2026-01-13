@@ -927,6 +927,15 @@ pfUI:RegisterModule("thirdparty-vanilla", "vanilla", function()
     end)
   end)
 
+  -- SuperCleveRoidMacros
+  HookAddonOrVariable("SuperCleveRoidMacros", function()
+    if C.thirdparty.supercleveroidmacros.enable == "0" then return end
+    if not pfUI.bars then return end
+
+    -- disable pfUI macro scanning
+    pfUI.bars.skip_macro = true
+  end)
+
   HookAddonOrVariable("AtlasLoot", function()
     if C.thirdparty.atlasloot.enable == "0" then return end
 
