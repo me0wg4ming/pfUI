@@ -980,11 +980,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local nameplate = frame.nameplate
     local now = GetTime()  -- Cache GetTime() once per update
     
-    -- OPTIMIZED: Minimal throttle - only skip if very recent update
-    -- Nutze Alpha >= 0.99 statt == 1 um Flackern durch Fließkomma-Ungenauigkeiten zu verhindern
-    -- (Nicht-Targets werden explizit auf 0.95 gesetzt, Targets auf 1.0)
+    -- OPTIMIZED: Smooth updates for castbars and targeting
     local target = UnitExists("target") and frame:GetAlpha() >= 0.99 or nil
-    local throttle = target and 0.020 or 0.020
+    local throttle = target and 0.02 or 0.025  -- Target: 50 FPS, Non-Target: 20 FPS
     
     if (nameplate.lasttick or 0) + throttle > now then return end
     nameplate.lasttick = now
@@ -1016,21 +1014,32 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
     nameplate.istarget = target
 
-    -- OPTIMIZED: Cache alpha changes
-    local newAlpha
-    if target or not UnitExists("target") then
-      newAlpha = 1
-    else
-      newAlpha = tonumber(C.nameplates.notargalpha)
-    end
-    
-    if nameplate.cachedAlpha ~= newAlpha then
-      if not target and UnitExists("target") then
-        frame:SetAlpha(.95)
-      end
-      nameplate:SetAlpha(newAlpha)
-      nameplate.cachedAlpha = newAlpha
-    end
+    -- set non-target plate alpha (cached to prevent flicker)
+local configAlpha = tonumber(C.nameplates.notargalpha)
+if not configAlpha or configAlpha < 0 then
+  configAlpha = 100
+end
+
+-- Ensure we're working with 0-1 range
+if configAlpha > 1 then
+  configAlpha = configAlpha / 100
+end
+
+local desiredAlpha = (target or not UnitExists("target")) and 1 or configAlpha
+
+if nameplate.cachedAlpha ~= desiredAlpha then
+  -- Setze nur die nameplate Alpha, nicht den parent frame
+  nameplate:SetAlpha(desiredAlpha)
+  nameplate.cachedAlpha = desiredAlpha
+end
+
+-- Der newAlpha Block wurde entfernt
+
+-- queue update on visual target update
+if nameplate.cache.target ~= target then
+  nameplate.cache.target = target
+  update = true
+end
 
     -- queue update on visual target update
     if nameplate.cache.target ~= target then
