@@ -1015,31 +1015,23 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     nameplate.istarget = target
 
     -- set non-target plate alpha (cached to prevent flicker)
-local configAlpha = tonumber(C.nameplates.notargalpha)
-if not configAlpha or configAlpha < 0 then
-  configAlpha = 100
-end
+    local configAlpha = tonumber(C.nameplates.notargalpha)
+    if not configAlpha or configAlpha < 0 then
+      configAlpha = 100
+    end
 
--- Ensure we're working with 0-1 range
-if configAlpha > 1 then
-  configAlpha = configAlpha / 100
-end
+    -- Ensure we're working with 0-1 range
+    if configAlpha > 1 then
+      configAlpha = configAlpha / 100
+    end
 
-local desiredAlpha = (target or not UnitExists("target")) and 1 or configAlpha
+    local desiredAlpha = (target or not UnitExists("target")) and 1 or configAlpha
 
-if nameplate.cachedAlpha ~= desiredAlpha then
-  -- Setze nur die nameplate Alpha, nicht den parent frame
-  nameplate:SetAlpha(desiredAlpha)
-  nameplate.cachedAlpha = desiredAlpha
-end
-
--- Der newAlpha Block wurde entfernt
-
--- queue update on visual target update
-if nameplate.cache.target ~= target then
-  nameplate.cache.target = target
-  update = true
-end
+    if nameplate.cachedAlpha ~= desiredAlpha then
+      -- Setze nur die nameplate Alpha, nicht den parent frame
+      nameplate:SetAlpha(desiredAlpha)
+      nameplate.cachedAlpha = desiredAlpha
+    end
 
     -- queue update on visual target update
     if nameplate.cache.target ~= target then
