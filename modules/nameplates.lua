@@ -688,9 +688,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local level = plate.original.level:IsShown() and plate.original.level:GetObjectType() == "FontString" and tonumber(plate.original.level:GetText()) or "??"
     local class, ulevel, elite, player, guild = GetUnitData(name, true)
     
-    -- Use database level if available and valid (fixes ?? after reload)
+    -- Use database level ONLY if current level is ?? (fixes ?? after reload, but doesn't override visible levels)
     local levelFromDB = false
-    if ulevel and ulevel > 0 then
+    if level == "??" and ulevel and ulevel > 0 then
       level = ulevel
       levelFromDB = true
     end
