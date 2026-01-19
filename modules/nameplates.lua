@@ -978,11 +978,22 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   nameplates.OnUpdate = function(frame)
     local frame = frame or this
     local nameplate = frame.nameplate
-    local now = GetTime()  -- Cache GetTime() once per update
+    local now = GetTime()
     
-    -- OPTIMIZED: Smooth updates for castbars and targeting
+    -- Performance: Skip invisible frames immediately
+    local isVisible = frame:IsVisible()
+    if not isVisible then return end
+    
+    -- Intelligent throttling based on target/castbar status
     local target = UnitExists("target") and frame:GetAlpha() >= 0.99 or nil
-    local throttle = target and 0.02 or 0.025  -- Target: 50 FPS, Non-Target: 20 FPS
+    local isCasting = nameplate.castbar and nameplate.castbar:IsShown()
+    
+    local throttle
+    if target or isCasting then
+      throttle = 0.02  -- 50 FPS for target OR active castbar
+    else
+      throttle = 0.1   -- 10 FPS for others (healthbar updates)
+    end
     
     if (nameplate.lasttick or 0) + throttle > now then return end
     nameplate.lasttick = now
