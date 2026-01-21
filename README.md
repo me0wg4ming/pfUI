@@ -15,7 +15,7 @@ This version includes significant performance improvements, DLL-enhanced feature
 ---
 ## What's New in Version 6.2.5 (January 21, 2026)
 
-### 🎯 Unit and Raidframes fix (unitframes.lua)
+### 🎯 Bug report fixes and feature requests.
 - Fixed aggro indicator on "Player" frame not working properly.
 - Changed the Aggro indicator timer from 0.1 to 0.2 times per second (5 times per second is enough)
 - Fixed the 40yard range check not working properly for Shamans and Druids in bear/cat form.
