@@ -1090,6 +1090,22 @@ function pfUI.uf.OnUpdate()
     end
   end
 
+  -- Combat/Aggro Indicators (separate throttle, works for all frames including player)
+  if not this.lastCombatCheck then this.lastCombatCheck = GetTime() + 0.2 end
+  if this.lastCombatCheck < GetTime() then
+    this.lastCombatCheck = GetTime() + 0.2
+    
+    if this.config.squareaggro == "1" and pfUI.api.UnitHasAggro(this.label .. this.id) > 0 then
+      this.combat.tex:SetTexture(1,.2,0)
+      this.combat:Show()
+    elseif this.config.squarecombat == "1" and UnitAffectingCombat(this.label .. this.id) then
+      this.combat.tex:SetTexture(1,1,.2)
+      this.combat:Show()
+    else
+      this.combat:Hide()
+    end
+  end
+
   -- trigger eventless actions (online/offline/range)
   if not this.lastTick then this.lastTick = GetTime() + (this.tick or .2) end
   if this.lastTick and this.lastTick < GetTime() then
@@ -1121,16 +1137,6 @@ function pfUI.uf.OnUpdate()
       this.glow:Show()
     else
       this.glow:Hide()
-    end
-
-    if this.config.squareaggro == "1" and pfUI.api.UnitHasAggro(this.label .. this.id) > 0 then
-      this.combat.tex:SetTexture(1,.2,0)
-      this.combat:Show()
-    elseif this.config.squarecombat == "1" and UnitAffectingCombat(this.label .. this.id) then
-      this.combat.tex:SetTexture(1,1,.2)
-      this.combat:Show()
-    else
-      this.combat:Hide()
     end
 
     -- update everything on eventless frames (targettarget, etc)
