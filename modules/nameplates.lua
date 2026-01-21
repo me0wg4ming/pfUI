@@ -58,6 +58,11 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- catch all nameplates
   local childs, regions, plate
   local initialized = 0
+  
+  -- Friendly zone nameplate disable state
+  local savedHostileState = nil
+  local savedFriendlyState = nil
+  local inFriendlyZone = false
   local parentcount = 0
   local platecount = 0
   local registry = {}
@@ -351,6 +356,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   nameplates:RegisterEvent("UNIT_COMBO_POINTS")
   nameplates:RegisterEvent("PLAYER_COMBO_POINTS")
   nameplates:RegisterEvent("UNIT_AURA")
+  nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
   
   -- NEW: Register cast events like Overhead.lua
   if superwow_active then
@@ -358,8 +364,52 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end
 
   nameplates:SetScript("OnEvent", function()
-    if event == "PLAYER_ENTERING_WORLD" then
-      this:SetGameVariables()
+    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+      if event == "PLAYER_ENTERING_WORLD" then
+        this:SetGameVariables()
+      end
+      
+      -- Handle friendly zone nameplate disable feature
+      local disableHostile = C.nameplates["disable_hostile_in_friendly"] == "1"
+      local disableFriendly = C.nameplates["disable_friendly_in_friendly"] == "1"
+      
+      if disableHostile or disableFriendly then
+        local pvpType = GetZonePVPInfo()
+        local nowFriendly = (pvpType == "friendly")
+        
+        if nowFriendly and not inFriendlyZone then
+          -- Entering friendly zone - save current state and hide based on options
+          inFriendlyZone = true
+          savedHostileState = C.nameplates["showhostile"]
+          savedFriendlyState = C.nameplates["showfriendly"]
+          
+          if disableHostile then
+            _G.NAMEPLATES_ON = nil
+            HideNameplates()
+          end
+          
+          if disableFriendly then
+            _G.FRIENDNAMEPLATES_ON = nil
+            HideFriendNameplates()
+          end
+        elseif not nowFriendly and inFriendlyZone then
+          -- Leaving friendly zone - restore previous state
+          inFriendlyZone = false
+          
+          if savedHostileState == "1" then
+            _G.NAMEPLATES_ON = true
+            ShowNameplates()
+          end
+          
+          if savedFriendlyState == "1" then
+            _G.FRIENDNAMEPLATES_ON = true
+            ShowFriendNameplates()
+          end
+          
+          savedHostileState = nil
+          savedFriendlyState = nil
+        end
+      end
     elseif event == "UNIT_CASTEVENT" then
       -- NEW: Event-based cast handling from Overhead.lua
       local casterGUID = arg1
@@ -1284,6 +1334,61 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   nameplates.UpdateConfig = function()
     -- update debuff filters
     DebuffFilterPopulate()
+
+    -- Check friendly zone state when config changes
+    local disableHostile = C.nameplates["disable_hostile_in_friendly"] == "1"
+    local disableFriendly = C.nameplates["disable_friendly_in_friendly"] == "1"
+    local pvpType = GetZonePVPInfo()
+    local nowFriendly = (pvpType == "friendly")
+    
+    if nowFriendly and (disableHostile or disableFriendly) then
+      if not inFriendlyZone then
+        -- Just entered friendly zone or feature just enabled
+        inFriendlyZone = true
+        savedHostileState = C.nameplates["showhostile"]
+        savedFriendlyState = C.nameplates["showfriendly"]
+      end
+      
+      -- Apply current settings based on options
+      if disableHostile then
+        _G.NAMEPLATES_ON = nil
+        HideNameplates()
+      else
+        -- Restore hostile if option is off but we're in friendly zone
+        if savedHostileState == "1" then
+          _G.NAMEPLATES_ON = true
+          ShowNameplates()
+        end
+      end
+      
+      if disableFriendly then
+        _G.FRIENDNAMEPLATES_ON = nil
+        HideFriendNameplates()
+      else
+        -- Restore friendly if option is off but we're in friendly zone
+        if savedFriendlyState == "1" then
+          _G.FRIENDNAMEPLATES_ON = true
+          ShowFriendNameplates()
+        end
+      end
+      
+      return -- Don't call SetGameVariables
+    elseif inFriendlyZone and not (disableHostile or disableFriendly) then
+      -- Both features disabled while in friendly zone - restore state
+      inFriendlyZone = false
+      
+      if savedHostileState == "1" then
+        C.nameplates["showhostile"] = savedHostileState
+      end
+      
+      if savedFriendlyState == "1" then
+        C.nameplates["showfriendly"] = savedFriendlyState
+      end
+      
+      savedHostileState = nil
+      savedFriendlyState = nil
+      -- Fall through to SetGameVariables to restore nameplates
+    end
 
     -- update nameplate visibility
     nameplates:SetGameVariables()
