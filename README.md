@@ -21,6 +21,7 @@ This version includes significant performance improvements, DLL-enhanced feature
 - Fixed the 40yard range check not working properly for Shamans and Druids in bear/cat form.
 - Added 2 new buttons to the Nameplate menu: "Disable Hostile Nameplates in Friendly Zones" and "Disable Friendly Nameplates in Friendly Zones"
 - changed version to 6.2.5 to push an update for everyone
+- Feel free to check out https://github.com/me0wg4ming/pfUI/tree/enhanced_release - this is an experiment version with proper tracking for debuffs on current target (use on own risk)
 
 
 ---
