@@ -51,6 +51,8 @@ if GetNampowerVersion then
     -- abort on non healing classes
     if not spells[class] then return end
 
+    nampower_spell = nil
+
     for i = 1, GetNumSpellTabs() do
       local _, _, offset, num = GetSpellTabInfo(i)
       for id = offset + 1, offset + num do
@@ -61,7 +63,6 @@ if GetNampowerVersion then
           for _, tex in pairs(spells[class]) do
             if tex == texture then
               nampower_spell = name
-              return
             end
           end
         end
