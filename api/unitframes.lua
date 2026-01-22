@@ -1104,6 +1104,16 @@ function pfUI.uf.OnUpdate()
     else
       this.combat:Hide()
     end
+    
+    if this.config.glowaggro == "1" and pfUI.api.UnitHasAggro(this.label .. this.id) > 0 then
+      this.glow:SetBackdropBorderColor(1,.2,0)
+      this.glow:Show()
+    elseif this.config.glowcombat == "1" and UnitAffectingCombat(this.label .. this.id) then
+      this.glow:SetBackdropBorderColor(1,1,.2)
+      this.glow:Show()
+    else
+      this.glow:Hide()
+    end
   end
 
   -- trigger eventless actions (online/offline/range)
@@ -1128,16 +1138,6 @@ function pfUI.uf.OnUpdate()
 
     pfUI.uf:RefreshUnitState(this)
     pfUI.uf:RefreshIndicators(this)
-
-    if this.config.glowaggro == "1" and pfUI.api.UnitHasAggro(this.label .. this.id) > 0 then
-      this.glow:SetBackdropBorderColor(1,.2,0)
-      this.glow:Show()
-    elseif this.config.glowcombat == "1" and UnitAffectingCombat(this.label .. this.id) then
-      this.glow:SetBackdropBorderColor(1,1,.2)
-      this.glow:Show()
-    else
-      this.glow:Hide()
-    end
 
     -- update everything on eventless frames (targettarget, etc)
     if this.tick then
