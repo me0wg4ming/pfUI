@@ -1090,10 +1090,14 @@ function pfUI.uf.OnUpdate()
     end
   end
 
-  -- Combat/Aggro Indicators (separate throttle, works for all frames including player)
+  -- Combat/Aggro/Range Indicators (separate throttle, works for all frames including player)
   if not this.lastCombatCheck then this.lastCombatCheck = GetTime() + 0.2 end
   if this.lastCombatCheck < GetTime() then
     this.lastCombatCheck = GetTime() + 0.2
+    
+    -- Range Fading and Online/Offline State
+    pfUI.uf:RefreshUnitState(this)
+    pfUI.uf:RefreshIndicators(this)
     
     if this.config.squareaggro == "1" and pfUI.api.UnitHasAggro(this.label .. this.id) > 0 then
       this.combat.tex:SetTexture(1,.2,0)
@@ -1388,7 +1392,7 @@ function pfUI.uf:RefreshUnitState(unit)
     unit.power.bar:SetMinMaxValues(0, 100, true)
     unit.hp.bar:SetValue(0)
     unit.power.bar:SetValue(0)
-  elseif unit.config.faderange == "1" and not pfUI.api.UnitInRange(unit.label .. unit.id, 4) and not unlock then
+  elseif (unit.label == "party" or unit.label == "raid") and unit.config.faderange == "1" and not pfUI.api.UnitInRange(unit.label .. unit.id, 4) and not unlock then
     alpha = unit.alpha_outrange
   end
 
