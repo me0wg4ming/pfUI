@@ -17,6 +17,7 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ### 🎯 Bug report fixes and feature requests.
 - Fixed aggro indicator on "Player" frame not working properly.
+- Fixed aggro and combat glow on player frames.
 - Changed the Aggro indicator timer from 0.1 to 0.2 times per second (5 times per second is enough)
 - Fixed the 40yard range check not working properly for Shamans and Druids in bear/cat form.
 - Added 2 new buttons to the Nameplate menu: "Disable Hostile Nameplates in Friendly Zones" and "Disable Friendly Nameplates in Friendly Zones"
