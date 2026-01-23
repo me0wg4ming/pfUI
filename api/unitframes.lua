@@ -1117,11 +1117,21 @@ function pfUI.uf.OnUpdate()
   end
 
   -- trigger eventless actions (online/offline/range)
-  if not this.lastTick then this.lastTick = GetTime() + (this.tick or .2) end
-  if this.lastTick and this.lastTick < GetTime() then
+  -- Validate tick value - it should be an interval (e.g. 0.5), not a timestamp
+  local tickInterval = this.tick
+  if tickInterval and tickInterval > 10 then
+    tickInterval = nil
+  end
+  -- Reset lastTick if it's invalid (much larger than now)
+  local now = GetTime()
+  if this.lastTick and this.lastTick > now + 10 then
+    this.lastTick = nil
+  end
+  if not this.lastTick then this.lastTick = now + (tickInterval or .5) end
+  if this.lastTick and this.lastTick < now then
     local unitstr = this.label .. this.id
 
-    this.lastTick = GetTime() + (this.tick or .2)
+    this.lastTick = now + (tickInterval or .5)
 
     -- target target has a huge delay, make sure to not tick during range checks
     -- by waiting for a stable name over three ticks otherwise aborting the update.
