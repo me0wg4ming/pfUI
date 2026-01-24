@@ -112,9 +112,11 @@ pfUI:RegisterModule("cooldown", "vanilla:tbc", function ()
       start, duration = 0, 0
     end
 
-    -- hide animation
+    -- handle animation visibility
     if this.pfCooldownStyleAnimation == 0 then
       this:SetAlpha(0)
+    elseif this.pfCooldownStyleAnimation == 1 then
+      this:SetAlpha(1)
     elseif not this.pfCooldownStyleAnimation and C.appearance.cd.hideanim == "1" then
       this:SetAlpha(0)
     end

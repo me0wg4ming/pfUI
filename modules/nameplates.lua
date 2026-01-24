@@ -300,19 +300,19 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     plate.debuffs[index].stacks:SetJustifyV("BOTTOM")
     plate.debuffs[index].stacks:SetTextColor(1,1,0)
 
+    -- Read config for cooldown animation
+    local cooldown_anim = tonumber(C.nameplates.debuffanim) or 0
+
     if pfUI.client <= 11200 then
-      -- create a fake animation frame on vanilla to improve performance
-      plate.debuffs[index].cd = CreateFrame("Frame", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index])
-      plate.debuffs[index].cd:SetScript("OnUpdate", CooldownFrame_OnUpdateModel)
-      plate.debuffs[index].cd.AdvanceTime = DoNothing
-      plate.debuffs[index].cd.SetSequence = DoNothing
-      plate.debuffs[index].cd.SetSequenceTime = DoNothing
+      -- Use Model frame with CooldownFrameTemplate for proper pie animation in Vanilla
+      plate.debuffs[index].cd = CreateFrame("Model", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
+      plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
     else
       -- use regular cooldown animation frames on burning crusade and later
       plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
     end
 
-    plate.debuffs[index].cd.pfCooldownStyleAnimation = 0
+    plate.debuffs[index].cd.pfCooldownStyleAnimation = cooldown_anim
     plate.debuffs[index].cd.pfCooldownType = "ALL"
   end
 
@@ -1000,7 +1000,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
           end
 
           if duration and timeleft and debuffdurations then
-            plate.debuffs[index].cd:SetAlpha(0)
+            local cooldown_anim = tonumber(C.nameplates.debuffanim) or 0
+            plate.debuffs[index].cd:SetAlpha(cooldown_anim == 1 and 1 or 0)
             plate.debuffs[index].cd:Show()
             CooldownFrame_SetTimer(plate.debuffs[index].cd, GetTime() + timeleft - duration, duration, 1)
           end
