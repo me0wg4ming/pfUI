@@ -32,6 +32,11 @@ local lastCastRanks = {}
 -- Speichert Spells die gefailed sind (miss/dodge/parry/etc.) für 1 Sekunde
 local lastFailedSpells = {}
 
+-- Combo Points Tracking
+local currentComboPoints = 0
+local lastSpentComboPoints = 0
+local lastSpentTime = 0
+
 -- Prüft ob ein Spell kürzlich gefailed ist (öffentliche Funktion für andere Module)
 function libdebuff:DidSpellFail(spell)
   if not spell then return false end
@@ -40,6 +45,14 @@ function libdebuff:DidSpellFail(spell)
     return true
   end
   return false
+end
+
+-- Gibt die zuletzt ausgegebenen Combo Points zurück (innerhalb 1 Sekunde)
+local function GetStoredComboPoints()
+  if lastSpentComboPoints > 0 and (GetTime() - lastSpentTime) < 1 then
+    return lastSpentComboPoints
+  end
+  return 0
 end
 
 -- Shared Debuffs: Diese werden von allen Spielern geteilt (nur einer kann drauf sein)
@@ -90,14 +103,20 @@ function libdebuff:GetDuration(effect, rank)
 
     if effect == L["dyndebuffs"]["Rupture"] then
       -- Rupture: +2 sec per combo point
-      duration = duration + GetComboPoints()*2
+      local cp = GetComboPoints() or 0
+      if cp == 0 then cp = GetStoredComboPoints() end
+      duration = duration + cp*2
     elseif effect == L["dyndebuffs"]["Kidney Shot"] then
       -- Kidney Shot: +1 sec per combo point
-      duration = duration + GetComboPoints()*1
+      local cp = GetComboPoints() or 0
+      if cp == 0 then cp = GetStoredComboPoints() end
+      duration = duration + cp*1
     elseif effect == "Rip" or effect == L["dyndebuffs"]["Rip"] then
       -- Rip (Turtle WoW): 10s base + 2s per additional combo point
       -- Base in table is 8, so: 8 + CP*2 = 10/12/14/16/18
-      duration = 8 + GetComboPoints()*2
+      local cp = GetComboPoints() or 0
+      if cp == 0 then cp = GetStoredComboPoints() end
+      duration = 8 + cp*2
     elseif effect == L["dyndebuffs"]["Demoralizing Shout"] then
       -- Booming Voice: 10% per talent
       local _,_,_,_,count = GetTalentInfo(2,1)
@@ -266,6 +285,11 @@ libdebuff:RegisterEvent("PLAYER_TARGET_CHANGED")
 libdebuff:RegisterEvent("SPELLCAST_STOP")
 libdebuff:RegisterEvent("UNIT_AURA")
 
+-- register combo points tracking for Druids and Rogues
+if class == "DRUID" or class == "ROGUE" then
+  libdebuff:RegisterEvent("PLAYER_COMBO_POINTS")
+end
+
 -- register seal handler
 if class == "PALADIN" then
   libdebuff:RegisterEvent("CHAT_MSG_COMBAT_SELF_HITS")
@@ -350,6 +374,16 @@ libdebuff:SetScript("OnEvent", function()
     end
   elseif event == "SPELLCAST_STOP" then
     libdebuff:PersistPending()
+  elseif event == "PLAYER_COMBO_POINTS" then
+    -- Track combo points for Druid AND Rogue (both use CP-based abilities)
+    if class ~= "DRUID" and class ~= "ROGUE" then return end
+    local current = GetComboPoints("player", "target") or 0
+    if current < currentComboPoints then
+      -- Combo points were spent!
+      lastSpentComboPoints = currentComboPoints
+      lastSpentTime = GetTime()
+    end
+    currentComboPoints = current
   end
 end)
 
