@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-6.2.5-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-6.2.6-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Enhanced-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Optional-yellow.svg)](https://gitea.com/avitasia/nampower)
@@ -11,6 +11,32 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+## What's New in Version 6.2.6 (January 27, 2026)
+
+### 🎯 Nameplate Debuff Timer Improvements
+
+- ✅ **New Option: Enable Debuff Timers** - Toggle for debuff timer display on nameplates
+  - Moved from hidden location (Appearance → Cooldown → "Display Debuff Durations") to Nameplates → Debuffs
+  - All timer-related options are now grouped together for better discoverability
+- ✅ **New Option: Show Timer Text** - Toggle the countdown text (e.g., "12s") on debuff icons
+  - Previously always shown, now configurable
+- ✅ **Show Timer Animation** - Existing pie-chart animation option, now properly grouped with other timer options
+
+### 🖼️ Unitframe Timer Config Fix (unitframes.lua)
+
+- ✅ **Live Config Updates** - "Show Timer Animation" and "Show Timer Text" now update immediately
+  - Previously: Changes only applied after buffs/debuffs were refreshed
+  - Now: Toggling the option instantly shows/hides the animation and text on existing buffs/debuffs
+
+### 🐱 Combo Point Ability Fixes (libdebuff.lua)
+
+- ✅ **Rogue & Druid Combo Point Tracking** - Fixed duration calculation for combo point abilities
+  - Rupture, Kidney Shot, and Rip now correctly calculate duration based on combo points spent
+  - Added `PLAYER_COMBO_POINTS` event tracking for both Rogues AND Druids
+  - Stores combo points before they're consumed, ensuring accurate duration calculation
+  - Fixes issue where abilities showed incorrect duration when combo points were already spent at cast time
 
 ---
 ## What's New in Version 6.2.5 (January 21, 2026)
@@ -450,7 +476,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 6.2.5
-**Release Date:** January 21, 2026  
+**Version:** 6.2.6
+**Release Date:** January 27, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable

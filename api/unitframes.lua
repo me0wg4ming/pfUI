@@ -758,6 +758,17 @@ function pfUI.uf:UpdateConfig()
       f.buffs[i].cd.pfCooldownType = "ALL"
       f.buffs[i].cd.pfCooldownStyleText = cooldown_text
       f.buffs[i].cd.pfCooldownStyleAnimation = cooldown_anim
+      f.buffs[i].cd:SetAlpha(cooldown_anim == 1 and 1 or 0)
+      
+      -- immediately show/hide existing cooldown text
+      if f.buffs[i].cd.pfCooldownText then
+        if cooldown_text == 1 then
+          f.buffs[i].cd.pfCooldownText:Show()
+        else
+          f.buffs[i].cd.pfCooldownText:Hide()
+        end
+      end
+      
       f.buffs[i].id = i
       f.buffs[i]:Hide()
 
@@ -850,6 +861,17 @@ function pfUI.uf:UpdateConfig()
       f.debuffs[i].cd.pfCooldownType = "ALL"
       f.debuffs[i].cd.pfCooldownStyleText = cooldown_text
       f.debuffs[i].cd.pfCooldownStyleAnimation = cooldown_anim
+      f.debuffs[i].cd:SetAlpha(cooldown_anim == 1 and 1 or 0)
+      
+      -- immediately show/hide existing cooldown text
+      if f.debuffs[i].cd.pfCooldownText then
+        if cooldown_text == 1 then
+          f.debuffs[i].cd.pfCooldownText:Show()
+        else
+          f.debuffs[i].cd.pfCooldownText:Hide()
+        end
+      end
+      
       f.debuffs[i].id = i
       f.debuffs[i]:Hide()
 
