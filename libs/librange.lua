@@ -123,12 +123,25 @@ combo:SetScript("OnEvent", function()
   hascombopoints = GetComboPoints() > 0
 end)
 
+-- Flag to prevent UnitXP calls during logout (crash prevention)
+local librange_isLoggingOut = false
+
 librange:Hide()
 librange:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 librange:RegisterEvent("PLAYER_ENTERING_WORLD")
 librange:RegisterEvent("PLAYER_ENTER_COMBAT")
 librange:RegisterEvent("PLAYER_LEAVE_COMBAT")
+librange:RegisterEvent("PLAYER_LOGOUT")
+librange:RegisterEvent("PLAYER_LEAVING_WORLD")
 librange:SetScript("OnEvent", function()
+  -- Handle logout to prevent UnitXP crashes during shutdown
+  if event == "PLAYER_LOGOUT" or event == "PLAYER_LEAVING_WORLD" then
+    librange_isLoggingOut = true
+    this:SetScript("OnUpdate", nil)  -- Stop OnUpdate completely
+    this:Hide()
+    return
+  end
+
   -- disable range checking activities
   if pfUI_config.unitframes.rangecheck == "0" or not spells[class] then
     this:Hide()
@@ -156,6 +169,9 @@ local target_event = TargetFrame_OnEvent
 local target_nop = function() return end
 
 librange:SetScript("OnUpdate", function()
+  -- Prevent UnitXP calls during logout (crash prevention)
+  if librange_isLoggingOut then return end
+
   if ( this.tick or 1) > GetTime() then
     return
   else
