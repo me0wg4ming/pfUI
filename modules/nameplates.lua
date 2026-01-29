@@ -303,17 +303,26 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local cooldown_text = tonumber(C.nameplates.debufftext) or 1
 
     if pfUI.client <= 11200 then
-      -- Use Model frame with CooldownFrameTemplate for proper pie animation in Vanilla
-      plate.debuffs[index].cd = CreateFrame("Model", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
-      plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
-    else
-      -- use regular cooldown animation frames on burning crusade and later
+      -- Animation enabled: Use Model frame with CooldownFrameTemplate
       plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
+      plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
+      plate.debuffs[index].cd.pfCooldownStyleAnimation = 1
+      plate.debuffs[index].cd.pfCooldownStyleText = cooldown_text
+      plate.debuffs[index].cd.pfCooldownType = "ALL"
+    else
+      -- Animation disabled: Create fake cooldown frame for performance (like ShaguPlates)
+      plate.debuffs[index].cd = CreateFrame("Frame", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index])
+      plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
+      
+      -- Add dummy functions so CooldownFrame_SetTimer doesn't crash
+      plate.debuffs[index].cd.AdvanceTime = DoNothing
+      plate.debuffs[index].cd.SetSequence = DoNothing
+      plate.debuffs[index].cd.SetSequenceTime = DoNothing
+      
+      plate.debuffs[index].cd.pfCooldownStyleAnimation = 0
+      plate.debuffs[index].cd.pfCooldownStyleText = cooldown_text
+      plate.debuffs[index].cd.pfCooldownType = "ALL"
     end
-
-    plate.debuffs[index].cd.pfCooldownStyleAnimation = cooldown_anim
-    plate.debuffs[index].cd.pfCooldownStyleText = cooldown_text
-    plate.debuffs[index].cd.pfCooldownType = "ALL"
   end
 
   local function UpdateDebuffConfig(nameplate, i)
@@ -1000,11 +1009,15 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
           end
 
           if duration and timeleft and C.nameplates.debufftimers == "1" then
+            -- Read config values for cooldown display
             local cooldown_anim = tonumber(C.nameplates.debuffanim) or 0
             local cooldown_text = tonumber(C.nameplates.debufftext) or 1
-            plate.debuffs[index].cd.pfCooldownStyleAnimation = cooldown_anim
+            
+            -- Ensure cooldown flags are set
             plate.debuffs[index].cd.pfCooldownStyleText = cooldown_text
-            plate.debuffs[index].cd:SetAlpha(cooldown_anim == 1 and 1 or 0)
+            plate.debuffs[index].cd.pfCooldownStyleAnimation = cooldown_anim
+            plate.debuffs[index].cd.pfCooldownType = "ALL"
+            
             plate.debuffs[index].cd:Show()
             CooldownFrame_SetTimer(plate.debuffs[index].cd, GetTime() + timeleft - duration, duration, 1)
           end
