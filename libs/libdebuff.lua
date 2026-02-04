@@ -262,18 +262,6 @@ local combopointAbilities = {
 -- HELPER FUNCTIONS
 -- ============================================================================
 
--- Combo Points Tracking
-local currentComboPoints = 0
-local lastSpentComboPoints = 0
-local lastSpentTime = 0
-
-local function GetStoredComboPoints()
-  if lastSpentComboPoints > 0 and (GetTime() - lastSpentTime) < 1 then
-    return lastSpentComboPoints
-  end
-  return 0
-end
-
 -- Player GUID Cache
 local playerGUID = nil
 local function GetPlayerGUID()
@@ -606,15 +594,12 @@ function libdebuff:GetDuration(effect, rank)
 
     if effect == L["dyndebuffs"]["Rupture"] then
       local cp = GetComboPoints() or 0
-      if cp == 0 then cp = GetStoredComboPoints() end
       duration = duration + cp*2
     elseif effect == L["dyndebuffs"]["Kidney Shot"] then
       local cp = GetComboPoints() or 0
-      if cp == 0 then cp = GetStoredComboPoints() end
       duration = duration + cp*1
     elseif effect == "Rip" or effect == L["dyndebuffs"]["Rip"] then
       local cp = GetComboPoints() or 0
-      if cp == 0 then cp = GetStoredComboPoints() end
       duration = 8 + cp*2
     elseif effect == L["dyndebuffs"]["Demoralizing Shout"] then
       local _,_,_,_,count = GetTalentInfo(2,1)
@@ -1005,7 +990,6 @@ if hasNampower then
   
   local frame = CreateFrame("Frame")
   frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-  frame:RegisterEvent("PLAYER_COMBO_POINTS")
   frame:RegisterEvent("PLAYER_TALENT_UPDATE")
   frame:RegisterEvent("PLAYER_LOGOUT")
   frame:RegisterEvent("SPELL_START_SELF")
@@ -1032,15 +1016,6 @@ if hasNampower then
       
     elseif event == "PLAYER_TALENT_UPDATE" then
       UpdateCarnageRank()
-      
-    elseif event == "PLAYER_COMBO_POINTS" then
-      if class ~= "DRUID" and class ~= "ROGUE" then return end
-      local current = GetComboPoints("player", "target") or 0
-      if current < currentComboPoints then
-        lastSpentComboPoints = currentComboPoints
-        lastSpentTime = GetTime()
-      end
-      currentComboPoints = current
       
     elseif event == "UNIT_HEALTH" then
       local guid = arg1
@@ -1110,48 +1085,70 @@ if hasNampower then
         }
       end
       
-      -- CARNAGE TALENT: Ferocious Bite refreshes Rip & Rake (only on HIT, only for us, only with 5 CP)
-      -- This must happen AFTER the spell hits (SPELL_GO), not on AURA_CAST
-      if class == "DRUID" and carnageRank == 2 and spellName == "Ferocious Bite" and casterGuid == myGuid then
-        local cp = lastSpentComboPoints or 0
-        if targetGuid and numHit > 0 and cp == 5 then
-          -- Refresh in ownDebuffs
-          if ownDebuffs[targetGuid] then
-            if ownDebuffs[targetGuid]["Rip"] then
-              ownDebuffs[targetGuid]["Rip"].startTime = GetTime()
-              if debugStats.enabled then
-                DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rip refreshed (5 CP)")
+      -- CARNAGE TALENT: Ferocious Bite refreshes Rip & Rake
+      -- NEW METHOD: Check for combo point gain after Bite (indicates Carnage proc)
+      -- Carnage gives +1 CP immediately after Bite if it procs
+      if class == "DRUID" and carnageRank >= 1 and spellName == "Ferocious Bite" and casterGuid == myGuid then
+        if targetGuid and numHit > 0 then
+          -- Schedule delayed check (50ms to allow CP to register)
+          local checkFrame = CreateFrame("Frame")
+          checkFrame.targetGuid = targetGuid
+          checkFrame.startTime = GetTime()
+          
+          checkFrame:SetScript("OnUpdate", function()
+            -- Wait 0.05 seconds
+            if GetTime() - this.startTime >= 0.05 then
+              -- Check if we gained a combo point (indicates Carnage proc)
+              local cp = GetComboPoints() or 0
+              
+              if cp > 0 then
+                -- Carnage triggered! Refresh Rip & Rake
+                local guid = this.targetGuid
+                local refreshTime = GetTime()
+                
+                -- Refresh in ownDebuffs
+                if ownDebuffs[guid] then
+                  if ownDebuffs[guid]["Rip"] then
+                    ownDebuffs[guid]["Rip"].startTime = refreshTime
+                    if debugStats.enabled then
+                      DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rip refreshed (CP detected)")
+                    end
+                  end
+                  if ownDebuffs[guid]["Rake"] then
+                    ownDebuffs[guid]["Rake"].startTime = refreshTime
+                    if debugStats.enabled then
+                      DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rake refreshed (CP detected)")
+                    end
+                  end
+                end
+                
+                -- Refresh in allAuraCasts
+                if allAuraCasts[guid] then
+                  if allAuraCasts[guid]["Rip"] and allAuraCasts[guid]["Rip"][myGuid] then
+                    allAuraCasts[guid]["Rip"][myGuid].startTime = refreshTime
+                  end
+                  if allAuraCasts[guid]["Rake"] and allAuraCasts[guid]["Rake"][myGuid] then
+                    allAuraCasts[guid]["Rake"][myGuid].startTime = refreshTime
+                  end
+                end
+                
+                -- Trigger UI updates
+                if pfTarget and UnitExists("target") then
+                  local _, currentTargetGuid = UnitExists("target")
+                  if currentTargetGuid == guid then
+                    pfTarget.update_aura = true
+                  end
+                end
+                
+                if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
+                  pfUI.nameplates:OnAuraUpdate(guid)
+                end
               end
+              
+              -- Cleanup: Remove OnUpdate handler
+              this:SetScript("OnUpdate", nil)
             end
-            if ownDebuffs[targetGuid]["Rake"] then
-              ownDebuffs[targetGuid]["Rake"].startTime = GetTime()
-              if debugStats.enabled then
-                DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rake refreshed (5 CP)")
-              end
-            end
-          end
-          
-          -- Refresh in allAuraCasts
-          if allAuraCasts[targetGuid] then
-            if allAuraCasts[targetGuid]["Rip"] and allAuraCasts[targetGuid]["Rip"][myGuid] then
-              allAuraCasts[targetGuid]["Rip"][myGuid].startTime = GetTime()
-            end
-            if allAuraCasts[targetGuid]["Rake"] and allAuraCasts[targetGuid]["Rake"][myGuid] then
-              allAuraCasts[targetGuid]["Rake"][myGuid].startTime = GetTime()
-            end
-          end
-          
-          -- Trigger UI updates
-          if pfTarget and UnitExists("target") then
-            local _, currentTargetGuid = UnitExists("target")
-            if currentTargetGuid == targetGuid then
-              pfTarget.update_aura = true
-            end
-          end
-          
-          if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-            pfUI.nameplates:OnAuraUpdate(targetGuid)
-          end
+          end)
         end
       end
       
@@ -1216,11 +1213,7 @@ if hasNampower then
       
       -- CP-based spells: Force duration=0 for others (unknown!)
       if not isOurs and combopointAbilities[spellName] then
-        if spellName == "Expose Armor" then
-          duration = 30  -- Fixed duration for Expose Armor
-        else
-          duration = 0
-        end
+        duration = 0
       end
       
       -- Store in allAuraCasts
