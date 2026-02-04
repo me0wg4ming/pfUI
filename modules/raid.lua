@@ -113,6 +113,27 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
       end
     end
 
+    -- Smart GUID-based updates: only refresh frames where unit changed
+    if pfUI.uf.guidTracker then
+      local tracker = pfUI.uf.guidTracker
+      
+      for i = 1, maxraid do
+        local frame = pfUI.uf.raid[i]
+        if frame and frame.id and frame.id > 0 then
+          local unit = "raid" .. frame.id
+          local _, newGuid = UnitExists(unit)
+          local oldGuid = tracker.frameToGuid[frame]
+          
+          if newGuid ~= oldGuid then
+            -- GUID changed = different player = need full update
+            tracker.frameToGuid[frame] = newGuid
+            frame.update_full = true
+            frame.update_aura = true  -- Force aura refresh!
+          end
+        end
+      end
+    end
+
     -- rebuild unitmap after frame IDs are assigned
     if pfUI.uf.RebuildUnitmap then
       pfUI.uf.RebuildUnitmap()

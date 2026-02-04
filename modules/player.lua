@@ -15,8 +15,8 @@ pfUI:RegisterModule("player", "vanilla:tbc", function ()
   if pfUI.uf.player:GetScript("OnUpdate") then
     local originalOnUpdate = pfUI.uf.player:GetScript("OnUpdate")
     pfUI.uf.player:SetScript("OnUpdate", function()
-      if (this.tick or 0) > GetTime() then return end
-      this.tick = GetTime() + 0.1
+      if (this.throttleTick or 0) > GetTime() then return end
+      this.throttleTick = GetTime() + 0.1
       originalOnUpdate()
     end)
   end

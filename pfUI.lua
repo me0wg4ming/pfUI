@@ -47,6 +47,11 @@ pfUI.version = {}
 pfUI.hooks = {}
 pfUI.env = {}
 
+-- check if macro addons are loaded (disables macrotweak/macroscan)
+function pfUI:MacroAddonsLoaded()
+  return IsAddOnLoaded("Supermacro") or IsAddOnLoaded("SuperCleveRoidMacros") or IsAddOnLoaded("UltimaMacros")
+end
+
 -- detect current addon path
 local tocs = { "", "-master", "-tbc", "-wotlk" }
 for _, name in pairs(tocs) do

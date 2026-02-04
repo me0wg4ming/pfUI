@@ -891,6 +891,15 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "7:" .. T["Small"],
         "8:" .. T["Tiny (PixelPerfect)"],
       },
+      ["abbrevnum"] = {
+        "0:" .. T["Full Numbers (4250)"],
+        "1:" .. T["Abbreviate 2 Decimals (4.25k)"],
+        "2:" .. T["Abbreviate 1 Decimal (4.2k)"],
+      },
+      ["castbardecimals"] = {
+        "1:" .. T["1 Decimal (2.1)"],
+        "2:" .. T["2 Decimals (2.14)"],
+      },
       ["orientation"] = {
         "HORIZONTAL:" .. T["Horizontal"],
         "VERTICAL:" .. T["Vertical"],
@@ -1378,7 +1387,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       donate:SetHeight(20)
       donate:SetText(T["Donate"])
       donate:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://ko-fi.com/shagu")
+        pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI")
       end)
       SkinButton(donate)
 
@@ -1388,7 +1397,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       github:SetHeight(20)
       github:SetText(T["GitHub"])
       github:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://github.com/shagu/pfUI")
+        pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI")
       end)
       SkinButton(github)
 
@@ -1398,7 +1407,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       website:SetHeight(20)
       website:SetText(T["Website"])
       website:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://shagu.org/pfUI")
+        pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI")
       end)
       SkinButton(website)
     end)
@@ -1496,7 +1505,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Disable Errors in UIErrors Frame"], C.global, "errors_hide", "checkbox")
       CreateConfig(nil, T["Highlight Settings That Require Reload"], C.gui, "reloadmarker", "checkbox")
       CreateConfig(nil, T["Show Incompatible Config Entries"], C.gui, "showdisabled", "checkbox")
-      CreateConfig(nil, T["Abbreviate Numbers (4200 -> 4.2k)"], C.unitframes, "abbrevnum", "checkbox")
+      CreateConfig(nil, T["Abbreviate Numbers"], C.unitframes, "abbrevnum", "dropdown", pfUI.gui.dropdowns.abbrevnum)
+      CreateConfig(nil, T["Castbar Timer Decimals"], C.unitframes, "castbardecimals", "dropdown", pfUI.gui.dropdowns.castbardecimals)
       CreateConfig(nil, T["Abbreviate Unit Names"], C.unitframes, "abbrevname", "checkbox")
       CreateConfig(nil, T["Health Point Estimation"], nil, nil, "header")
       CreateConfig(nil, T["Estimate Enemy Health Points"], C.global, "libhealth", "checkbox")
@@ -1669,7 +1679,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Spell Queue Icon Size"], C.unitframes, "spellqueuesize", nil, nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Show Reactive Spell Indicator"], C.unitframes, "reactive_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Reactive Indicator Size"], C.unitframes, "reactive_size", nil, nil, nil, nil, nil, "vanilla" )
-      CreateConfig(nil, T["Enhanced Buff Tracking"], C.unitframes, "nampower_buffs", "checkbox", nil, nil, nil, nil, "vanilla" )
 
       CreateConfig(nil, T["UnitXP Settings"], nil, nil, "header")
       CreateConfig(nil, T["Show Line of Sight Indicator"], C.unitframes, "los_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
@@ -1831,7 +1840,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
         CreateConfig(U[c], T["Timer"], nil, nil, "header")
         CreateConfig(U[c], T["Show Timer Text"], C.unitframes[c], "cooldown_text", "checkbox")
-        CreateConfig(U[c], T["Show Timer Animation"], C.unitframes[c], "cooldown_anim", "checkbox")
+        CreateConfig(Reload, T["Show Timer Animation"], C.unitframes[c], "cooldown_anim", "checkbox")
 
         CreateConfig(U[c], T["Buffs"], nil, nil, "header")
         CreateConfig(U[c], T["Buff Position"], C.unitframes[c], "buffs", "dropdown", pfUI.gui.dropdowns.uf_buff_position)
@@ -2032,7 +2041,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["bars"], T["Button Animation"], C.bars, "animation", "dropdown", pfUI.gui.dropdowns.actionbuttonanimations)
       CreateConfig(U["bars"], T["Button Animation Trigger"], C.bars, "animmode", "dropdown", pfUI.gui.dropdowns.animationmode)
       CreateConfig(U["bars"], T["Show Animation On Hidden Bars"], C.bars, "animalways", "checkbox")
-      CreateConfig(U["bars"], T["Scan Macros For Spells"], C.bars, "macroscan", "checkbox", nil, nil, nil, nil, "vanilla")
+      if not pfUI:MacroAddonsLoaded() then
+        CreateConfig(U["bars"], T["Scan Macros For Spells"], C.bars, "macroscan", "checkbox", nil, nil, nil, nil, "vanilla")
+      end
       CreateConfig(U["bars"], T["Show Reagent Count"], C.bars, "reagents", "checkbox")
       CreateConfig(U["bars"], T["Highlight Equipped Items"], C.bars, "showequipped", "checkbox")
       CreateConfig(U["bars"], T["Equipped Item Color"], C.bars, "eqcolor", "color")
@@ -2357,7 +2368,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Show Debuff Stacks"], C.nameplates.debuffs, "showstacks", "checkbox")
       CreateConfig(U["nameplates"], T["Enable Debuff Timers"], C.nameplates, "debufftimers", "checkbox")
       CreateConfig(U["nameplates"], T["Show Timer Text"], C.nameplates, "debufftext", "checkbox")
-      CreateConfig(nil, T["Show Timer Animation"], C.nameplates, "debuffanim", "checkbox")
+      CreateConfig(Reload, T["Show Timer Animation"], C.nameplates, "debuffanim", "checkbox")
+
       CreateConfig(U["nameplates"], T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.nameplates, "selfdebuff", "checkbox")
       CreateConfig(U["nameplates"], T["Filter Mode"], C.nameplates.debuffs, "filter", "dropdown", pfUI.gui.dropdowns.buffbarfilter)
       CreateConfig(U["nameplates"], T["Blacklist"], C.nameplates.debuffs, "blacklist", "list")
@@ -2448,7 +2460,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
     CreateGUIEntry(T["Components"], T["Modules"], function()
       table.sort(pfUI.modules)
       for i,m in pairs(pfUI.modules) do
-        if m ~= "gui" then
+        -- skip gui and macrotweak when macro addons are loaded
+        if m ~= "gui" and not (m == "macrotweak" and pfUI:MacroAddonsLoaded()) then
           -- create disabled entry if not existing and display
           pfUI:UpdateConfig("disabled", nil, m, "0")
           CreateConfig(nil, T["Disable Module"] .. " " .. m, C.disabled, m, "checkbox")

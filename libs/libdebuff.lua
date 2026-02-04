@@ -1,14 +1,19 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
---[[ libdebuff ]]--
+--[[ libdebuff - GetUnitField Edition ]]--
 -- A pfUI library that detects and saves all ongoing debuffs of players, NPCs and enemies.
--- The functions UnitDebuff is exposed to the modules which allows to query debuffs like you
--- would on later expansions.
+-- 
+-- MAJOR REWRITE: Now uses GetUnitField for slot mapping instead of manual shifting.
+-- Key insight: GetUnitField returns STABLE aura slots (33-48) that DON'T shift when 
+-- debuffs expire. Only the display slots (UnitDebuff returns 1,2,3...) are compacted.
+--
+-- This eliminates ~400 lines of error-prone shift logic while maintaining full
+-- multi-caster tracking support.
 --
 --  libdebuff:UnitDebuff(unit, id)
 --    Returns debuff informations on the given effect of the specified unit.
---    name, rank, texture, stacks, dtype, duration, timeleft
+--    name, rank, texture, stacks, dtype, duration, timeleft, caster
 
 -- return instantly if we're not on a vanilla client
 if pfUI.client > 11200 then return end
@@ -26,18 +31,334 @@ local scanner = libtipscan:GetScanner("libdebuff")
 local _, class = UnitClass("player")
 local lastspell
 
--- Speichert die Ranks der zuletzt gecasteten Spells (bleibt länger als pending)
-local lastCastRanks = {}
+-- Nampower Support
+local hasNampower = false
 
--- Speichert Spells die gefailed sind (miss/dodge/parry/etc.) für 1 Sekunde
-local lastFailedSpells = {}
+-- Set hasNampower immediately for functionality
+if GetNampowerVersion then
+  local major, minor, patch = GetNampowerVersion()
+  patch = patch or 0
+  -- Minimum required version: 2.27.2 (SPELL_FAILED_OTHER fix)
+  if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+    hasNampower = true
+  end
+end
+
+-- Delayed Nampower version check (5 seconds after PLAYER_ENTERING_WORLD)
+local nampowerCheckFrame = CreateFrame("Frame")
+local nampowerCheckTimer = 0
+local nampowerCheckDone = false
+nampowerCheckFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+nampowerCheckFrame:RegisterEvent("PLAYER_LOGOUT")
+nampowerCheckFrame:SetScript("OnEvent", function()
+  -- Handle shutdown to prevent crash 132
+  if event == "PLAYER_LOGOUT" then
+    this:UnregisterAllEvents()
+    this:SetScript("OnEvent", nil)
+    this:SetScript("OnUpdate", nil)
+    return
+  end
+  
+  nampowerCheckFrame:SetScript("OnUpdate", function()
+    nampowerCheckTimer = nampowerCheckTimer + arg1
+    if nampowerCheckTimer >= 5 and not nampowerCheckDone then
+      nampowerCheckDone = true
+      
+      if GetNampowerVersion then
+        local major, minor, patch = GetNampowerVersion()
+        patch = patch or 0
+        local versionString = major .. "." .. minor .. "." .. patch
+        
+        if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+          DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
+          
+          -- Enable required Nampower CVars
+          if SetCVar and GetCVar then
+            local cvarsToEnable = {
+              "NP_EnableSpellStartEvents",
+              "NP_EnableSpellGoEvents", 
+              "NP_EnableAuraCastEvents",
+              "NP_EnableAutoAttackEvents"
+            }
+            
+            local totalCvars = table.getn(cvarsToEnable)
+            local enabledCount = 0
+            local alreadyEnabledCount = 0
+            local failedCount = 0
+            
+            for _, cvar in ipairs(cvarsToEnable) do
+              local success, currentValue = pcall(GetCVar, cvar)
+              if success and currentValue then
+                if currentValue == "1" then
+                  alreadyEnabledCount = alreadyEnabledCount + 1
+                else
+                  local setSuccess = pcall(SetCVar, cvar, "1")
+                  if setSuccess then
+                    enabledCount = enabledCount + 1
+                  else
+                    failedCount = failedCount + 1
+                  end
+                end
+              else
+                failedCount = failedCount + 1
+              end
+            end
+            
+            if enabledCount > 0 then
+              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Enabled " .. enabledCount .. " Nampower CVars")
+            end
+            
+            if alreadyEnabledCount == totalCvars then
+              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r All required Nampower CVars already enabled")
+            elseif alreadyEnabledCount > 0 then
+              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r " .. alreadyEnabledCount .. " CVars were already enabled")
+            end
+            
+            if failedCount > 0 then
+              DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff]|r Warning: Could not check/set " .. failedCount .. " CVars")
+            end
+          end
+          
+        elseif major == 2 and minor == 27 and patch == 1 then
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.27.1 detected!|r")
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.27.2 or higher!|r")
+          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
+        else
+          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.27.2 or higher.|r")
+          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
+        end
+      else
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Nampower not found! Debuff tracking disabled.|r")
+        StaticPopup_Show("LIBDEBUFF_NAMPOWER_MISSING")
+      end
+      
+      nampowerCheckFrame:SetScript("OnUpdate", nil)
+    end
+  end)
+end)
+
+-- ============================================================================
+-- DATA STRUCTURES (Simplified - no more manual slot tracking!)
+-- ============================================================================
+
+-- ownDebuffs: [targetGUID][spellName] = {startTime, duration, texture, rank}
+-- Timer data for OUR debuffs only
+pfUI.libdebuff_own = pfUI.libdebuff_own or {}
+local ownDebuffs = pfUI.libdebuff_own
+
+-- allAuraCasts: [targetGUID][spellName][casterGuid] = {startTime, duration, rank}
+-- Timer data for ALL debuffs (multi-caster support)
+pfUI.libdebuff_all_auras = pfUI.libdebuff_all_auras or {}
+local allAuraCasts = pfUI.libdebuff_all_auras
+
+-- slotOwnership: [targetGUID][auraSlot] = {casterGuid, spellName, spellId}
+-- Maps REAL aura slots (33-48) to caster info - NO SHIFTING NEEDED!
+pfUI.libdebuff_slot_ownership = pfUI.libdebuff_slot_ownership or {}
+local slotOwnership = pfUI.libdebuff_slot_ownership
+
+-- displayToAura: [targetGUID][displaySlot] = auraSlot
+-- Maps DISPLAY slots (1-16) to REAL aura slots (33-48) for DEBUFF_REMOVED correlation
+pfUI.libdebuff_display_to_aura = pfUI.libdebuff_display_to_aura or {}
+local displayToAura = pfUI.libdebuff_display_to_aura
+
+-- pendingCasts: [targetGUID][spellName] = {casterGuid, rank, time}
+-- Temporary storage from SPELL_GO to correlate with DEBUFF_ADDED
+pfUI.libdebuff_pending = pfUI.libdebuff_pending or {}
+local pendingCasts = pfUI.libdebuff_pending
+
+-- Spell Icon Cache: [spellId] = texture
+pfUI.libdebuff_icon_cache = pfUI.libdebuff_icon_cache or {}
+local iconCache = pfUI.libdebuff_icon_cache
+
+-- Cast Tracking: [casterGuid] = {spellID, spellName, icon, startTime, duration, endTime}
+-- Shared with nameplates for cast-bar display
+pfUI.libdebuff_casts = pfUI.libdebuff_casts or {}
+
+-- Cleveroids API: [targetGUID][spellID] = {start, duration, caster, stacks}
+pfUI.libdebuff_objects_guid = pfUI.libdebuff_objects_guid or {}
+local objectsByGuid = pfUI.libdebuff_objects_guid
+
+-- LEGACY: Keep these for backwards compatibility (external modules might check them)
+pfUI.libdebuff_own_slots = pfUI.libdebuff_own_slots or {}
+pfUI.libdebuff_all_slots = pfUI.libdebuff_all_slots or {}
+
+-- Deduplication: Track recent AURA_CAST events to ignore duplicates
+-- [targetGuid][spellName][casterGuid] = timestamp
+pfUI.libdebuff_recent_casts = pfUI.libdebuff_recent_casts or {}
+local recentCasts = pfUI.libdebuff_recent_casts
+local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
+
+-- ============================================================================
+-- STATIC POPUP DIALOGS
+-- ============================================================================
+
+StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
+  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.27.2+\n\nPlease update Nampower!",
+  button1 = "OK",
+  timeout = 0,
+  whileDead = 1,
+  hideOnEscape = 1,
+  preferredIndex = 3,
+  OnAccept = function()
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.27.2")
+  end,
+}
+
+StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
+  text = "Nampower Not Found!\n\nNampower 2.27.2+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
+  button1 = "OK",
+  timeout = 0,
+  whileDead = 1,
+  hideOnEscape = 1,
+  preferredIndex = 3,
+}
+
+-- ============================================================================
+-- SPELL DATA TABLES
+-- ============================================================================
+
+-- Debuffs that only ONE player can have on target (overwrites other casters)
+local selfOverwriteDebuffs = {
+  ["Faerie Fire"] = true,
+  ["Faerie Fire (Feral)"] = true,
+  ["Demoralizing Shout"] = true,
+  ["Demoralizing Roar"] = true,
+  ["Hunter's Mark"] = true,
+  ["Sunder Armor"] = true,
+  ["Thunder Clap"] = true,
+  ["Expose Armor"] = true,
+  ["Curse of Weakness"] = true,
+  ["Curse of Recklessness"] = true,
+  ["Curse of the Elements"] = true,
+  ["Curse of Shadow"] = true,
+  ["Curse of Tongues"] = true,
+  ["Curse of Exhaustion"] = true,
+  ["Judgement of Wisdom"] = true,
+  ["Judgement of Light"] = true,
+  ["Judgement of the Crusader"] = true,
+  ["Judgement of Justice"] = true,
+  ["Shadow Weaving"] = true,
+  ["Winter's Chill"] = true,
+}
+
+-- Debuff pairs that overwrite each other
+local debuffOverwritePairs = {
+  ["Faerie Fire"] = "Faerie Fire (Feral)",
+  ["Faerie Fire (Feral)"] = "Faerie Fire",
+  ["Demoralizing Shout"] = "Demoralizing Roar",
+  ["Demoralizing Roar"] = "Demoralizing Shout",
+}
+
+-- Combopoint-based abilities: Only show timers for OUR casts
+local combopointAbilities = {
+  ["Rip"] = true,
+  ["Rupture"] = true,
+  ["Kidney Shot"] = true,
+  ["Slice and Dice"] = true,
+  ["Expose Armor"] = true,
+}
+
+-- ============================================================================
+-- HELPER FUNCTIONS
+-- ============================================================================
 
 -- Combo Points Tracking
 local currentComboPoints = 0
 local lastSpentComboPoints = 0
 local lastSpentTime = 0
 
--- Prüft ob ein Spell kürzlich gefailed ist (öffentliche Funktion für andere Module)
+local function GetStoredComboPoints()
+  if lastSpentComboPoints > 0 and (GetTime() - lastSpentTime) < 1 then
+    return lastSpentComboPoints
+  end
+  return 0
+end
+
+-- Player GUID Cache
+local playerGUID = nil
+local function GetPlayerGUID()
+  if not playerGUID and UnitExists then
+    local _, guid = UnitExists("player")
+    playerGUID = guid
+  end
+  return playerGUID
+end
+
+-- Debug Stats
+pfUI.libdebuff_debugstats = pfUI.libdebuff_debugstats or {
+  enabled = false,
+  trackAllUnits = false,
+  aura_cast = 0,
+  debuff_added = 0,
+  debuff_removed = 0,
+  getunitfield_calls = 0,
+}
+local debugStats = pfUI.libdebuff_debugstats
+
+local function DebugGuid(guid)
+  if not guid then return "nil" end
+  local str = tostring(guid)
+  if string.len(str) > 4 then
+    return string.sub(str, -4)
+  end
+  return str
+end
+
+local function IsCurrentTarget(guid)
+  if debugStats.trackAllUnits then return true end
+  if not guid or not UnitExists then return false end
+  local _, targetGuid = UnitExists("target")
+  return targetGuid == guid
+end
+
+local function GetDebugTimestamp()
+  return string.format("[%.3f]", GetTime())
+end
+
+-- Speichert die Ranks der zuletzt gecasteten Spells
+pfUI.libdebuff_lastranks = pfUI.libdebuff_lastranks or {}
+local lastCastRanks = pfUI.libdebuff_lastranks
+
+-- Speichert Spells die gefailed sind
+pfUI.libdebuff_lastfailed = pfUI.libdebuff_lastfailed or {}
+local lastFailedSpells = pfUI.libdebuff_lastfailed
+
+-- Get spell icon texture (with caching)
+function libdebuff:GetSpellIcon(spellId)
+  if not spellId or type(spellId) ~= "number" or spellId <= 0 then
+    return "Interface\\Icons\\INV_Misc_QuestionMark"
+  end
+  
+  if iconCache[spellId] then
+    return iconCache[spellId]
+  end
+  
+  local texture = nil
+  
+  if GetSpellRecField and GetSpellIconTexture then
+    local spellIconId = GetSpellRecField(spellId, "spellIconID")
+    if spellIconId and type(spellIconId) == "number" and spellIconId > 0 then
+      texture = GetSpellIconTexture(spellIconId)
+    end
+  end
+  
+  if not texture and SpellInfo then
+    local _, _, spellTexture = SpellInfo(spellId)
+    texture = spellTexture
+  end
+  
+  if not texture then
+    texture = "Interface\\Icons\\INV_Misc_QuestionMark"
+  end
+  
+  iconCache[spellId] = texture
+  return texture
+end
+
+pfUI.libdebuff_GetSpellIcon = function(spellId)
+  return libdebuff:GetSpellIcon(spellId)
+end
+
 function libdebuff:DidSpellFail(spell)
   if not spell then return false end
   local data = lastFailedSpells[spell]
@@ -47,53 +368,235 @@ function libdebuff:DidSpellFail(spell)
   return false
 end
 
--- Gibt die zuletzt ausgegebenen Combo Points zurück (innerhalb 1 Sekunde)
-local function GetStoredComboPoints()
-  if lastSpentComboPoints > 0 and (GetTime() - lastSpentTime) < 1 then
-    return lastSpentComboPoints
+-- ============================================================================
+-- CORE: GetUnitField-based Slot Mapping (THE KEY INNOVATION!)
+-- ============================================================================
+
+-- Cache for GetDebuffSlotMap to reduce GetUnitField calls
+-- [guid] = {map, timestamp}
+local slotMapCache = {}
+local SLOT_MAP_CACHE_DURATION = 0.05  -- 50ms cache (1-2 frames)
+
+-- Get current debuff state directly from WoW via GetUnitField
+-- Returns: { [displaySlot] = {auraSlot, spellId, spellName} }
+local function GetDebuffSlotMap(guid)
+  if not guid or not GetUnitField or not SpellInfo then
+    return nil
   end
-  return 0
+  
+  -- Check cache first
+  local now = GetTime()
+  local cached = slotMapCache[guid]
+  if cached and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
+    return cached.map
+  end
+  
+  local auras = GetUnitField(guid, "aura")
+  if not auras then return nil end
+  
+  if debugStats.enabled then
+    debugStats.getunitfield_calls = debugStats.getunitfield_calls + 1
+  end
+  
+  local map = {}
+  local displaySlot = 0
+  
+  -- Debuff aura slots are 33-48
+  for auraSlot = 33, 48 do
+    local spellId = auras[auraSlot]
+    if spellId and spellId > 0 then
+      displaySlot = displaySlot + 1
+      local spellName = SpellInfo(spellId)
+      
+      map[displaySlot] = {
+        auraSlot = auraSlot,
+        spellId = spellId,
+        spellName = spellName or "Unknown"
+      }
+    end
+  end
+  
+  -- Cache the result
+  slotMapCache[guid] = {
+    map = map,
+    timestamp = now
+  }
+  
+  return map
 end
 
--- Shared Debuffs: Diese werden von allen Spielern geteilt (nur einer kann drauf sein)
--- Timer darf von anderen Spielern aktualisiert werden
-local sharedDebuffs = {
-  -- Warrior
-  ["Sunder Armor"] = true,
-  ["Demoralizing Shout"] = true,
-  ["Thunder Clap"] = true,
+-- Get caster info for a specific aura slot
+local function GetSlotCaster(guid, auraSlot, spellName)
+  -- First check our ownership tracking
+  if slotOwnership[guid] and slotOwnership[guid][auraSlot] then
+    local ownership = slotOwnership[guid][auraSlot]
+    -- Verify spell name matches (slot might have been reused)
+    if ownership.spellName == spellName then
+      return ownership.casterGuid, ownership.isOurs
+    end
+  end
   
-  -- Rogue
-  ["Expose Armor"] = true,
+  -- Fallback: Check ownDebuffs
+  local myGuid = GetPlayerGUID()
+  if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+    return myGuid, true
+  end
   
-  -- Druid
-  ["Faerie Fire"] = true,
-  ["Faerie Fire (Feral)"] = true,
+  -- Fallback: Check allAuraCasts for any caster
+  if allAuraCasts[guid] and allAuraCasts[guid][spellName] then
+    for casterGuid, data in pairs(allAuraCasts[guid][spellName]) do
+      local timeleft = (data.startTime + data.duration) - GetTime()
+      if timeleft > 0 then
+        return casterGuid, (casterGuid == myGuid)
+      end
+    end
+  end
   
-  -- Hunter
-  ["Hunter's Mark"] = true,
+  return nil, false
+end
+
+-- ============================================================================
+-- CLEANUP FUNCTIONS
+-- ============================================================================
+
+local lastRangeCheck = 0
+
+local function CleanupUnit(guid)
+  if not guid then return false end
   
-  -- Warlock Curses (nur eine pro Typ kann auf Target sein)
-  ["Curse of Weakness"] = true,
-  ["Curse of Recklessness"] = true,
-  ["Curse of the Elements"] = true,
-  ["Curse of Shadow"] = true,
-  ["Curse of Tongues"] = true,
-  ["Curse of Exhaustion"] = true,
-  -- NICHT: Curse of Agony, Curse of Doom (jeder Warlock hat seinen eigenen!)
+  local cleaned = false
   
-  -- Priest
-  ["Shadow Weaving"] = true,
+  if ownDebuffs[guid] then
+    ownDebuffs[guid] = nil
+    cleaned = true
+  end
   
-  -- Mage
-  ["Winter's Chill"] = true,
+  if slotOwnership[guid] then
+    slotOwnership[guid] = nil
+    cleaned = true
+  end
   
-  -- Paladin Judgements
-  ["Judgement of Wisdom"] = true,
-  ["Judgement of Light"] = true,
-  ["Judgement of the Crusader"] = true,
-  ["Judgement of Justice"] = true,
-}
+  if allAuraCasts[guid] then
+    allAuraCasts[guid] = nil
+    cleaned = true
+  end
+  
+  if objectsByGuid[guid] then
+    objectsByGuid[guid] = nil
+    cleaned = true
+  end
+  
+  if pendingCasts[guid] then
+    pendingCasts[guid] = nil
+    cleaned = true
+  end
+  
+  if debugStats.enabled and cleaned and IsCurrentTarget(guid) then
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[CLEANUP]|r GUID %s", DebugGuid(guid)))
+  end
+  
+  return cleaned
+end
+
+local function CleanupExpiredTimers(guid)
+  local now = GetTime()
+  
+  -- Cleanup ownDebuffs
+  if ownDebuffs[guid] then
+    local toDelete = {}
+    for spellName, data in pairs(ownDebuffs[guid]) do
+      local timeleft = (data.startTime + data.duration) - now
+      if timeleft < -2 then -- Grace period
+        table.insert(toDelete, spellName)
+      end
+    end
+    for _, spellName in ipairs(toDelete) do
+      ownDebuffs[guid][spellName] = nil
+    end
+  end
+  
+  -- Cleanup allAuraCasts
+  if allAuraCasts[guid] then
+    for spellName, casterTable in pairs(allAuraCasts[guid]) do
+      local castersToDelete = {}
+      for casterGuid, data in pairs(casterTable) do
+        local timeleft = (data.startTime + data.duration) - now
+        if timeleft < -2 then
+          table.insert(castersToDelete, casterGuid)
+        end
+      end
+      for _, casterGuid in ipairs(castersToDelete) do
+        allAuraCasts[guid][spellName][casterGuid] = nil
+      end
+      -- Remove empty spell tables
+      local hasCasters = false
+      for _ in pairs(allAuraCasts[guid][spellName]) do
+        hasCasters = true
+        break
+      end
+      if not hasCasters then
+        allAuraCasts[guid][spellName] = nil
+      end
+    end
+  end
+end
+
+local function CleanupOutOfRangeUnits()
+  local now = GetTime()
+  if now - lastRangeCheck < 10 then return end
+  lastRangeCheck = now
+  
+  local allGuids = {}
+  for guid in pairs(ownDebuffs) do allGuids[guid] = true end
+  for guid in pairs(slotOwnership) do allGuids[guid] = true end
+  for guid in pairs(allAuraCasts) do allGuids[guid] = true end
+  for guid in pairs(objectsByGuid) do allGuids[guid] = true end
+  for guid in pairs(pendingCasts) do allGuids[guid] = true end
+  
+  for guid in pairs(allGuids) do
+    local exists = UnitExists and UnitExists(guid)
+    local isDead = UnitIsDead and UnitIsDead(guid)
+    
+    if not exists or isDead then
+      CleanupUnit(guid)
+    end
+  end
+  
+  -- Cleanup old lastCastRanks
+  for spell, data in pairs(lastCastRanks) do
+    if now - data.time > 3 then
+      lastCastRanks[spell] = nil
+    end
+  end
+  
+  -- Cleanup old lastFailedSpells
+  for spell, data in pairs(lastFailedSpells) do
+    if now - data.time > 2 then
+      lastFailedSpells[spell] = nil
+    end
+  end
+  
+  -- Cleanup old pendingCasts
+  for guid, spells in pairs(pendingCasts) do
+    for spell, data in pairs(spells) do
+      if now - data.time > 1 then
+        pendingCasts[guid][spell] = nil
+      end
+    end
+    local isEmpty = true
+    for _ in pairs(pendingCasts[guid]) do
+      isEmpty = false
+      break
+    end
+    if isEmpty then
+      pendingCasts[guid] = nil
+    end
+  end
+end
+
+-- ============================================================================
+-- DURATION FUNCTIONS
+-- ============================================================================
 
 function libdebuff:GetDuration(effect, rank)
   if L["debuffs"][effect] then
@@ -102,50 +605,33 @@ function libdebuff:GetDuration(effect, rank)
     local duration = L["debuffs"][effect][rank]
 
     if effect == L["dyndebuffs"]["Rupture"] then
-      -- Rupture: +2 sec per combo point
       local cp = GetComboPoints() or 0
       if cp == 0 then cp = GetStoredComboPoints() end
       duration = duration + cp*2
     elseif effect == L["dyndebuffs"]["Kidney Shot"] then
-      -- Kidney Shot: +1 sec per combo point
       local cp = GetComboPoints() or 0
       if cp == 0 then cp = GetStoredComboPoints() end
       duration = duration + cp*1
     elseif effect == "Rip" or effect == L["dyndebuffs"]["Rip"] then
-      -- Rip (Turtle WoW): 10s base + 2s per additional combo point
-      -- Base in table is 8, so: 8 + CP*2 = 10/12/14/16/18
       local cp = GetComboPoints() or 0
       if cp == 0 then cp = GetStoredComboPoints() end
       duration = 8 + cp*2
     elseif effect == L["dyndebuffs"]["Demoralizing Shout"] then
-      -- Booming Voice: 10% per talent
       local _,_,_,_,count = GetTalentInfo(2,1)
       if count and count > 0 then duration = duration + ( duration / 100 * (count*10)) end
     elseif effect == L["dyndebuffs"]["Shadow Word: Pain"] then
-      -- Improved Shadow Word: Pain: +3s per talent
       local _,_,_,_,count = GetTalentInfo(3,4)
       if count and count > 0 then duration = duration + count * 3 end
     elseif effect == L["dyndebuffs"]["Frostbolt"] then
-      -- Permafrost: +1s per talent
       local _,_,_,_,count = GetTalentInfo(3,7)
       if count and count > 0 then duration = duration + count end
     elseif effect == L["dyndebuffs"]["Gouge"] then
-      -- Improved Gouge: +.5s per talent
       local _,_,_,_,count = GetTalentInfo(3,3)
       if count and count > 0 then duration = duration + (count*.5) end
     end
     return duration
   else
     return 0
-  end
-end
-
-function libdebuff:UpdateDuration(unit, unitlevel, effect, duration)
-  if not unit or not effect or not duration then return end
-  unitlevel = unitlevel or 0
-
-  if libdebuff.objects[unit] and libdebuff.objects[unit][unitlevel] and libdebuff.objects[unit][unitlevel][effect] then
-    libdebuff.objects[unit][unitlevel][effect].duration = duration
   end
 end
 
@@ -157,10 +643,26 @@ function libdebuff:GetMaxRank(effect)
   return max
 end
 
+function libdebuff:UpdateDuration(unit, unitlevel, effect, duration)
+  if not unit or not effect or not duration then return end
+  unitlevel = unitlevel or 0
+
+  if libdebuff.objects[unit] and libdebuff.objects[unit][unitlevel] and libdebuff.objects[unit][unitlevel][effect] then
+    libdebuff.objects[unit][unitlevel][effect].duration = duration
+  end
+end
+
 function libdebuff:UpdateUnits()
   if not pfUI.uf or not pfUI.uf.target then return end
   pfUI.uf:RefreshUnit(pfUI.uf.target, "aura")
 end
+
+-- ============================================================================
+-- LEGACY API (for turtle-wow.lua compatibility)
+-- ============================================================================
+
+libdebuff.pending = {}
+libdebuff.objects = {}
 
 function libdebuff:AddPending(unit, unitlevel, effect, duration, caster, rank)
   if not unit or duration <= 0 then return end
@@ -197,295 +699,222 @@ function libdebuff:PersistPending(effect)
   libdebuff:RemovePending()
 end
 
-function libdebuff:RevertLastAction()
-  if lastspell and lastspell.effect then
-  end
-  lastspell.start = lastspell.start_old
-  lastspell.start_old = nil
-  libdebuff:UpdateUnits()
-end
-
 function libdebuff:AddEffect(unit, unitlevel, effect, duration, caster, rank)
-  -- WORKAROUND: Wenn rank nil ist und wir einen eigenen Cast haben, hole rank aus lastCastRanks
   if not rank and caster == "player" and effect then
-    -- Erst aus pending versuchen
     if libdebuff.pending[3] == effect and libdebuff.pending[6] then
       rank = libdebuff.pending[6]
-    -- Dann aus lastCastRanks (bleibt länger)
     elseif lastCastRanks[effect] and (GetTime() - lastCastRanks[effect].time) < 2 then
       rank = lastCastRanks[effect].rank
     end
   end
   
-  if not unit or not effect then return end
-  
-  -- SCHUTZ: Wenn der Spell gerade gefailed ist (miss/dodge/parry/etc.), nicht anwenden
-  -- Nur für eigene Spells prüfen, nicht für andere Spieler
-  if caster == "player" and libdebuff:DidSpellFail(effect) then
-    return  -- Spell hat nicht getroffen, keinen Timer setzen
-  end
-  
+  if not unit then return end
   unitlevel = unitlevel or 0
-  if not libdebuff.objects[unit] then libdebuff.objects[unit] = {} end
-  if not libdebuff.objects[unit][unitlevel] then libdebuff.objects[unit][unitlevel] = {} end
-  if not libdebuff.objects[unit][unitlevel][effect] then libdebuff.objects[unit][unitlevel][effect] = {} end
-
-  local existing = libdebuff.objects[unit][unitlevel][effect]
+  
+  -- Create tables if needed
+  libdebuff.objects[unit] = libdebuff.objects[unit] or {}
+  libdebuff.objects[unit][unitlevel] = libdebuff.objects[unit][unitlevel] or {}
+  
+  -- Get duration from spell database if not provided
+  if not duration or duration == 0 then
+    duration = libdebuff:GetDuration(effect, rank)
+  end
+  
+  -- Store/update effect
   local now = GetTime()
+  local existing = libdebuff.objects[unit][unitlevel][effect]
   
-  -- Wenn kein Caster übergeben wurde, behalte den existierenden (wichtig für Refresh-Mechaniken wie Ferocious Bite)
-  if not caster and existing.caster then
-    caster = existing.caster
+  if existing then
+    existing.start = now
+    existing.duration = duration
+    existing.caster = caster
+    existing.rank = rank
+  else
+    libdebuff.objects[unit][unitlevel][effect] = {
+      start = now,
+      duration = duration,
+      caster = caster,
+      rank = rank
+    }
   end
   
-  -- Wenn kein Rank übergeben wurde, behalte den existierenden
-  if not rank and existing.rank then
-    rank = existing.rank
+  lastspell = libdebuff.objects[unit][unitlevel][effect]
+end
+
+-- ============================================================================
+-- MAIN API: UnitDebuff (GetUnitField-based)
+-- ============================================================================
+
+local cache = {}
+
+function libdebuff:UnitDebuff(unit, displaySlot)
+  local unitname = UnitName(unit)
+  local unitlevel = UnitLevel(unit)
+  local texture, stacks, dtype = UnitDebuff(unit, displaySlot)  -- Blizzard API for texture/stacks
+  local duration, timeleft = nil, -1
+  local rank = nil
+  local caster = nil
+  local effect = nil
+
+  -- Get effect name from tooltip
+  if texture then
+    scanner:SetUnitDebuff(unit, displaySlot)
+    effect = scanner:Line(1) or ""
   end
-  
-  -- Prüfe ob ein existierender Debuff noch aktiv ist
-  local existingIsActive = existing.start and existing.duration and (existing.start + existing.duration) > now
-  
-  -- SCHUTZ: Wenn MEIN Debuff aktiv ist, darf ein anderer Spieler ihn NICHT überschreiben
-  -- AUSNAHME: Shared Debuffs (Sunder Armor, Curses, etc.) dürfen aktualisiert werden
-  if existingIsActive and existing.caster == "player" and caster ~= "player" then
-    if not sharedDebuffs[effect] then
-      return  -- Blockiere das Update
+
+  -- Nampower: Use GetUnitField for accurate slot mapping
+  if hasNampower and UnitExists and effect then
+    local _, guid = UnitExists(unit)
+    if not guid then
+      -- Fallback to legacy
+      return effect, rank, texture, stacks, dtype, duration, timeleft, caster
     end
-  end
-  
-  -- Rank-Prüfung wenn beide vom Player sind und beide Ranks bekannt sind
-  if existingIsActive and existing.rank and rank and existing.caster == "player" and caster == "player" then
-    -- Niedrigerer Rank darf höheren NICHT überschreiben
-    if rank < existing.rank then
-      return  -- Blockiere das Update
+    
+    -- Get current slot map from GetUnitField
+    local slotMap = GetDebuffSlotMap(guid)
+    if not slotMap or not slotMap[displaySlot] then
+      -- Slot doesn't exist in GetUnitField - might be Blizzard displaying stale data
+      return nil
     end
-    -- Gleicher oder höherer Rank darf überschreiben (Timer erneuern)
-  end
-
-  -- save current effect as lastspell
-  lastspell = existing
-
-  existing.effect = effect
-  existing.start_old = existing.start
-  existing.start = now
-  existing.duration = duration or libdebuff:GetDuration(effect)
-  existing.caster = caster
-  existing.rank = rank
-
-  libdebuff:UpdateUnits()
-end
-
--- scan for debuff application
-libdebuff:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_DAMAGE")
-libdebuff:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_CREATURE_DAMAGE")
-libdebuff:RegisterEvent("CHAT_MSG_SPELL_FAILED_LOCALPLAYER")
-libdebuff:RegisterEvent("CHAT_MSG_SPELL_SELF_DAMAGE")
-libdebuff:RegisterEvent("PLAYER_TARGET_CHANGED")
-libdebuff:RegisterEvent("SPELLCAST_STOP")
-libdebuff:RegisterEvent("UNIT_AURA")
-
--- register combo points tracking for Druids and Rogues
-if class == "DRUID" or class == "ROGUE" then
-  libdebuff:RegisterEvent("PLAYER_COMBO_POINTS")
-end
-
--- register seal handler
-if class == "PALADIN" then
-  libdebuff:RegisterEvent("CHAT_MSG_COMBAT_SELF_HITS")
-end
-
--- Remove Pending
-libdebuff.rp = { SPELLIMMUNESELFOTHER, IMMUNEDAMAGECLASSSELFOTHER,
-  SPELLMISSSELFOTHER, SPELLRESISTSELFOTHER, SPELLEVADEDSELFOTHER,
-  SPELLDODGEDSELFOTHER, SPELLDEFLECTEDSELFOTHER, SPELLREFLECTSELFOTHER,
-  SPELLPARRIEDSELFOTHER, SPELLLOGABSORBSELFOTHER, SPELLFAILCASTSELF }
-
-libdebuff.objects = {}
-libdebuff.pending = {}
-
--- Gather Data by Events
-libdebuff:SetScript("OnEvent", function()
-  -- paladin seal refresh
-  if event == "CHAT_MSG_COMBAT_SELF_HITS" then
-    local hit = cmatch(arg1, COMBATHITSELFOTHER)
-    local crit = cmatch(arg1, COMBATHITCRITSELFOTHER)
-    if hit or crit then
-      for seal in L["judgements"] do
-        local name = UnitName("target")
-        local level = UnitLevel("target")
-        if name and libdebuff.objects[name] then
-          if level and libdebuff.objects[name][level] and libdebuff.objects[name][level][seal] then
-            libdebuff:AddEffect(name, level, seal)
-          elseif libdebuff.objects[name][0] and libdebuff.objects[name][0][seal] then
-            libdebuff:AddEffect(name, 0, seal)
+    
+    local slotData = slotMap[displaySlot]
+    local gufSpellName = slotData.spellName
+    local auraSlot = slotData.auraSlot
+    
+    -- Verify spell names match (sanity check)
+    if gufSpellName ~= effect then
+      -- Mismatch! GetUnitField and UnitDebuff disagree.
+      -- This can happen during the brief moment when debuffs change.
+      -- Trust GetUnitField (it's more accurate).
+      effect = gufSpellName
+      texture = libdebuff:GetSpellIcon(slotData.spellId)
+    end
+    
+    -- Get caster info for this slot
+    local slotCasterGuid, isOurs = GetSlotCaster(guid, auraSlot, effect)
+    
+    if isOurs then
+      -- OUR debuff - get timer from ownDebuffs
+      if ownDebuffs[guid] and ownDebuffs[guid][effect] then
+        local data = ownDebuffs[guid][effect]
+        local remaining = (data.startTime + data.duration) - GetTime()
+        if remaining > 0 then
+          duration = data.duration
+          timeleft = remaining
+          caster = "player"
+          rank = data.rank
+        elseif remaining > -1 then
+          -- Grace period - show 0 timeleft
+          duration = data.duration
+          timeleft = 0
+          caster = "player"
+          rank = data.rank
+        end
+      end
+    else
+      -- OTHER player's debuff - get timer from allAuraCasts
+      if slotCasterGuid and allAuraCasts[guid] and allAuraCasts[guid][effect] then
+        local data = allAuraCasts[guid][effect][slotCasterGuid]
+        if data then
+          local remaining = (data.startTime + data.duration) - GetTime()
+          if remaining > 0 and data.duration > 0 then
+            duration = data.duration
+            timeleft = remaining
+            caster = "other"
+            rank = data.rank
+          end
+        end
+      end
+      
+      -- Fallback: Search all casters if specific one not found
+      if not duration and allAuraCasts[guid] and allAuraCasts[guid][effect] then
+        for anyCasterGuid, data in pairs(allAuraCasts[guid][effect]) do
+          local remaining = (data.startTime + data.duration) - GetTime()
+          if remaining > 0 and data.duration > 0 then
+            duration = data.duration
+            timeleft = remaining
+            caster = "other"
+            rank = data.rank
+            break
           end
         end
       end
     end
+    
+    return effect, rank, texture, stacks, dtype, duration, timeleft, caster
+  end
 
-  -- Add Combat Log
-  elseif event == "CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_DAMAGE" or event == "CHAT_MSG_SPELL_PERIODIC_CREATURE_DAMAGE" then
-    local unit, effect = cmatch(arg1, AURAADDEDOTHERHARMFUL)
-    if unit and effect then
-      local unitlevel = UnitName("target") == unit and UnitLevel("target") or 0
-      if not libdebuff.objects[unit] or not libdebuff.objects[unit][unitlevel] or not libdebuff.objects[unit][unitlevel][effect] then
-        libdebuff:AddEffect(unit, unitlevel, effect, nil, nil, nil)  -- Explizit nil für rank
-      end
-    end
+  -- ============================================================================
+  -- FALLBACK: Legacy (non-Nampower) system
+  -- ============================================================================
+  
+  if effect and libdebuff.objects[unitname] then
+    for level, effects in pairs(libdebuff.objects[unitname]) do
+      if effects[effect] and effects[effect].duration then
+        local timeleft = effects[effect].start and
+          effects[effect].start + effects[effect].duration - GetTime()
 
-  -- Add Missing Buffs by Iteration
-  elseif ( event == "UNIT_AURA" and arg1 == "target" ) or event == "PLAYER_TARGET_CHANGED" then
-    for i=1, 16 do
-      local effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff("target", i)
-
-      -- abort when no further debuff was found
-      if not texture then return end
-
-      if texture and effect and effect ~= "" then
-        -- don't overwrite existing timers
-        local unitlevel = UnitLevel("target") or 0
-        local unit = UnitName("target")
-        if not libdebuff.objects[unit] or not libdebuff.objects[unit][unitlevel] or not libdebuff.objects[unit][unitlevel][effect] then
-          libdebuff:AddEffect(unit, unitlevel, effect, nil, nil, nil)  -- Explizit nil für rank
+        if timeleft and timeleft > 0 then
+          return effect, effects[effect].rank, texture, stacks, dtype,
+            effects[effect].duration, timeleft, effects[effect].caster
         end
       end
-    end
-
-  -- Update Pending Spells und tracke failed spells
-  elseif event == "CHAT_MSG_SPELL_FAILED_LOCALPLAYER" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" then
-    -- Prüfe ob ein Spell gefailed ist und speichere ihn
-    for _, msg in pairs(libdebuff.rp) do
-      local effect = cmatch(arg1, msg)
-      if effect then
-        -- Speichere den failed spell für 1 Sekunde
-        lastFailedSpells[effect] = { time = GetTime() }
-        
-        -- Bestehende Logik: Remove pending spell
-        if libdebuff.pending[3] == effect then
-          libdebuff:RemovePending()
-          return
-        elseif lastspell and lastspell.start_old and lastspell.effect == effect then
-          -- late removal of debuffs (e.g hunter arrows as they hit late)
-          libdebuff:RevertLastAction()
-          return
-        end
-      end
-    end
-  elseif event == "SPELLCAST_STOP" then
-    libdebuff:PersistPending()
-  elseif event == "PLAYER_COMBO_POINTS" then
-    -- Track combo points for Druid AND Rogue (both use CP-based abilities)
-    if class ~= "DRUID" and class ~= "ROGUE" then return end
-    local current = GetComboPoints("player", "target") or 0
-    if current < currentComboPoints then
-      -- Combo points were spent!
-      lastSpentComboPoints = currentComboPoints
-      lastSpentTime = GetTime()
-    end
-    currentComboPoints = current
-  end
-end)
-
--- Gather Data by User Actions
-hooksecurefunc("CastSpell", function(id, bookType)
-  local rawEffect, rank = libspell.GetSpellInfo(id, bookType)
-  local duration = libdebuff:GetDuration(rawEffect, rank)
-  local rankNum = 0
-  if rank then
-    local _, _, num = string.find(rank, "(%d+)")
-    rankNum = num and tonumber(num) or 0
-  end
-  
-  -- Speichere rank für später (bleibt 2 Sekunden)
-  if rawEffect and rankNum > 0 then
-    lastCastRanks[rawEffect] = { rank = rankNum, time = GetTime() }
-  end
-  
-  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player", rankNum)
-end)
-
-hooksecurefunc("CastSpellByName", function(effect, target)
-  local rawEffect, rank = libspell.GetSpellInfo(effect)
-  local duration = libdebuff:GetDuration(rawEffect, rank)
-  local rankNum = 0
-  if rank then
-    local _, _, num = string.find(rank, "(%d+)")
-    rankNum = num and tonumber(num) or 0
-  end
-  
-  -- Speichere rank für später (bleibt 2 Sekunden)
-  if rawEffect and rankNum > 0 then
-    lastCastRanks[rawEffect] = { rank = rankNum, time = GetTime() }
-  end
-  
-  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player", rankNum)
-end)
-
-hooksecurefunc("UseAction", function(slot, target, button)
-  if GetActionText(slot) or not IsCurrentAction(slot) then return end
-  scanner:SetAction(slot)
-  local rawEffect, rank = scanner:Line(1)
-  local duration = libdebuff:GetDuration(rawEffect, rank)
-  local rankNum = 0
-  if rank then
-    local _, _, num = string.find(rank, "(%d+)")
-    rankNum = num and tonumber(num) or 0
-  end
-  
-  -- Speichere rank für später (bleibt 2 Sekunden)
-  if rawEffect and rankNum > 0 then
-    lastCastRanks[rawEffect] = { rank = rankNum, time = GetTime() }
-  end
-  
-  libdebuff:AddPending(UnitName("target"), UnitLevel("target"), rawEffect, duration, "player", rankNum)
-end)
-
-function libdebuff:UnitDebuff(unit, id)
-  local unitname = UnitName(unit)
-  local unitlevel = UnitLevel(unit)
-  local texture, stacks, dtype = UnitDebuff(unit, id)
-  local duration, timeleft = nil, -1
-  local rank = nil -- no backport
-  local caster = nil -- experimental
-  local effect
-
-  if texture then
-    scanner:SetUnitDebuff(unit, id)
-    effect = scanner:Line(1) or ""
-  end
-
-  -- read level based debuff table
-  local data = libdebuff.objects[unitname] and libdebuff.objects[unitname][unitlevel]
-  data = data or libdebuff.objects[unitname] and libdebuff.objects[unitname][0]
-
-  if data and data[effect] then
-    if data[effect].duration and data[effect].start and data[effect].duration + data[effect].start > GetTime() then
-      -- read valid debuff data
-      duration = data[effect].duration
-      timeleft = duration + data[effect].start - GetTime()
-      caster = data[effect].caster
-    else
-      -- clean up invalid values
-      data[effect] = nil
     end
   end
 
   return effect, rank, texture, stacks, dtype, duration, timeleft, caster
 end
 
-local cache = {}
-function libdebuff:UnitOwnDebuff(unit, id)
-  -- clean cache
-  for k, v in pairs(cache) do cache[k] = nil end
+-- ============================================================================
+-- API: UnitOwnDebuff (only OUR debuffs)
+-- ============================================================================
 
-  -- detect own debuffs
+function libdebuff:UnitOwnDebuff(unit, id)
+  if hasNampower and UnitExists then
+    local _, guid = UnitExists(unit)
+    if guid and ownDebuffs[guid] then
+      -- Build sorted list of our active debuffs
+      local sortedDebuffs = {}
+      local now = GetTime()
+      
+      for spellName, data in pairs(ownDebuffs[guid]) do
+        local timeleft = (data.startTime + data.duration) - now
+        if timeleft > -1 then  -- Grace period
+          table.insert(sortedDebuffs, {
+            spellName = spellName,
+            data = data,
+            timeleft = timeleft
+          })
+        end
+      end
+      
+      -- Sort by startTime (oldest first = lowest display slot)
+      -- If startTime is equal (e.g. after Carnage refresh), use spellName for stable sorting
+      table.sort(sortedDebuffs, function(a, b)
+        if a.data.startTime == b.data.startTime then
+          return a.spellName < b.spellName
+        end
+        return a.data.startTime < b.data.startTime
+      end)
+      
+      -- Return debuff at position 'id'
+      if sortedDebuffs[id] then
+        local entry = sortedDebuffs[id]
+        local texture = entry.data.texture or "Interface\\Icons\\INV_Misc_QuestionMark"
+        local displayTimeleft = entry.timeleft > 0 and entry.timeleft or 0
+        return entry.spellName, entry.data.rank, texture, 1, nil, entry.data.duration, displayTimeleft, "player"
+      end
+    end
+    return nil
+  end
+  
+  -- Fallback: Iterate through all debuffs and filter
+  for k in pairs(cache) do cache[k] = nil end
   local count = 1
   for i=1,16 do
     local effect, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitDebuff(unit, i)
     if effect and not cache[effect] and caster and caster == "player" then
       cache[effect] = true
-
       if count == id then
         return effect, rank, texture, stacks, dtype, duration, timeleft, caster
       else
@@ -495,5 +924,805 @@ function libdebuff:UnitOwnDebuff(unit, id)
   end
 end
 
+-- ============================================================================
+-- API: GetBestAuraCast (for libpredict HoT tracking)
+-- ============================================================================
+
+function libdebuff:GetBestAuraCast(guid, spellName)
+  if not guid or not spellName then return nil end
+  
+  -- Check ownDebuffs first (for our casts)
+  if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+    local data = ownDebuffs[guid][spellName]
+    local timeleft = (data.startTime + data.duration) - GetTime()
+    if timeleft > 0 then
+      return data.startTime, data.duration, timeleft, data.rank, GetPlayerGUID()
+    end
+  end
+  
+  -- Check allAuraCasts (for any caster)
+  if allAuraCasts[guid] and allAuraCasts[guid][spellName] then
+    local bestData = nil
+    local bestCaster = nil
+    local bestTimeleft = 0
+    
+    for casterGuid, data in pairs(allAuraCasts[guid][spellName]) do
+      local timeleft = (data.startTime + data.duration) - GetTime()
+      if timeleft > bestTimeleft then
+        bestTimeleft = timeleft
+        bestData = data
+        bestCaster = casterGuid
+      end
+    end
+    
+    if bestData and bestTimeleft > 0 then
+      return bestData.startTime, bestData.duration, bestTimeleft, bestData.rank, bestCaster
+    end
+  end
+  
+  return nil
+end
+
+-- ============================================================================
+-- API: GetEnhancedDebuffs (for external modules)
+-- ============================================================================
+
+function libdebuff:GetEnhancedDebuffs(targetGUID)
+  if not targetGUID then return nil end
+  local result = {}
+  
+  if ownDebuffs[targetGUID] then
+    local myGuid = GetPlayerGUID()
+    for spellName, data in pairs(ownDebuffs[targetGUID]) do
+      local timeleft = (data.startTime + data.duration) - GetTime()
+      if timeleft > 0 then
+        result[spellName] = result[spellName] or {}
+        result[spellName][myGuid] = {
+          startTime = data.startTime,
+          duration = data.duration,
+          texture = data.texture,
+          rank = data.rank
+        }
+      end
+    end
+  end
+  
+  return result
+end
+
+-- ============================================================================
+-- NAMPOWER EVENT HANDLING
+-- ============================================================================
+
+if hasNampower then
+  -- Carnage Talent Rank
+  local carnageRank = 0
+  local function UpdateCarnageRank()
+    if class ~= "DRUID" then return end
+    local _, _, _, _, rank = GetTalentInfo(2, 17)
+    carnageRank = rank or 0
+  end
+  
+  local frame = CreateFrame("Frame")
+  frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+  frame:RegisterEvent("PLAYER_COMBO_POINTS")
+  frame:RegisterEvent("PLAYER_TALENT_UPDATE")
+  frame:RegisterEvent("PLAYER_LOGOUT")
+  frame:RegisterEvent("SPELL_START_SELF")
+  frame:RegisterEvent("SPELL_START_OTHER")
+  frame:RegisterEvent("SPELL_GO_SELF")
+  frame:RegisterEvent("SPELL_GO_OTHER")
+  frame:RegisterEvent("SPELL_FAILED_OTHER")
+  frame:RegisterEvent("AURA_CAST_ON_SELF")
+  frame:RegisterEvent("AURA_CAST_ON_OTHER")
+  frame:RegisterEvent("DEBUFF_ADDED_OTHER")
+  frame:RegisterEvent("DEBUFF_REMOVED_OTHER")
+  frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+  frame:RegisterEvent("UNIT_HEALTH")
+  
+  frame:SetScript("OnEvent", function()
+    if event == "PLAYER_LOGOUT" then
+      this:UnregisterAllEvents()
+      this:SetScript("OnEvent", nil)
+      return
+      
+    elseif event == "PLAYER_ENTERING_WORLD" then
+      GetPlayerGUID()
+      UpdateCarnageRank()
+      
+    elseif event == "PLAYER_TALENT_UPDATE" then
+      UpdateCarnageRank()
+      
+    elseif event == "PLAYER_COMBO_POINTS" then
+      if class ~= "DRUID" and class ~= "ROGUE" then return end
+      local current = GetComboPoints("player", "target") or 0
+      if current < currentComboPoints then
+        lastSpentComboPoints = currentComboPoints
+        lastSpentTime = GetTime()
+      end
+      currentComboPoints = current
+      
+    elseif event == "UNIT_HEALTH" then
+      local guid = arg1
+      if guid and UnitIsDead and UnitIsDead(guid) then
+        CleanupUnit(guid)
+      end
+      
+    elseif event == "SPELL_START_SELF" or event == "SPELL_START_OTHER" then
+      local spellId = arg2
+      local casterGuid = arg3
+      local castTime = arg6
+      
+      if not casterGuid or not spellId then return end
+      
+      local spellName = SpellInfo and SpellInfo(spellId) or nil
+      local icon = libdebuff:GetSpellIcon(spellId)
+      
+      pfUI.libdebuff_casts[casterGuid] = {
+        spellID = spellId,
+        spellName = spellName,
+        icon = icon,
+        startTime = GetTime(),
+        duration = castTime and castTime / 1000 or 0,
+        endTime = castTime and (GetTime() + castTime / 1000) or nil,
+        event = "START"
+      }
+      
+    elseif event == "SPELL_GO_SELF" or event == "SPELL_GO_OTHER" then
+      local spellId = arg2
+      local casterGuid = arg3
+      local targetGuid = arg4
+      local numHit = arg6 or 0
+      local numMissed = arg7 or 0
+      
+      -- Clear cast bar
+      if casterGuid and pfUI.libdebuff_casts[casterGuid] then
+        pfUI.libdebuff_casts[casterGuid] = nil
+      end
+      
+      if numMissed > 0 or numHit == 0 then return end
+      if not SpellInfo then return end
+      
+      local spellName, spellRankString = SpellInfo(spellId)
+      if not spellName then return end
+      
+      local castRank = 0
+      if spellRankString and spellRankString ~= "" then
+        castRank = tonumber((string.gsub(spellRankString, "Rank ", ""))) or 0
+      end
+      
+      -- Store in pendingCasts for DEBUFF_ADDED correlation
+      if targetGuid then
+        pendingCasts[targetGuid] = pendingCasts[targetGuid] or {}
+        pendingCasts[targetGuid][spellName] = {
+          casterGuid = casterGuid,
+          rank = castRank,
+          time = GetTime()
+        }
+      end
+      
+      -- Store rank for our casts
+      local myGuid = GetPlayerGUID()
+      if casterGuid == myGuid then
+        lastCastRanks[spellName] = {
+          rank = castRank,
+          time = GetTime()
+        }
+      end
+      
+      -- CARNAGE TALENT: Ferocious Bite refreshes Rip & Rake (only on HIT, only for us, only with 5 CP)
+      -- This must happen AFTER the spell hits (SPELL_GO), not on AURA_CAST
+      if class == "DRUID" and carnageRank == 2 and spellName == "Ferocious Bite" and casterGuid == myGuid then
+        local cp = lastSpentComboPoints or 0
+        if targetGuid and numHit > 0 and cp == 5 then
+          -- Refresh in ownDebuffs
+          if ownDebuffs[targetGuid] then
+            if ownDebuffs[targetGuid]["Rip"] then
+              ownDebuffs[targetGuid]["Rip"].startTime = GetTime()
+              if debugStats.enabled then
+                DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rip refreshed (5 CP)")
+              end
+            end
+            if ownDebuffs[targetGuid]["Rake"] then
+              ownDebuffs[targetGuid]["Rake"].startTime = GetTime()
+              if debugStats.enabled then
+                DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rake refreshed (5 CP)")
+              end
+            end
+          end
+          
+          -- Refresh in allAuraCasts
+          if allAuraCasts[targetGuid] then
+            if allAuraCasts[targetGuid]["Rip"] and allAuraCasts[targetGuid]["Rip"][myGuid] then
+              allAuraCasts[targetGuid]["Rip"][myGuid].startTime = GetTime()
+            end
+            if allAuraCasts[targetGuid]["Rake"] and allAuraCasts[targetGuid]["Rake"][myGuid] then
+              allAuraCasts[targetGuid]["Rake"][myGuid].startTime = GetTime()
+            end
+          end
+          
+          -- Trigger UI updates
+          if pfTarget and UnitExists("target") then
+            local _, currentTargetGuid = UnitExists("target")
+            if currentTargetGuid == targetGuid then
+              pfTarget.update_aura = true
+            end
+          end
+          
+          if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
+            pfUI.nameplates:OnAuraUpdate(targetGuid)
+          end
+        end
+      end
+      
+    elseif event == "SPELL_FAILED_OTHER" then
+      local casterGuid = arg1
+      
+      if casterGuid and pfUI.libdebuff_casts[casterGuid] then
+        pfUI.libdebuff_casts[casterGuid] = nil
+      end
+      
+    elseif event == "AURA_CAST_ON_SELF" or event == "AURA_CAST_ON_OTHER" then
+      local spellId = arg1
+      local casterGuid = arg2
+      local targetGuid = arg3
+      local effect = arg4
+      local effectAuraName = arg5
+      local effectAmplitude = arg6
+      local effectMiscValue = arg7
+      local durationMs = arg8
+      local auraCapStatus = arg9
+      
+      if not SpellInfo or not spellId then return end
+      if not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000" then return end
+      
+      local spellName = SpellInfo(spellId)
+      if not spellName then return end
+      
+      -- Deduplicate: Ignore if we processed this exact cast recently (within 100ms)
+      -- Nampower fires multiple AURA_CAST events for multi-effect spells (e.g. Faerie Fire has 3 effects)
+      recentCasts[targetGuid] = recentCasts[targetGuid] or {}
+      recentCasts[targetGuid][spellName] = recentCasts[targetGuid][spellName] or {}
+      
+      local now = GetTime()
+      local lastCastTime = recentCasts[targetGuid][spellName][casterGuid]
+      
+      if lastCastTime and (now - lastCastTime) < AURA_CAST_DEDUPE_WINDOW then
+        return  -- Duplicate event, ignore
+      end
+      
+      recentCasts[targetGuid][spellName][casterGuid] = now
+      
+      -- Rank aus spellId ermitteln
+      local rankNum = 0
+      local rankString = GetSpellRecField(spellId, "rank")
+      if rankString and rankString ~= "" then
+        rankNum = tonumber((string.gsub(rankString, "Rank ", ""))) or 0
+      end
+      
+      local duration = durationMs and (durationMs / 1000) or 0
+      local startTime = GetTime()
+      local myGuid = GetPlayerGUID()
+      local isOurs = (myGuid and casterGuid == myGuid)
+      
+      if debugStats.enabled and isOurs then
+        debugStats.aura_cast = debugStats.aura_cast + 1
+      end
+      
+      -- CP-based spells: Use GetDuration for our casts
+      if isOurs and combopointAbilities[spellName] then
+        duration = libdebuff:GetDuration(spellName, rankNum)
+      end
+      
+      -- CP-based spells: Force duration=0 for others (unknown!)
+      if not isOurs and combopointAbilities[spellName] then
+        if spellName == "Expose Armor" then
+          duration = 30  -- Fixed duration for Expose Armor
+        else
+          duration = 0
+        end
+      end
+      
+      -- Store in allAuraCasts
+      if targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" then
+        allAuraCasts[targetGuid] = allAuraCasts[targetGuid] or {}
+        allAuraCasts[targetGuid][spellName] = allAuraCasts[targetGuid][spellName] or {}
+        
+        -- Downrank Protection: Check BEFORE clearing old casters!
+        -- For selfOverwrite debuffs, check ALL existing casters
+        if selfOverwriteDebuffs[spellName] then
+          for otherCaster, existingData in pairs(allAuraCasts[targetGuid][spellName]) do
+            if existingData.rank and rankNum and rankNum > 0 then
+              local existingTimeleft = (existingData.startTime + existingData.duration) - GetTime()
+              if existingTimeleft > 0 and rankNum < existingData.rank then
+                -- Lower rank cannot overwrite higher rank - block the update
+                if debugStats.enabled then
+                  DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d from %s cannot overwrite Rank %d from %s (%.1fs left)", 
+                    spellName, rankNum, DebugGuid(casterGuid), existingData.rank, DebugGuid(otherCaster), existingTimeleft))
+                end
+                return
+              end
+            end
+          end
+        else
+          -- For non-selfOverwrite: Check only same caster
+          local existingData = allAuraCasts[targetGuid][spellName][casterGuid]
+          if existingData and existingData.rank and rankNum and rankNum > 0 then
+            local existingTimeleft = (existingData.startTime + existingData.duration) - GetTime()
+            if existingTimeleft > 0 and rankNum < existingData.rank then
+              if debugStats.enabled and isOurs then
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)", 
+                  spellName, rankNum, existingData.rank, existingTimeleft))
+              end
+              return
+            end
+          end
+        end
+        
+        -- Handle self-overwrite debuffs (clear other casters)
+        if selfOverwriteDebuffs[spellName] then
+          local oldCasters = {}
+          for otherCaster in pairs(allAuraCasts[targetGuid][spellName]) do
+            if otherCaster ~= casterGuid then
+              table.insert(oldCasters, otherCaster)
+            end
+          end
+          for _, otherCaster in ipairs(oldCasters) do
+            allAuraCasts[targetGuid][spellName][otherCaster] = nil
+          end
+          
+          -- Clear from ownDebuffs if we're being overwritten
+          if not isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
+            ownDebuffs[targetGuid][spellName] = nil
+          end
+        end
+        
+        -- Handle variant pairs (Faerie Fire <-> Faerie Fire (Feral))
+        if debuffOverwritePairs[spellName] then
+          local otherVariant = debuffOverwritePairs[spellName]
+          if allAuraCasts[targetGuid][otherVariant] and allAuraCasts[targetGuid][otherVariant][casterGuid] then
+            allAuraCasts[targetGuid][otherVariant][casterGuid] = nil
+          end
+        end
+        
+        -- Store timer data
+        allAuraCasts[targetGuid][spellName][casterGuid] = {
+          startTime = startTime,
+          duration = duration,
+          rank = rankNum
+        }
+        
+        -- UPDATE slotOwnership for selfOverwrite refreshes
+        -- (DEBUFF_ADDED doesn't fire on refresh, so we must update here!)
+        if selfOverwriteDebuffs[spellName] and slotOwnership[targetGuid] then
+          for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+            if ownership.spellName == spellName then
+              -- Update the casterGuid and isOurs for this slot
+              ownership.casterGuid = casterGuid
+              ownership.isOurs = isOurs
+              
+              if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[SLOT UPDATED]|r aura=%d %s newCaster=%s isOurs=%s", 
+                  auraSlot, spellName, DebugGuid(casterGuid), tostring(isOurs)))
+              end
+              break
+            end
+          end
+        end
+        
+        if debugStats.enabled and IsCurrentTarget(targetGuid) then
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[AURA_CAST]|r %s target=%s caster=%s isOurs=%s dur=%.1fs", 
+            GetDebugTimestamp(), spellName, DebugGuid(targetGuid), DebugGuid(casterGuid), tostring(isOurs), duration))
+        end
+      end
+      
+      -- Notify nameplates
+        if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
+          pfUI.nameplates:OnAuraUpdate(targetGuid)
+        end
+        
+        -- Notify unitframes of debuff updates (UNIT_AURA doesn't fire on refreshes!)
+        -- Check player
+        if UnitExists("player") then
+          local _, playerGuid = UnitExists("player")
+          if playerGuid == targetGuid and pfPlayer then
+            pfPlayer.update_aura = true
+          end
+        end
+        
+        -- Check target
+        if UnitExists("target") then
+          local _, targetUnitGuid = UnitExists("target")
+          if targetUnitGuid == targetGuid and pfTarget then
+            pfTarget.update_aura = true
+          end
+        end
+      
+      -- Only track in ownDebuffs if it's OUR debuff
+      if not isOurs then return end
+      if targetGuid == myGuid then return end  -- Skip self-buffs
+      if not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000" then return end
+      
+      -- Get texture
+      local texture = libdebuff:GetSpellIcon(spellId)
+      
+      -- Store in ownDebuffs
+      ownDebuffs[targetGuid] = ownDebuffs[targetGuid] or {}
+      
+      if not ownDebuffs[targetGuid][spellName] then
+        ownDebuffs[targetGuid][spellName] = {}
+      end
+      
+      local data = ownDebuffs[targetGuid][spellName]
+      
+      -- Downrank Protection: Check if existing debuff is still active and has higher rank
+      if data.startTime and data.duration and data.rank and rankNum > 0 then
+        local existingTimeleft = (data.startTime + data.duration) - GetTime()
+        if existingTimeleft > 0 then
+          -- Existing debuff is still active
+          if rankNum < data.rank then
+            -- Lower rank cannot overwrite higher rank - block the update
+            if debugStats.enabled then
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)", 
+                spellName, rankNum, data.rank, existingTimeleft))
+            end
+            return
+          end
+        end
+      end
+      
+      data.startTime = startTime
+      data.duration = duration
+      data.texture = texture
+      data.rank = rankNum
+      
+      -- Handle variant pairs for ownDebuffs
+      if debuffOverwritePairs[spellName] then
+        local otherVariant = debuffOverwritePairs[spellName]
+        if ownDebuffs[targetGuid][otherVariant] then
+          ownDebuffs[targetGuid][otherVariant] = nil
+        end
+      end
+      
+      -- Store for Cleveroids API
+      objectsByGuid[targetGuid] = objectsByGuid[targetGuid] or {}
+      objectsByGuid[targetGuid][spellId] = {
+        start = startTime,
+        duration = duration,
+        caster = "player",
+        stacks = 1
+      }
+      
+    elseif event == "DEBUFF_ADDED_OTHER" then
+      local guid = arg1
+      local displaySlot = arg2  -- This is DISPLAY slot (1-16), NOT aura slot!
+      local spellId = arg3
+      local stacks = arg4
+      
+      -- Invalidate slot map cache for this GUID
+      slotMapCache[guid] = nil
+      
+      local spellName = SpellInfo and SpellInfo(spellId)
+      if not spellName then return end
+      
+      if debugStats.enabled then
+        debugStats.debuff_added = debugStats.debuff_added + 1
+      end
+      
+      -- If unit is dead, cleanup and skip
+      if UnitIsDead and UnitIsDead(guid) then
+        CleanupUnit(guid)
+        return
+      end
+      
+      -- Find the REAL aura slot (33-48) via GetUnitField
+      local auraSlot = nil
+      local slotMap = GetDebuffSlotMap(guid)
+      if slotMap and slotMap[displaySlot] then
+        auraSlot = slotMap[displaySlot].auraSlot
+      end
+      
+      -- Fallback: Calculate aura slot if GetUnitField didn't work
+      -- (This assumes no gaps, which isn't always true, but better than nothing)
+      if not auraSlot then
+        auraSlot = 32 + displaySlot
+      end
+      
+      -- Get caster from pendingCasts (SPELL_GO correlation)
+      local casterGuid = nil
+      if pendingCasts[guid] and pendingCasts[guid][spellName] then
+        local pending = pendingCasts[guid][spellName]
+        if GetTime() - pending.time < 0.5 then
+          casterGuid = pending.casterGuid
+          pendingCasts[guid][spellName] = nil
+        end
+      end
+      
+      -- Fallback: Check allAuraCasts for most recent caster
+      if not casterGuid and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
+        local mostRecent = nil
+        local mostRecentTime = 0
+        for casterId, data in pairs(allAuraCasts[guid][spellName]) do
+          if data.startTime > mostRecentTime then
+            mostRecentTime = data.startTime
+            mostRecent = casterId
+          end
+        end
+        if mostRecent then
+          casterGuid = mostRecent
+        end
+      end
+      
+      local myGuid = GetPlayerGUID()
+      local isOurs = (myGuid and casterGuid == myGuid)
+      
+      -- Fallback: Check ownDebuffs timing
+      if not isOurs and not casterGuid then
+        if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+          local age = GetTime() - ownDebuffs[guid][spellName].startTime
+          if age < 0.5 then
+            isOurs = true
+            casterGuid = myGuid
+          end
+        end
+      end
+      
+      -- Store slot ownership (KEY: auraSlot is STABLE, no shifting needed!)
+      slotOwnership[guid] = slotOwnership[guid] or {}
+      slotOwnership[guid][auraSlot] = {
+        casterGuid = casterGuid,
+        spellName = spellName,
+        spellId = spellId,
+        isOurs = isOurs
+      }
+      
+      -- Store displaySlot → auraSlot mapping for DEBUFF_REMOVED
+      displayToAura[guid] = displayToAura[guid] or {}
+      displayToAura[guid][displaySlot] = auraSlot
+      
+      if debugStats.enabled and IsCurrentTarget(guid) then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ff00[DEBUFF_ADDED]|r display=%d aura=%d %s caster=%s isOurs=%s", 
+          GetDebugTimestamp(), displaySlot, auraSlot, spellName, DebugGuid(casterGuid), tostring(isOurs)))
+      end
+      
+      -- CRITICAL FIX: Update ownDebuffs here too for refresh timing!
+      -- This prevents the gap between DEBUFF_REMOVED and AURA_CAST where buffwatch shows nothing
+      if isOurs and casterGuid then
+        local myGuid = GetPlayerGUID()
+        if myGuid and casterGuid == myGuid then
+          -- Check if we have timer data from allAuraCasts
+          if allAuraCasts[guid] and allAuraCasts[guid][spellName] and allAuraCasts[guid][spellName][casterGuid] then
+            local auraData = allAuraCasts[guid][spellName][casterGuid]
+            local texture = libdebuff:GetSpellIcon(spellId)
+            
+            ownDebuffs[guid] = ownDebuffs[guid] or {}
+            ownDebuffs[guid][spellName] = {
+              startTime = auraData.startTime,
+              duration = auraData.duration,
+              texture = texture,
+              rank = auraData.rank or 0
+            }
+            
+            if debugStats.enabled and IsCurrentTarget(guid) then
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[OWNDEBUFF SYNC]|r %s from DEBUFF_ADDED", spellName))
+            end
+          end
+        end
+      end
+      
+      -- Cleanup expired timers
+      CleanupExpiredTimers(guid)
+      
+      -- Notify nameplates
+      if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
+        pfUI.nameplates:OnAuraUpdate(guid)
+      end
+      
+    elseif event == "DEBUFF_REMOVED_OTHER" then
+      local guid = arg1
+      local displaySlot = arg2  -- This is DISPLAY slot (1-16), NOT aura slot!
+      local spellId = arg3
+      
+      -- Invalidate slot map cache for this GUID
+      slotMapCache[guid] = nil
+      
+      local spellName = SpellInfo and SpellInfo(spellId) or "?"
+      
+      if debugStats.enabled then
+        debugStats.debuff_removed = debugStats.debuff_removed + 1
+        if IsCurrentTarget(guid) then
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[DEBUFF_REMOVED]|r display=%d %s", 
+            GetDebugTimestamp(), displaySlot, spellName))
+        end
+      end
+      
+      -- If unit is dead, cleanup all
+      if UnitIsDead and UnitIsDead(guid) then
+        CleanupUnit(guid)
+        return
+      end
+      
+      -- Find the auraSlot using displaySlot mapping
+      local wasOurs = false
+      local removedCasterGuid = nil
+      local foundAuraSlot = nil
+      
+      -- Use displayToAura mapping to find the correct auraSlot
+      if displayToAura[guid] and displayToAura[guid][displaySlot] then
+        foundAuraSlot = displayToAura[guid][displaySlot]
+        
+        -- Get ownership info for this specific slot
+        if slotOwnership[guid] and slotOwnership[guid][foundAuraSlot] then
+          local ownership = slotOwnership[guid][foundAuraSlot]
+          wasOurs = ownership.isOurs
+          removedCasterGuid = ownership.casterGuid
+        end
+        
+        -- Clear both mappings
+        slotOwnership[guid][foundAuraSlot] = nil
+        displayToAura[guid][displaySlot] = nil
+        
+        if debugStats.enabled and IsCurrentTarget(guid) then
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d %s wasOurs=%s caster=%s", 
+            GetDebugTimestamp(), foundAuraSlot, spellName, tostring(wasOurs), DebugGuid(removedCasterGuid)))
+        end
+      end
+      
+      -- Remove from ownDebuffs if it was ours
+      if wasOurs and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+        local age = GetTime() - ownDebuffs[guid][spellName].startTime
+        -- Only delete if not recently renewed
+        if age > 1 then
+          ownDebuffs[guid][spellName] = nil
+        end
+      end
+      
+      -- Remove from allAuraCasts
+      if removedCasterGuid and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
+        if allAuraCasts[guid][spellName][removedCasterGuid] then
+          local auraData = allAuraCasts[guid][spellName][removedCasterGuid]
+          local age = GetTime() - auraData.startTime
+          -- Only delete if not recently refreshed
+          if age > 1 then
+            allAuraCasts[guid][spellName][removedCasterGuid] = nil
+          end
+        end
+      end
+      
+      -- Cleanup expired timers
+      CleanupExpiredTimers(guid)
+      
+      -- Notify nameplates
+      if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
+        pfUI.nameplates:OnAuraUpdate(guid)
+      end
+      
+    elseif event == "PLAYER_TARGET_CHANGED" then
+      -- Nothing special needed - GetUnitField will get fresh data on next query
+      if not UnitExists then return end
+      local _, targetGuid = UnitExists("target")
+      
+      if targetGuid and targetGuid ~= "" then
+        -- Cleanup expired timers for new target
+        CleanupExpiredTimers(targetGuid)
+      end
+    end
+    
+    -- Periodic cleanup
+    CleanupOutOfRangeUnits()
+  end)
+  
+  -- Cleveroids API
+  if CleveRoids then
+    CleveRoids.libdebuff = libdebuff
+    libdebuff.objects = objectsByGuid
+  end
+end
+
 -- add libdebuff to pfUI API
 pfUI.api.libdebuff = libdebuff
+
+-- Expose debugStats for external access
+libdebuff.debugStats = debugStats
+
+-- ============================================================================
+-- DEBUG COMMANDS
+-- ============================================================================
+
+_G.SLASH_LIBDEBUGSTATS1 = "/libdebugstats"
+_G.SlashCmdList["LIBDEBUGSTATS"] = function(msg)
+  msg = string.lower(msg or "")
+  
+  if msg == "start" then
+    debugStats.enabled = true
+    debugStats.trackAllUnits = false
+    debugStats.aura_cast = 0
+    debugStats.debuff_added = 0
+    debugStats.debuff_removed = 0
+    debugStats.getunitfield_calls = 0
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[libdebuff]|r Debug tracking STARTED")
+    
+  elseif msg == "stop" then
+    debugStats.enabled = false
+    DEFAULT_CHAT_FRAME:AddMessage("|cffff9900[libdebuff]|r Debug tracking STOPPED")
+    
+  elseif msg == "stats" then
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff=== LIBDEBUFF STATS (GetUnitField Edition) ===|r")
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("AURA_CAST events: %d", debugStats.aura_cast))
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("DEBUFF_ADDED events: %d", debugStats.debuff_added))
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("DEBUFF_REMOVED events: %d", debugStats.debuff_removed))
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("GetUnitField calls: %d", debugStats.getunitfield_calls))
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00No manual slot shifting needed!|r")
+    
+  elseif msg == "target" then
+    if not UnitExists("target") then
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff]|r No target!")
+      return
+    end
+    
+    local _, guid = UnitExists("target")
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff=== TARGET DEBUFF STATE ===|r")
+    DEFAULT_CHAT_FRAME:AddMessage(string.format("GUID: %s", tostring(guid)))
+    
+    -- Show GetUnitField slot map
+    local slotMap = GetDebuffSlotMap(guid)
+    if slotMap then
+      DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00GetUnitField Slots:|r")
+      for displaySlot, data in pairs(slotMap) do
+        local casterGuid, isOurs = GetSlotCaster(guid, data.auraSlot, data.spellName)
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("  Display %d (aura %d): %s [caster=%s, ours=%s]", 
+          displaySlot, data.auraSlot, data.spellName, DebugGuid(casterGuid), tostring(isOurs)))
+      end
+    else
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff9900No debuffs via GetUnitField|r")
+    end
+    
+    -- Show ownDebuffs
+    if ownDebuffs[guid] then
+      DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00ownDebuffs:|r")
+      for spell, data in pairs(ownDebuffs[guid]) do
+        local timeleft = (data.startTime + data.duration) - GetTime()
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s: dur=%.1f left=%.1f", spell, data.duration, timeleft))
+      end
+    end
+    
+  else
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[libdebuff] GetUnitField Edition - Commands:|r")
+    DEFAULT_CHAT_FRAME:AddMessage("  /libdebugstats start - Start debug tracking")
+    DEFAULT_CHAT_FRAME:AddMessage("  /libdebugstats stop  - Stop debug tracking")
+    DEFAULT_CHAT_FRAME:AddMessage("  /libdebugstats stats - Show statistics")
+    DEFAULT_CHAT_FRAME:AddMessage("  /libdebugstats target - Show target debuff state")
+  end
+end
+
+_G.SLASH_MEMCHECK1 = "/memcheck"
+_G.SlashCmdList["MEMCHECK"] = function()
+  local function countTable(t)
+    local count = 0
+    if not t then return 0 end
+    for _ in pairs(t) do count = count + 1 end
+    return count
+  end
+  
+  local function countNestedEntries(t)
+    local total = 0
+    if not t then return 0 end
+    for _, nested in pairs(t) do
+      if type(nested) == "table" then
+        total = total + countTable(nested)
+      end
+    end
+    return total
+  end
+  
+  DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff========== LIBDEBUFF MEMORY (GetUnitField Edition) ==========|r")
+  DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00Primary Tables:|r"))
+  DEFAULT_CHAT_FRAME:AddMessage(string.format("  ownDebuffs: %d GUIDs, %d debuffs", countTable(ownDebuffs), countNestedEntries(ownDebuffs)))
+  DEFAULT_CHAT_FRAME:AddMessage(string.format("  slotOwnership: %d GUIDs, %d slots", countTable(slotOwnership), countNestedEntries(slotOwnership)))
+  DEFAULT_CHAT_FRAME:AddMessage(string.format("  allAuraCasts: %d GUIDs", countTable(allAuraCasts)))
+  DEFAULT_CHAT_FRAME:AddMessage(string.format("  pendingCasts: %d GUIDs", countTable(pendingCasts)))
+  DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00No ownSlots/allSlots (eliminated by GetUnitField approach!)|r")
+  DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff============================================================|r")
+end
+
+DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r GetUnitField Edition loaded!")

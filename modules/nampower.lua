@@ -54,7 +54,15 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
 
     local queue = CreateFrame("Frame")
     queue:RegisterEvent("SPELL_QUEUE_EVENT")
+    queue:RegisterEvent("PLAYER_LOGOUT")
     queue:SetScript("OnEvent", function()
+      -- Handle shutdown to prevent crash 132
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        return
+      end
+      
       local eventCode = arg1
       local spellId = arg2
 
@@ -76,189 +84,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
     end)
   end
 
-  -- Enhanced Debuff Tracking using Nampower events
-  -- DEBUFF_ADDED_OTHER/DEBUFF_REMOVED_OTHER provide accurate debuff tracking with spellId
-  if libdebuff then
-    -- Storage for GUID-based debuff tracking
-    pfUI.nampower_debuffs = pfUI.nampower_debuffs or {}
-    local debuffdb = pfUI.nampower_debuffs
-
-    -- Get player GUID for tracking own debuffs
-    local playerGuid
-
-    local debuffTracker = CreateFrame("Frame")
-    debuffTracker:RegisterEvent("PLAYER_ENTERING_WORLD")
-    debuffTracker:RegisterEvent("DEBUFF_ADDED_OTHER")
-    debuffTracker:RegisterEvent("DEBUFF_REMOVED_OTHER")
-    debuffTracker:RegisterEvent("DEBUFF_ADDED_SELF")
-    debuffTracker:RegisterEvent("DEBUFF_REMOVED_SELF")
-
-    debuffTracker:SetScript("OnEvent", function()
-      if event == "PLAYER_ENTERING_WORLD" then
-        -- Cache player GUID
-        if UnitExists then
-          local _, guid = UnitExists("player")
-          playerGuid = guid
-        end
-        return
-      end
-
-      -- DEBUFF events: arg1=guid, arg2=slot, arg3=spellId, arg4=stackCount, arg5=auraLevel
-      local guid = arg1
-      local slot = arg2
-      local spellId = arg3
-      local stackCount = arg4
-      local auraLevel = arg5
-
-      if not guid or not spellId then return end
-
-      if event == "DEBUFF_ADDED_OTHER" or event == "DEBUFF_ADDED_SELF" then
-        -- Initialize storage for this GUID
-        if not debuffdb[guid] then debuffdb[guid] = {} end
-
-        -- Get spell info
-        local spellName, spellRank, texture
-        if SpellInfo then
-          spellName, spellRank, texture = SpellInfo(spellId)
-        end
-        if not spellName then
-          spellName, spellRank = SafeGetSpellNameAndRank(spellId)
-        end
-
-        if spellName then
-          -- Get duration from libdebuff's duration table or GetSpellRec
-          local duration = 0
-          if libdebuff.GetDuration then
-            duration = libdebuff:GetDuration(spellName, spellRank)
-          end
-
-          -- Try GetSpellRec for duration if libdebuff doesn't have it
-          if duration == 0 and GetSpellRec and spellId then
-            local success, spellRec = pcall(GetSpellRec, spellId)
-            if success and spellRec and spellRec.durationIndex and spellRec.durationIndex > 0 then
-              -- Duration index maps to spell duration - common values:
-              -- This is a rough approximation since we don't have the duration table
-              duration = 30 -- Default fallback
-            end
-          end
-
-          -- Store debuff data
-          debuffdb[guid][spellId] = {
-            spellId = spellId,
-            name = spellName,
-            rank = spellRank,
-            texture = texture,
-            stacks = stackCount or 1,
-            start = GetTime(),
-            duration = duration,
-            slot = slot,
-            auraLevel = auraLevel,
-            caster = (event == "DEBUFF_ADDED_SELF" or guid == playerGuid) and "player" or nil
-          }
-
-          -- Also update libdebuff's internal tracking if we have unit info
-          local unitName = UnitName and guid and UnitName(guid)
-          local unitLevel = UnitLevel and guid and UnitLevel(guid)
-          if unitName and duration > 0 then
-            libdebuff:AddEffect(unitName, unitLevel or 0, spellName, duration, "player")
-          end
-        end
-
-      elseif event == "DEBUFF_REMOVED_OTHER" or event == "DEBUFF_REMOVED_SELF" then
-        -- Remove debuff from tracking
-        if debuffdb[guid] and debuffdb[guid][spellId] then
-          debuffdb[guid][spellId] = nil
-        end
-      end
-    end)
-
-    -- Enhanced UnitDebuff function that uses Nampower data
-    -- This provides more accurate debuff information when available
-    local originalUnitDebuff = libdebuff.UnitDebuff
-    function libdebuff:UnitDebuffNampower(unit, id)
-      -- First try the original method
-      local effect, rank, texture, stacks, dtype, duration, timeleft, caster = originalUnitDebuff(self, unit, id)
-
-      -- If we have Nampower data for this unit, try to enhance it
-      if not UnitExists then return effect, rank, texture, stacks, dtype, duration, timeleft, caster end
-      
-      local exists, guid = UnitExists(unit)
-      if not exists or not guid or not debuffdb[guid] then
-        return effect, rank, texture, stacks, dtype, duration, timeleft, caster
-      end
-
-      -- Find the debuff by slot
-      for spellId, data in pairs(debuffdb[guid]) do
-        if data.slot == id then
-          -- Use Nampower data for more accurate timing
-          if data.duration and data.duration > 0 and data.start then
-            duration = data.duration
-            timeleft = data.duration + data.start - GetTime()
-            if timeleft < 0 then timeleft = 0 end
-            caster = data.caster
-            stacks = data.stacks or stacks
-          end
-          break
-        end
-      end
-
-      return effect, rank, texture, stacks, dtype, duration, timeleft, caster
-    end
-
-    -- Expose enhanced function
-    pfUI.api.libdebuff_nampower = libdebuff.UnitDebuffNampower
-  end
-
-  -- Enhanced buff tracking using BUFF events
-  if C.unitframes.nampower_buffs == "1" then
-    pfUI.nampower_buffs = pfUI.nampower_buffs or {}
-    local buffdb = pfUI.nampower_buffs
-
-    local buffTracker = CreateFrame("Frame")
-    buffTracker:RegisterEvent("BUFF_ADDED_OTHER")
-    buffTracker:RegisterEvent("BUFF_REMOVED_OTHER")
-    buffTracker:RegisterEvent("BUFF_ADDED_SELF")
-    buffTracker:RegisterEvent("BUFF_REMOVED_SELF")
-
-    buffTracker:SetScript("OnEvent", function()
-      local guid = arg1
-      local slot = arg2
-      local spellId = arg3
-      local stackCount = arg4
-      local auraLevel = arg5
-
-      if not guid or not spellId then return end
-
-      if event == "BUFF_ADDED_OTHER" or event == "BUFF_ADDED_SELF" then
-        if not buffdb[guid] then buffdb[guid] = {} end
-
-        local spellName, spellRank, texture
-        if SpellInfo then
-          spellName, spellRank, texture = SpellInfo(spellId)
-        end
-        if not spellName then
-          spellName, spellRank = SafeGetSpellNameAndRank(spellId)
-        end
-
-        if spellName then
-          buffdb[guid][spellId] = {
-            spellId = spellId,
-            name = spellName,
-            rank = spellRank,
-            texture = texture,
-            stacks = stackCount or 1,
-            start = GetTime(),
-            slot = slot,
-            auraLevel = auraLevel
-          }
-        end
-      elseif event == "BUFF_REMOVED_OTHER" or event == "BUFF_REMOVED_SELF" then
-        if buffdb[guid] and buffdb[guid][spellId] then
-          buffdb[guid][spellId] = nil
-        end
-      end
-    end)
-  end
+  -- NOTE: Buff tracking removed - was dead code (data collected but never used for display)
 
   -- Direct Aura Access API using GetUnitField
   -- Much faster than tooltip scanning - reads aura arrays directly from unit fields
@@ -429,22 +255,8 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
     end
   end
 
-  -- UNIT_DIED event handling
-  -- Can be used to clear tracking data or trigger effects on unit death
-  local deathTracker = CreateFrame("Frame")
-  deathTracker:RegisterEvent("UNIT_DIED")
-  deathTracker:SetScript("OnEvent", function()
-    local guid = arg1
-    if not guid then return end
-
-    -- Clean up debuff tracking for dead units
-    if pfUI.nampower_debuffs and pfUI.nampower_debuffs[guid] then
-      pfUI.nampower_debuffs[guid] = nil
-    end
-    if pfUI.nampower_buffs and pfUI.nampower_buffs[guid] then
-      pfUI.nampower_buffs[guid] = nil
-    end
-  end)
+  -- UNIT_DIED event handling - placeholder for future use
+  -- (Debuff/buff cleanup removed as tracking is now handled by libdebuff)
 
   -- Trinket Management API
   if GetTrinkets then
@@ -667,96 +479,6 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
     end
   end
 
-  -- Enhanced Heal Prediction with AURA_CAST events
-  -- This helps libpredict detect HoT applications more accurately
-  if libpredict then
-    local auraCastFrame = CreateFrame("Frame")
-    auraCastFrame:RegisterEvent("AURA_CAST_ON_SELF")
-    auraCastFrame:RegisterEvent("AURA_CAST_ON_OTHER")
-
-    auraCastFrame:SetScript("OnEvent", function()
-      local casterGuid = arg1
-      local targetGuid = arg2
-      local spellId = arg3
-
-      if not spellId or not targetGuid then return end
-
-      -- Get spell name
-      local spellName
-      if SpellInfo then
-        spellName = SpellInfo(spellId)
-      end
-      if not spellName then
-        spellName = SafeGetSpellNameAndRank(spellId)
-      end
-
-      if not spellName then return end
-
-      -- Check if this is a HoT spell we care about
-      local hotSpells = {
-        ["Rejuvenation"] = true,
-        ["Renew"] = true,
-        ["Regrowth"] = true,
-        ["Verjüngung"] = true, -- German
-        ["Erneuerung"] = true,
-        ["Nachwachsen"] = true,
-      }
-
-      if hotSpells[spellName] then
-        -- Signal to libpredict that a HoT was applied
-        -- This can be used to update heal predictions
-        if pfUI.api.libpredict and pfUI.api.libpredict.OnHotApplied then
-          pfUI.api.libpredict:OnHotApplied(targetGuid, spellName, spellId)
-        end
-      end
-    end)
-  end
-
-  -- Swing Timer Integration
-  -- Track auto-attack swing timers for melee classes
-  local swingFrame = CreateFrame("Frame")
-  swingFrame.mainHand = { start = 0, speed = 0 }
-  swingFrame.offHand = { start = 0, speed = 0 }
-  swingFrame.ranged = { start = 0, speed = 0 }
-
-  swingFrame:RegisterEvent("PLAYER_ENTER_COMBAT")
-  swingFrame:RegisterEvent("PLAYER_LEAVE_COMBAT")
-  swingFrame:RegisterEvent("CHAT_MSG_COMBAT_SELF_HITS")
-  swingFrame:RegisterEvent("CHAT_MSG_COMBAT_SELF_MISSES")
-
-  swingFrame:SetScript("OnEvent", function()
-    if event == "PLAYER_ENTER_COMBAT" then
-      local mainSpeed, offSpeed = UnitAttackSpeed("player")
-      this.mainHand.speed = mainSpeed or 2
-      this.offHand.speed = offSpeed or 0
-      this.mainHand.start = GetTime()
-      if this.offHand.speed > 0 then
-        this.offHand.start = GetTime()
-      end
-    elseif event == "CHAT_MSG_COMBAT_SELF_HITS" or event == "CHAT_MSG_COMBAT_SELF_MISSES" then
-      -- Reset swing timer on hit/miss
-      local mainSpeed, offSpeed = UnitAttackSpeed("player")
-      this.mainHand.speed = mainSpeed or 2
-      this.mainHand.start = GetTime()
-    end
-  end)
-
-  pfUI.api.GetSwingTimers = function()
-    local now = GetTime()
-    local mainRemaining = swingFrame.mainHand.speed - (now - swingFrame.mainHand.start)
-    local offRemaining = swingFrame.offHand.speed > 0 and (swingFrame.offHand.speed - (now - swingFrame.offHand.start)) or 0
-
-    return {
-      mainHand = {
-        remaining = math.max(0, mainRemaining),
-        speed = swingFrame.mainHand.speed,
-        progress = swingFrame.mainHand.speed > 0 and (1 - math.max(0, mainRemaining) / swingFrame.mainHand.speed) or 0,
-      },
-      offHand = {
-        remaining = math.max(0, offRemaining),
-        speed = swingFrame.offHand.speed,
-        progress = swingFrame.offHand.speed > 0 and (1 - math.max(0, offRemaining) / swingFrame.offHand.speed) or 0,
-      },
-    }
-  end
+  -- NOTE: HoT Detection (AURA_CAST events) removed - OnHotApplied callback was never implemented in libpredict
+  -- NOTE: Swing Timer removed - GetSwingTimers() was never called anywhere
 end)

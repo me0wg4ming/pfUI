@@ -90,7 +90,24 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
   -- Also try on PLAYER_ENTERING_WORLD in case target frame wasn't ready
   local initFrame = CreateFrame("Frame")
   initFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+  initFrame:RegisterEvent("PLAYER_LOGOUT")
   initFrame:SetScript("OnEvent", function()
+    -- Handle shutdown to prevent crash 132
+    if event == "PLAYER_LOGOUT" then
+      this:UnregisterAllEvents()
+      this:SetScript("OnEvent", nil)
+      -- Stop indicator OnUpdate scripts
+      if pfUI.uf and pfUI.uf.target then
+        if pfUI.uf.target.behindIndicator then
+          pfUI.uf.target.behindIndicator:SetScript("OnUpdate", nil)
+        end
+        if pfUI.uf.target.losIndicator then
+          pfUI.uf.target.losIndicator:SetScript("OnUpdate", nil)
+        end
+      end
+      return
+    end
+    
     CreateTargetIndicators()
     this:UnregisterAllEvents()
   end)
@@ -102,8 +119,16 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
     notifyFrame:RegisterEvent("CHAT_MSG_BN_WHISPER")
     notifyFrame:RegisterEvent("READY_CHECK")
     notifyFrame:RegisterEvent("RAID_INSTANCE_WELCOME")
+    notifyFrame:RegisterEvent("PLAYER_LOGOUT")
 
     notifyFrame:SetScript("OnEvent", function()
+      -- Handle shutdown to prevent crash 132
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        return
+      end
+      
       pcall(UnitXP, "notify", "taskbarIcon")
       pcall(UnitXP, "notify", "systemSound")
     end)

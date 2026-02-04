@@ -700,6 +700,7 @@ pfUI_translation["zhCN"] = {
   ["Show Empty Buttons"] = "显示空按钮",
   ["Show FPS and Latency Colors"] = "显示帧数以及延迟颜色",
   ["Show Guild Name"] = "显示公会名称",
+  ["Show Player Levels"] ="显示玩家等级",
   ["Show Happiness Icon"] = "显示高兴值图标",
   ["Show Health Points"] = "显示生命值",
   ["Show/Hide TimeManager"] = "显示/隐藏时间管理器",

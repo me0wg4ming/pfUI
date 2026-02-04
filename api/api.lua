@@ -445,18 +445,33 @@ end
 -- 'number'     [number]           the number that should be abbreviated
 -- 'returns:    [string]           the abbreviated value
 function pfUI.api.Abbreviate(number)
-  if pfUI_config.unitframes.abbrevnum == "1" then
+  local mode = pfUI_config.unitframes.abbrevnum
+  -- mode "0" = disabled (full numbers)
+  -- mode "1" = 2 decimals (4250 -> 4.25k) [legacy/default]
+  -- mode "2" = 1 decimal (4250 -> 4.2k) - always rounds DOWN
+  
+  if mode == "1" or mode == "2" then
     local sign = number < 0 and -1 or 1
     number = math.abs(number)
 
     if number > 1000000 then
-      return pfUI.api.round(number/1000000*sign,2) .. "m"
+      if mode == "2" then
+        -- 1 decimal, round DOWN: 4.18m -> 4.1m
+        return (floor(number/100000) / 10 * sign) .. "m"
+      else
+        return pfUI.api.round(number/1000000*sign, 2) .. "m"
+      end
     elseif number > 1000 then
-      return pfUI.api.round(number/1000*sign,2) .. "k"
+      if mode == "2" then
+        -- 1 decimal, round DOWN: 4180 -> 4.1k (not 4.2k)
+        return (floor(number/100) / 10 * sign) .. "k"
+      else
+        return pfUI.api.round(number/1000*sign, 2) .. "k"
+      end
     end
   end
 
-  return number
+  return math.floor(number)
 end
 
 -- [ SendChatMessageWide ]

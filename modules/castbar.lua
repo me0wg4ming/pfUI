@@ -6,6 +6,17 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
   local rawborder, default_border = GetBorderSize("unitframes")
   local cbtexture = pfUI.media[C.appearance.castbar.texture]
 
+  -- Helper function for castbar timer formatting
+  local function FormatCastbarTime(value)
+    if C.unitframes.castbardecimals == "1" then
+      -- 1 decimal, always floor
+      return string.format("%.1f", floor(value * 10) / 10)
+    else
+      -- 2 decimals (default)
+      return string.format("%.2f", value)
+    end
+  end
+
   local function CreateCastbar(name, parent, unitstr, unitname)
     local cb = CreateFrame("Frame", name, parent or UIParent)
 
@@ -165,10 +176,10 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
         if this.showtimer then
           if this.delay and this.delay > 0 then
-            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. round(this.delay,2) .. " |r "
-            this.bar.right:SetText(delay .. string.format("%.2f",cur) .. " / " .. round(max,2))
+            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. FormatCastbarTime(this.delay) .. " |r "
+            this.bar.right:SetText(delay .. FormatCastbarTime(cur) .. " / " .. FormatCastbarTime(max))
           else
-            this.bar.right:SetText(string.format("%.2f",cur) .. " / " .. round(max,2))
+            this.bar.right:SetText(FormatCastbarTime(cur) .. " / " .. FormatCastbarTime(max))
           end
         end
 
