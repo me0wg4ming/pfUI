@@ -257,8 +257,13 @@ function pfUI.api.GetUnitStats(unitstr, trackStats)
   local hp, maxHp, power, maxPower, powerType
   local usedNampower = false
   
-  -- For NPCs/Mobs/Pets (everything that's NOT a player): Skip Nampower, use Blizzard API only
-  if unitstr and UnitExists(unitstr) and not UnitIsPlayer(unitstr) then
+  
+  -- For NPCs/Mobs (everything that's NOT a player AND NOT a pet): Skip Nampower, use Blizzard API only
+  -- Pets should use Nampower for better accuracy (power3=focus, power5=happiness)
+  -- Proper pet check: UnitPlayerControlled = true for pets and players, UnitIsPlayer = false for pets
+  local isPet = UnitPlayerControlled(unitstr) and not UnitIsPlayer(unitstr)
+  
+  if unitstr and UnitExists(unitstr) and not UnitIsPlayer(unitstr) and not isPet then
     hp = UnitHealth(unitstr) or 0
     maxHp = UnitHealthMax(unitstr) or 1
     powerType = UnitPowerType(unitstr) or 0
@@ -285,13 +290,14 @@ function pfUI.api.GetUnitStats(unitstr, trackStats)
     return hp, maxHp, power, maxPower, powerType
   end
   
-  -- Try Nampower first if available (ONLY for players now)
+  -- Try Nampower first if available (for players AND pets now)
   if GetUnitField then
     -- Use the standard check first, then get guid separately
     local exists = _G.UnitExists(unitstr)
     if exists then
       -- Get guid via the extended UnitExists for Nampower
       local _, guid = _G.UnitExists(unitstr)
+      
       if guid then
         hp = GetUnitField(guid, "health")
         maxHp = GetUnitField(guid, "maxHealth")
@@ -316,6 +322,12 @@ function pfUI.api.GetUnitStats(unitstr, trackStats)
           power = GetUnitField(guid, "power4") or UnitMana(unitstr)
           if power then power = math.floor(power) end
           maxPower = GetUnitField(guid, "maxPower4") or UnitManaMax(unitstr)
+        elseif powerType == 2 then
+          -- Focus (Hunter pets use power3)
+          power = GetUnitField(guid, "power3") or UnitMana(unitstr)
+          if power then power = math.floor(power) end
+          maxPower = GetUnitField(guid, "maxPower3") or UnitManaMax(unitstr)
+          
         else
           -- Mana (default)
           power = GetUnitField(guid, "power1") or UnitMana(unitstr)
