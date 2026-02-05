@@ -1551,9 +1551,13 @@ if hasNampower then
           removedCasterGuid = ownership.casterGuid
         end
         
-        -- Clear both mappings
-        slotOwnership[guid][foundAuraSlot] = nil
-        displayToAura[guid][displaySlot] = nil
+        -- Clear both mappings (with nil-checks)
+        if slotOwnership[guid] then
+          slotOwnership[guid][foundAuraSlot] = nil
+        end
+        if displayToAura[guid] then
+          displayToAura[guid][displaySlot] = nil
+        end
         
         if debugStats.enabled and IsCurrentTarget(guid) then
           DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d %s wasOurs=%s caster=%s", 
