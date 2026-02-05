@@ -257,7 +257,35 @@ function pfUI.api.GetUnitStats(unitstr, trackStats)
   local hp, maxHp, power, maxPower, powerType
   local usedNampower = false
   
-  -- Try Nampower first if available
+  -- For NPCs/Mobs/Pets (everything that's NOT a player): Skip Nampower, use Blizzard API only
+  if unitstr and UnitExists(unitstr) and not UnitIsPlayer(unitstr) then
+    hp = UnitHealth(unitstr) or 0
+    maxHp = UnitHealthMax(unitstr) or 1
+    powerType = UnitPowerType(unitstr) or 0
+    power = UnitMana(unitstr) or 0
+    maxPower = UnitManaMax(unitstr) or 1
+    
+    -- Track as fallback usage
+    if trackStats then
+      if pfUI.uf and pfUI.uf.stats and pfUI.uf.stats.enabled then
+        local lastStats = pfUI.api.lastUnitStats[unitstr]
+        if not lastStats or lastStats.hp ~= hp or lastStats.maxHp ~= maxHp or 
+           lastStats.power ~= power or lastStats.maxPower ~= maxPower then
+          pfUI.uf.stats.fallbackUsed = (pfUI.uf.stats.fallbackUsed or 0) + 1
+          pfUI.api.lastUnitStats[unitstr] = {
+            hp = hp,
+            maxHp = maxHp,
+            power = power,
+            maxPower = maxPower
+          }
+        end
+      end
+    end
+    
+    return hp, maxHp, power, maxPower, powerType
+  end
+  
+  -- Try Nampower first if available (ONLY for players now)
   if GetUnitField then
     -- Use the standard check first, then get guid separately
     local exists = _G.UnitExists(unitstr)
@@ -319,7 +347,7 @@ function pfUI.api.GetUnitStats(unitstr, trackStats)
     end
   end
   
-  -- Fallback to standard API
+  -- Fallback to standard API (for players when Nampower fails)
   hp = UnitHealth(unitstr) or 0
   maxHp = UnitHealthMax(unitstr) or 1
   powerType = UnitPowerType(unitstr) or 0
@@ -2586,9 +2614,16 @@ function pfUI.uf:RefreshUnit(unit, component)
       unit.hpCenterText:SetText(pfUI.uf:GetStatusValue(unit, "hpcenter"))
       unit.hpRightText:SetText(pfUI.uf:GetStatusValue(unit, "hpright"))
 
-      unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
-      unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
-      unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
+      -- Hide power text for NPCs without power (maxPower == 0)
+      if powermax == 0 then
+        unit.powerLeftText:SetText("")
+        unit.powerCenterText:SetText("")
+        unit.powerRightText:SetText("")
+      else
+        unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
+        unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
+        unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
+      end
 
       if UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
         unit.hp.bar:SetStatusBarColor(.5,.5,.5,.5)
