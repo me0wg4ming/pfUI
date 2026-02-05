@@ -1213,8 +1213,11 @@ if hasNampower then
       
       -- CP-based spells: Force duration=0 for others (unknown!)
       if not isOurs and combopointAbilities[spellName] then
-        duration = 0
-      end
+        if spellName == "Expose Armor" then
+          duration = 30  -- Fixed duration for Expose Armor
+        else
+          duration = 0
+        end
       
       -- Store in allAuraCasts
       if targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" then
