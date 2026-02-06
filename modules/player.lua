@@ -13,12 +13,7 @@ pfUI:RegisterModule("player", "vanilla:tbc", function ()
 
   -- Add throttle to player frame OnUpdate
   if pfUI.uf.player:GetScript("OnUpdate") then
-    local originalOnUpdate = pfUI.uf.player:GetScript("OnUpdate")
-    pfUI.uf.player:SetScript("OnUpdate", function()
-      if (this.throttleTick or 0) > GetTime() then return end
-      this.throttleTick = GetTime() + 0.1  -- Default: 10 FPS
-      originalOnUpdate()
-    end)
+    pfUI.uf.player:SetScript("OnUpdate", pfUI.uf.player:GetScript("OnUpdate"))
   end
 
   -- Replace default's RESET_INSTANCES button with an always working one

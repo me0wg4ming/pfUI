@@ -149,8 +149,37 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
             this.icon:Show()
             this.icon:SetHeight(size)
             this.icon:SetWidth(size)
-            this.icon.texture:SetTexture(texture)
+            
+            -- Override with item icon from libdebuff_casts or persistent item icon cache
+            local useTexture = texture
+            local useItemName = nil
+            if pfUI.libdebuff_casts or pfUI.libdebuff_item_icons then
+              local castGuid = nil
+              if this.unitstr == "player" and GetPlayerGUID then
+                castGuid = GetPlayerGUID()
+              elseif this.unitstr and UnitExists then
+                local _, guid = UnitExists(this.unitstr)
+                castGuid = guid
+              end
+              if castGuid then
+                -- First check active cast data
+                if pfUI.libdebuff_casts and pfUI.libdebuff_casts[castGuid] and pfUI.libdebuff_casts[castGuid].itemID then
+                  useTexture = pfUI.libdebuff_casts[castGuid].icon or texture
+                -- Fallback to persistent item icon cache
+                elseif pfUI.libdebuff_item_icons and pfUI.libdebuff_item_icons[castGuid] then
+                  useTexture = pfUI.libdebuff_item_icons[castGuid].icon or texture
+                  useItemName = pfUI.libdebuff_item_icons[castGuid].name
+                end
+              end
+            end
+            
+            this.icon.texture:SetTexture(useTexture)
             this.bar:SetPoint("TOPLEFT", this.icon, "TOPRIGHT", this.spacing, 0)
+            
+            -- Override spell name with item name for item-triggered casts
+            if useItemName and this.showname then
+              this.bar.left:SetText(useItemName .. " " .. rank)
+            end
           else
             this.bar:SetPoint("TOPLEFT", this, 0, 0)
             this.icon:Hide()
@@ -189,6 +218,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         this.bar:SetValue(100)
         this.fadeout = 1
         this.delay = 0
+        this.itemIconApplied = nil
       end
     end)
 

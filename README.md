@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-7.6.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-7.6.2-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Required-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Required-purple.svg)](https://gitea.com/avitasia/nampower)
@@ -11,6 +11,76 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+
+## 🎯 What's New in Version 7.6.2 (February 6, 2026)
+
+### 🚀 Pure GetUnitField Debuff System (libdebuff.lua)
+
+**Major performance rewrite: UnitDebuff() now runs entirely through Nampower's GetUnitField — zero Blizzard API calls, zero tooltip scans.**
+
+Previously, every debuff icon required three expensive calls per update:
+1. `UnitDebuff(unit, slot)` — Blizzard C-side API call
+2. `scanner:SetUnitDebuff(unit, slot)` — Tooltip object creation + GameTooltip parse
+3. `scanner:Line(1)` — String extraction from tooltip
+
+All three are now replaced by pure Lua table lookups into cached GetUnitField data:
+
+| Data | Old (Blizzard API) | New (GetUnitField) |
+|------|-------------------|-------------------|
+| Spell Name | Tooltip scan | `SpellInfo(spellId)` |
+| Texture | `UnitDebuff()` ret.1 | `GetSpellIconTexture(GetSpellRecField(spellId, "spellIconID"))` |
+| Stacks | `UnitDebuff()` ret.2 | `GetUnitField(guid, "auraApplications")[slot]` |
+| DebuffType | `UnitDebuff()` ret.3 | `GetSpellRecField(spellId, "dispel")` → dispelTypeMap |
+| Duration/Timeleft | ownDebuffs tracking | unchanged |
+| Caster | slotOwnership tracking | unchanged |
+
+**Performance impact:** With 5 debuffs on target = 15 expensive calls eliminated per update cycle. With 10 visible nameplates × 3 debuffs = 90 calls eliminated per refresh. Estimated **3-5x faster** per UnitDebuff call.
+
+**DebuffType now works in Nampower path:** Previously dtype was only available from Blizzard's UnitDebuff(). Now resolved from SpellRec DBC via `GetSpellRecField(spellId, "dispel")`, meaning debuff frame border colors (Magic=blue, Curse=purple, Poison=green, Disease=brown) now work correctly for all units including nameplates.
+
+### 🎨 Item-Cast Icon & Name Support (libdebuff.lua + castbar.lua)
+
+**Castbar now shows the correct item icon and item name for item-triggered casts!**
+
+Previously, using items with cast times (Gnomish Death Ray, Net-o-Matic, Noggenfogger Elixir etc.) showed the generic spell icon and spell name on the castbar. Now:
+
+- ✅ `SPELL_START_SELF/OTHER` `arg1` (itemId) is now parsed and used
+- ✅ `SPELL_GO_SELF/OTHER` `arg1` (itemId) is now parsed
+- ✅ Item icon resolved via `GetItemStatsField(itemId, "displayInfoID")` → `GetItemIconTexture()`
+- ✅ Item name resolved via `GetItemStatsField(itemId, "displayName")`
+- ✅ `pfUI.libdebuff_item_icons` — Persistent item icon/name cache that survives SPELL_GO clearing cast data
+- ✅ `castbar.lua` — Reads item icon + name from persistent cache with fallback to spell data
+
+**Note:** Item icon/name detection only works for your own casts (WoW 1.12.1 protocol limitation — server sends `itemId=0` to other clients).
+
+### 🔧 Icon Path Fix (libdebuff.lua)
+
+**Fixed missing icons from Nampower texture functions.**
+
+`GetSpellIconTexture()` and `GetItemIconTexture()` return short texture names (e.g. `INV_Gizmo_08`) without the `Interface\Icons\` prefix required by `SetTexture()`. Both `GetSpellIcon()` and the item icon lookup now auto-prefix the full path when needed.
+
+### ⚡ Memory & GC Optimizations (libdebuff.lua)
+
+- ✅ **Carnage frame recycling** — Persistent `carnageCheckFrame` reused instead of `CreateFrame()` per Ferocious Bite (eliminates frame leak in combat)
+- ✅ **Recycled cleanup buffers** — `_cleanupBuf1`/`_cleanupBuf2` reused instead of `table.insert` + new table per `CleanupExpiredTimers` call
+- ✅ **SelfOverwrite buffer recycling** — Reused buffer instead of new `oldCasters` table per overwrite
+- ✅ **Pre-defined sort function** — `_ownDebuffSortFunc` defined once instead of anonymous closure per `UnitOwnDebuff` call
+- ✅ **spellId stored in ownDebuffs** — Enables direct DBC lookups for dtype without slotMap iteration
+
+### 📊 Code Statistics
+
+**libdebuff.lua:**
+- Blizzard API calls in Nampower path: 3 per debuff → 0
+- New GetUnitField calls: `aura` + `auraApplications` (cached 50ms)
+- New DBC lookups: `GetSpellRecField(spellId, "dispel")` for dtype
+- New exports: `pfUI.libdebuff_item_icons`
+
+**castbar.lua:**
+- Item icon override via `pfUI.libdebuff_item_icons` (persistent cache)
+- Item name override via `GetItemStatsField(itemId, "displayName")`
+- Works for player + target + focus castbars
 
 ---
 
@@ -1423,7 +1493,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 7.6.0
-**Release Date:** February 3, 2026  
+**Version:** 7.6.2
+**Release Date:** February 6, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable

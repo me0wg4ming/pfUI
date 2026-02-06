@@ -243,7 +243,7 @@ libpredict:SetScript("OnUpdate", function()
   -- throttle cleanup - no need to check every frame
   local now = pfUI.uf.now or GetTime()
   if (this.tick or 0) > now then return end
-  this.tick = now + 0.1  -- Default: 10 FPS
+  this.tick = now + pfUI.throttle:Get("libpredict")  -- Default: Normal (10 FPS)
 
   -- update on timeout events
   for timestamp, targets in pairs(events) do
