@@ -2510,6 +2510,10 @@ function pfUI.uf:RefreshUnit(unit, component)
     unit.power.bar:SetMinMaxValues(0, powermax, true)
     unit.power.bar:SetValue(power)
 
+    -- Hide power bar text for NPCs without real power (power == 0)
+    local isNPC = not UnitIsPlayer(unitstr) and not UnitPlayerControlled(unitstr)
+    local npcNoPower = isNPC and (not power or power == 0)
+
     -- set healthbar color
     local custom_active = nil
     local customfullhp = unit.config.defcolor == "0" and unit.config.customfullhp or C.unitframes.customfullhp
@@ -2594,10 +2598,25 @@ function pfUI.uf:RefreshUnit(unit, component)
       unit.hpCenterText:SetText(pfUI.uf:GetStatusValue(unit, "hpcenter"))
       unit.hpRightText:SetText(pfUI.uf:GetStatusValue(unit, "hpright"))
 
-      -- Hide power text for NPCs without power (maxPower == 0)
-      unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
-      unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
-      unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
+      -- Hide power text for NPCs without a real power system
+      local cfgLeft = unit.config.txtpowerleft
+      local cfgCenter = unit.config.txtpowercenter
+      local cfgRight = unit.config.txtpowerright
+      if npcNoPower and cfgLeft and strfind(cfgLeft, "power") then
+        unit.powerLeftText:SetText("")
+      else
+        unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
+      end
+      if npcNoPower and cfgCenter and strfind(cfgCenter, "power") then
+        unit.powerCenterText:SetText("")
+      else
+        unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
+      end
+      if npcNoPower and cfgRight and strfind(cfgRight, "power") then
+        unit.powerRightText:SetText("")
+      else
+        unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
+      end
 
       if UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
         unit.hp.bar:SetStatusBarColor(.5,.5,.5,.5)
