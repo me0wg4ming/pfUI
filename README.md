@@ -15,7 +15,7 @@ This version includes significant performance improvements, DLL-enhanced feature
 ---
 
 ## 🎯 What's New in Version 7.6.1 (February 6, 2026)
-- Added a new menu in /pfui named "Throttling" - Players who were unsatisfied with the throggling update rate can change it now for nameplates, Toolip Cursor and Chat Tab.
+- Added a new menu in /pfui named "Throttling" - Players who were unsatisfied with the throttling update rate can change it now for nameplates, Toolip Cursor and Chat Tab.
 
 ---
 
