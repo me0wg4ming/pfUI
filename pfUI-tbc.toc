@@ -4,7 +4,7 @@
 ## Notes: A complete user interface replacement.
 ## Notes-ruRU: Полная замена пользовательского интерфейса.
 ## Version: 7.6.0 (experiment version)
-## SavedVariables: pfUI_profiles, pfUI_addon_profiles, pfUI_cache
+## SavedVariables: pfUI_profiles, pfUI_addon_profiles, pfUI_cache, pfUI_throttle
 ## SavedVariablesPerCharacter: pfUI_config, pfUI_init, pfUI_playerDB
 
 pfUI.lua

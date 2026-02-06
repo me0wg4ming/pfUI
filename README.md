@@ -12,6 +12,13 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
 
+---
+
+## 🎯 What's New in Version 7.6.1 (February 6, 2026)
+- Added a new menu in /pfui named "Throttling" - Players who were unsatisfied with the throggling update rate can change it now for nameplates, Toolip Cursor and Chat Tab.
+
+---
+
 ## 🎯 What's New in Version 7.6.0 (February 3, 2026)
 
 ### 🚀 Centralized Cast-Bar Tracking System (libdebuff.lua + nameplates.lua)

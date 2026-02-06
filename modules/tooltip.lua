@@ -33,9 +33,9 @@ pfUI:RegisterModule("tooltip", "vanilla", function ()
           tooltip.cursor:SetWidth(tonumber(C.tooltip.cursoroffset) * 2)
           tooltip.cursor:SetHeight(tonumber(C.tooltip.cursoroffset) * 2)
           tooltip.cursor:SetScript("OnUpdate", function()
-            -- throttle to 0.1s - cursor following doesn't need to be every frame
+            -- throttle - cursor following doesn't need to be every frame
             if (this.tick or 0) > GetTime() then return end
-            this.tick = GetTime() + 0.1
+            this.tick = GetTime() + (pfUI.throttle and pfUI.throttle:Get("tooltip_cursor") or 0.1)
 
             local scale = UIParent:GetScale()
             local x, y = GetCursorPosition()

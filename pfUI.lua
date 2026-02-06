@@ -30,6 +30,7 @@ pfUI_init = {}
 pfUI_profiles = {}
 pfUI_addon_profiles = {}
 pfUI_cache = {}
+pfUI_throttle = {}
 
 -- localization
 pfUI_locale = {}
@@ -241,6 +242,7 @@ function pfUI:GetEnvironment()
 
   pfUI.env._G = getfenv(0)
   pfUI.env.C = pfUI_config
+  pfUI.env.pfUI_throttle = _G.pfUI_throttle
   pfUI.env.L = (pfUI_locale[GetLocale()] or pfUI_locale["enUS"])
 
   return pfUI.env

@@ -455,8 +455,8 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
   if C.chat.global.tabmouse == "1" then
     pfUI.chat.mouseovertab = CreateFrame("Frame")
     pfUI.chat.mouseovertab:SetScript("OnUpdate", function()
-      -- throttle to 0.1s
-      if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
+      -- throttle
+      if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + pfUI.throttle:Get("chat_tab") end  -- Default: Normal (10 FPS)
 
       if pfUI.chat.hideLock then return end
 

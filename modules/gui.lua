@@ -351,13 +351,13 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
             entry.text = text
             entry.func = function()
-              if category[config] ~= value then
+              if category and category[config] ~= value then
                 category[config] = value
                 if ufunc then ufunc() else pfUI.gui.settingChanged = true end
               end
             end
 
-            if category[config] == value then
+            if category and category[config] == value then
               frame.input.current = i
             end
 
@@ -1623,6 +1623,321 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
     CreateGUIEntry(T["Settings"], T["GM-Mode"], function()
       CreateConfig(nil, T["Disable GM-Mode"], C.gm, "disable", "checkbox")
       CreateConfig(nil, T["Selected Core"], C.gm, "server", "dropdown", pfUI.gui.dropdowns.gmserver_text)
+    end)
+
+    -- Throttling Menu
+    CreateGUIEntry(T["Throttling"], T["Nameplates"], function()
+      local header = CreateConfig(nil, T["Nameplate Update Rate"], nil, nil, "header")
+      header:GetParent().objectCount = header:GetParent().objectCount - 1
+      header:SetHeight(20)
+      
+      local targetCustom  -- declare first so callback can use it
+      
+      CreateConfig(function()
+        -- Callback when dropdown changes - update custom field immediately
+        if targetCustom and targetCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("nameplates_target")
+          if not isCustom then
+            -- Preset selected - show FPS from preset, make readonly
+            targetCustom.input:EnableMouse(false)
+            targetCustom.input:EnableKeyboard(false)
+            targetCustom.input:ClearFocus()
+            targetCustom.input:SetTextColor(.5,.5,.5,1)
+            targetCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_target")))
+          else
+            -- Custom selected - make editable
+            targetCustom.input:EnableMouse(true)
+            targetCustom.input:EnableKeyboard(true)
+            targetCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.nameplates_target_custom then
+              targetCustom.input:SetText(_G.pfUI_throttle.nameplates_target_custom)
+            end
+          end
+        end
+      end, T["Target/Casting Plates"], _G.pfUI_throttle, "nameplates_target", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      -- Now create custom field AFTER dropdown
+      targetCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_target_custom")
+      
+      -- Set initial state
+      local isCustom = pfUI.throttle:IsCustom("nameplates_target")
+      if not isCustom then
+        targetCustom.input:EnableMouse(false)
+        targetCustom.input:EnableKeyboard(false)
+        targetCustom.input:SetTextColor(.5,.5,.5,1)
+        targetCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_target")))
+      else
+        targetCustom.input:EnableMouse(true)
+        targetCustom.input:EnableKeyboard(true)
+        targetCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.nameplates_target_custom then
+          targetCustom.input:SetText(_G.pfUI_throttle.nameplates_target_custom)
+        end
+      end
+      
+      -- Spacer after custom field
+      local spacer1 = CreateConfig(nil, " ", nil, nil, "header")
+      spacer1:GetParent().objectCount = spacer1:GetParent().objectCount - 1
+      spacer1:SetHeight(5)
+      
+      local normalCustom
+      
+      CreateConfig(function()
+        if normalCustom and normalCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("nameplates")
+          if not isCustom then
+            normalCustom.input:EnableMouse(false)
+            normalCustom.input:EnableKeyboard(false)
+            normalCustom.input:ClearFocus()
+            normalCustom.input:SetTextColor(.5,.5,.5,1)
+            normalCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates")))
+          else
+            normalCustom.input:EnableMouse(true)
+            normalCustom.input:EnableKeyboard(true)
+            normalCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.nameplates_custom then
+              normalCustom.input:SetText(_G.pfUI_throttle.nameplates_custom)
+            end
+          end
+        end
+      end, T["Normal Plates"], _G.pfUI_throttle, "nameplates", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      normalCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_custom")
+      
+      local isCustom2 = pfUI.throttle:IsCustom("nameplates")
+      if not isCustom2 then
+        normalCustom.input:EnableMouse(false)
+        normalCustom.input:EnableKeyboard(false)
+        normalCustom.input:SetTextColor(.5,.5,.5,1)
+        normalCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates")))
+      else
+        normalCustom.input:EnableMouse(true)
+        normalCustom.input:EnableKeyboard(true)
+        normalCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.nameplates_custom then
+          normalCustom.input:SetText(_G.pfUI_throttle.nameplates_custom)
+        end
+      end
+      
+      -- Spacer after custom field
+      local spacer2 = CreateConfig(nil, " ", nil, nil, "header")
+      spacer2:GetParent().objectCount = spacer2:GetParent().objectCount - 1
+      spacer2:SetHeight(5)
+      
+      local massCustom
+      
+      CreateConfig(function()
+        if massCustom and massCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("nameplates_mass")
+          if not isCustom then
+            massCustom.input:EnableMouse(false)
+            massCustom.input:EnableKeyboard(false)
+            massCustom.input:ClearFocus()
+            massCustom.input:SetTextColor(.5,.5,.5,1)
+            massCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_mass")))
+          else
+            massCustom.input:EnableMouse(true)
+            massCustom.input:EnableKeyboard(true)
+            massCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.nameplates_mass_custom then
+              massCustom.input:SetText(_G.pfUI_throttle.nameplates_mass_custom)
+            end
+          end
+        end
+      end, T["Mass Pulls (20+ Plates)"], _G.pfUI_throttle, "nameplates_mass", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      massCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_mass_custom")
+      
+      local isCustom3 = pfUI.throttle:IsCustom("nameplates_mass")
+      if not isCustom3 then
+        massCustom.input:EnableMouse(false)
+        massCustom.input:EnableKeyboard(false)
+        massCustom.input:SetTextColor(.5,.5,.5,1)
+        massCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_mass")))
+      else
+        massCustom.input:EnableMouse(true)
+        massCustom.input:EnableKeyboard(true)
+        massCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.nameplates_mass_custom then
+          massCustom.input:SetText(_G.pfUI_throttle.nameplates_mass_custom)
+        end
+      end
+      
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(10)
+      
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("nameplates_target")
+        pfUI.throttle:ResetToDefault("nameplates")
+        pfUI.throttle:ResetToDefault("nameplates_mass")
+        -- Also reset custom fields to their default FPS values
+        _G.pfUI_throttle.nameplates_target_custom = "50"
+        _G.pfUI_throttle.nameplates_custom = "10"
+        _G.pfUI_throttle.nameplates_mass_custom = "7"
+        Reload()
+      end, true)
+    end)
+
+    CreateGUIEntry(T["Throttling"], T["Tooltips"], function()
+      local header = CreateConfig(nil, T["Tooltip Update Rate"], nil, nil, "header")
+      header:GetParent().objectCount = header:GetParent().objectCount - 1
+      header:SetHeight(20)
+      
+      local cursorCustom
+      
+      CreateConfig(function()
+        if cursorCustom and cursorCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("tooltip_cursor")
+          if not isCustom then
+            cursorCustom.input:EnableMouse(false)
+            cursorCustom.input:EnableKeyboard(false)
+            cursorCustom.input:ClearFocus()
+            cursorCustom.input:SetTextColor(.5,.5,.5,1)
+            cursorCustom.input:SetText(tostring(pfUI.throttle:GetFps("tooltip_cursor")))
+          else
+            cursorCustom.input:EnableMouse(true)
+            cursorCustom.input:EnableKeyboard(true)
+            cursorCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.tooltip_cursor_custom then
+              cursorCustom.input:SetText(_G.pfUI_throttle.tooltip_cursor_custom)
+            end
+          end
+        end
+      end, T["Cursor Follow"], _G.pfUI_throttle, "tooltip_cursor", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      cursorCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "tooltip_cursor_custom")
+      
+      local isCustom = pfUI.throttle:IsCustom("tooltip_cursor")
+      if not isCustom then
+        cursorCustom.input:EnableMouse(false)
+        cursorCustom.input:EnableKeyboard(false)
+        cursorCustom.input:SetTextColor(.5,.5,.5,1)
+        cursorCustom.input:SetText(tostring(pfUI.throttle:GetFps("tooltip_cursor")))
+      else
+        cursorCustom.input:EnableMouse(true)
+        cursorCustom.input:EnableKeyboard(true)
+        cursorCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.tooltip_cursor_custom then
+          cursorCustom.input:SetText(_G.pfUI_throttle.tooltip_cursor_custom)
+        end
+      end
+      
+      -- Small spacer
+      local spacer1 = CreateConfig(nil, " ", nil, nil, "header")
+      spacer1:GetParent().objectCount = spacer1:GetParent().objectCount - 1
+      spacer1:SetHeight(5)
+      
+      -- Info note about Native mode
+      local infoText = CreateConfig(nil, T["Note: Only works when Cursor Align is NOT 'Native'"], nil, nil, "header")
+      infoText:GetParent().objectCount = infoText:GetParent().objectCount - 1
+      infoText:SetHeight(25)
+      
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(5)
+      
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("tooltip_cursor")
+        _G.pfUI_throttle.tooltip_cursor_custom = "10"
+        Reload()
+      end, true)
+    end)
+    CreateGUIEntry(T["Throttling"], T["Chat Tab"], function()
+      local chatCustom
+      
+      CreateConfig(function()
+        if chatCustom and chatCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("chat_tab")
+          if not isCustom then
+            chatCustom.input:EnableMouse(false)
+            chatCustom.input:EnableKeyboard(false)
+            chatCustom.input:ClearFocus()
+            chatCustom.input:SetTextColor(.5,.5,.5,1)
+            chatCustom.input:SetText(tostring(pfUI.throttle:GetFps("chat_tab")))
+          else
+            chatCustom.input:EnableMouse(true)
+            chatCustom.input:EnableKeyboard(true)
+            chatCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.chat_tab_custom then
+              chatCustom.input:SetText(_G.pfUI_throttle.chat_tab_custom)
+            end
+          end
+        end
+      end, T["Chat Tab Hover Check"], _G.pfUI_throttle, "chat_tab", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      chatCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "chat_tab_custom")
+      
+      local isCustom = pfUI.throttle:IsCustom("chat_tab")
+      if not isCustom then
+        chatCustom.input:EnableMouse(false)
+        chatCustom.input:EnableKeyboard(false)
+        chatCustom.input:SetTextColor(.5,.5,.5,1)
+        chatCustom.input:SetText(tostring(pfUI.throttle:GetFps("chat_tab")))
+      else
+        chatCustom.input:EnableMouse(true)
+        chatCustom.input:EnableKeyboard(true)
+        chatCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.chat_tab_custom then
+          chatCustom.input:SetText(_G.pfUI_throttle.chat_tab_custom)
+        end
+      end
+      
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(10)
+      
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("chat_tab")
+        _G.pfUI_throttle.chat_tab_custom = "10"
+        Reload()
+      end, true)
     end)
 
     CreateGUIEntry(T["Unit Frames"], T["General"], function()

@@ -1263,11 +1263,11 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     
     local throttle
     if target or isCasting then
-      throttle = 0.02  -- 50 FPS for target OR active castbar
+      throttle = pfUI.throttle:Get("nameplates_target")  -- Default: Fast (20 FPS)
     elseif visiblePlateCount > 20 then
-      throttle = 0.15  -- ~7 FPS for mass pulls (20+ plates)
+      throttle = pfUI.throttle:Get("nameplates_mass")    -- Default: Slow (5 FPS) for mass pulls
     else
-      throttle = 0.1   -- 10 FPS for others (healthbar updates)
+      throttle = pfUI.throttle:Get("nameplates")         -- Default: Normal (10 FPS)
     end
     
     -- Check for pending event updates (these bypass throttle for immediate response)

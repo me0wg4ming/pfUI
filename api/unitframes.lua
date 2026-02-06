@@ -1395,7 +1395,7 @@ function pfUI.uf.OnUpdate()
   -- update combat feedback (no throttle - needs immediate feedback)
   if this.feedbackText then CombatFeedback_OnUpdate(arg1) end
 
-  -- Throttle raid/party frames for performance (10 updates/sec)
+  -- Throttle raid/party frames for performance
   if this.label == "raid" or this.label == "party" then
     if (this.throttleTick or 0) > now then
       if pfUI.uf.stats and pfUI.uf.stats.enabled then
@@ -1403,7 +1403,7 @@ function pfUI.uf.OnUpdate()
       end
       return
     end
-    this.throttleTick = now + 0.1
+    this.throttleTick = now + 0.1  -- Default: 10 FPS
   end
 
   -- ============================================================================
