@@ -1197,9 +1197,12 @@ if hasNampower then
       local numHit = arg6 or 0
       local numMissed = arg7 or 0
       
-      -- Clear cast bar
+      -- Clear cast bar only if SPELL_GO matches the active cast
+      -- (Reactive procs like Frost Armor trigger SPELL_GO but shouldn't clear the castbar)
       if casterGuid and pfUI.libdebuff_casts[casterGuid] then
-        pfUI.libdebuff_casts[casterGuid] = nil
+        if pfUI.libdebuff_casts[casterGuid].spellID == spellId then
+          pfUI.libdebuff_casts[casterGuid] = nil
+        end
       end
       
       if numMissed > 0 or numHit == 0 then return end
