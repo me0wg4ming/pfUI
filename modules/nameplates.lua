@@ -105,6 +105,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     cfg.targetcastbar = C.nameplates["targetcastbar"] == "1"
     cfg.notargalpha = tonumber(C.nameplates.notargalpha) or 0.5
     if cfg.notargalpha > 1 then cfg.notargalpha = cfg.notargalpha / 100 end
+    -- Clamp to 0.99 so non-target plates never reach 1.0 (used for target detection)
+    if cfg.notargalpha > 0.99 then cfg.notargalpha = 0.99 end
     cfg.namefightcolor = C.nameplates.namefightcolor == "1"
     cfg.spellname = C.nameplates.spellname == "1"
     cfg.showhp = C.nameplates.showhp == "1"
