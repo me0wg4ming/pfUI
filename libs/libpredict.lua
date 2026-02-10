@@ -131,10 +131,6 @@ libpredict:SetScript("OnEvent", function()
   end
   
   if event == "CHAT_MSG_ADDON" and (arg1 == "HealComm" or arg1 == "CTRA") then
-    -- Ignore own messages (sender receives own addon messages)
-    local playerName = UnitName("player")
-    if arg4 == playerName then return end
-    
     this:ParseChatMessage(arg4, arg2, arg1)
   elseif event == "UNIT_HEALTH" then
     local name = UnitName(arg1)
