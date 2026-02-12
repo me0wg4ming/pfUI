@@ -957,7 +957,7 @@ libpredict.sender:SetScript("OnEvent", function()
       if spell == REGROWTH then
         -- Extract rank from spell_queue[2] which contains "spell + rank"
         local fullSpell = spell_queue[2]
-        local rankStr = fullSpell and string.match(fullSpell, "Rank (%d+)") or nil
+        local rankStr = fullSpell and string.find(fullSpell, "Rank (%d+)") or nil
         local rankNum = rankStr and tonumber(rankStr) or nil
         
         if this.regrowth_timer then
