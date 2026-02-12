@@ -175,7 +175,17 @@ end
 function pfUI.api.UnitHasBuff(unit, buff)
   local hasbuff = nil
   for i=1,32 do
-    if UnitBuff(unit, i) == buff then
+    local texture
+    if unit == "player" then
+      texture = UnitBuff(unit, i)
+    elseif libdebuff and libdebuff.UnitBuff then
+      local _, _, tex = libdebuff:UnitBuff(unit, i)
+      texture = tex
+    else
+      texture = UnitBuff(unit, i)
+    end
+    
+    if texture == buff then
       hasbuff = true
       break
     end

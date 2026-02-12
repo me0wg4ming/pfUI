@@ -17,7 +17,57 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     else
       buff.id = buff.gid
     end
-    buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
+    
+    -- NEW: Use GetUnitField + sorted slots to find correct buff/debuff
+    local useNampower = false
+    local targetSlot = nil
+    local spellId = nil
+    
+    if GetUnitField and UnitExists then
+      local _, guid = UnitExists("player")
+      local auras = guid and GetUnitField(guid, "aura")
+      
+      if auras then
+        -- Collect occupied slots based on buff type
+        local occupiedSlots = {}
+        local startSlot, endSlot
+        
+        if buff.btype == "HELPFUL" then
+          -- Buffs: slots 1-32
+          startSlot, endSlot = 1, 32
+        else
+          -- Debuffs: slots 33-48
+          startSlot, endSlot = 33, 48
+        end
+        
+        for fieldSlot = startSlot, endSlot do
+          local sid = auras[fieldSlot]
+          if sid and sid > 0 then
+            table.insert(occupiedSlots, fieldSlot)
+          end
+        end
+        
+        table.sort(occupiedSlots)
+        
+        -- Use buff.gid for slot lookup
+        targetSlot = occupiedSlots[buff.gid]
+        if targetSlot then
+          spellId = auras[targetSlot]
+          useNampower = true
+        end
+      end
+    end
+    
+    -- Fallback: Use old Blizzard method
+    if not useNampower then
+      buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
+    else
+      -- Store both for compatibility
+      buff.targetSlot = targetSlot  -- GetUnitField slot (1-based)
+      buff.spellId = spellId
+      -- Also get Blizzard slot for fallback
+      buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
+    end
 
     if not buff.backdrop then
       CreateBackdrop(buff)
@@ -53,6 +103,42 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       elseif buff.mode == "OFFHAND" then
         buff.texture:SetTexture(GetInventoryItemTexture("player", 17))
         buff.backdrop:SetBackdropBorderColor(GetItemQualityColor(GetInventoryItemQuality("player", 17) or 1))
+      end
+    elseif useNampower and spellId and libdebuff and libdebuff.GetSpellIcon and (( buff.btype == "HARMFUL" and C.buffs.debuffs == "1" ) or ( buff.btype == "HELPFUL" and C.buffs.buffs == "1" )) then
+      -- NEW: Use libdebuff icon for correct display
+      buff.mode = buff.btype
+      local texture = libdebuff:GetSpellIcon(spellId)
+      buff.texture:SetTexture(texture)
+
+      if buff.btype == "HARMFUL" and GetSpellRec then
+        -- Get dispel type from SpellRec
+        local spellRec = GetSpellRec(spellId)
+        if spellRec and spellRec.dispel then
+          local dispelTypes = {
+            [0] = "none",
+            [1] = "Magic",
+            [2] = "Curse", 
+            [3] = "Disease",
+            [4] = "Poison"
+          }
+          local dtype = dispelTypes[spellRec.dispel] or "none"
+          
+          if dtype == "Magic" then
+            buff.backdrop:SetBackdropBorderColor(0,1,1,1)
+          elseif dtype == "Poison" then
+            buff.backdrop:SetBackdropBorderColor(0,1,0,1)
+          elseif dtype == "Curse" then
+            buff.backdrop:SetBackdropBorderColor(1,0,1,1)
+          elseif dtype == "Disease" then
+            buff.backdrop:SetBackdropBorderColor(1,1,0,1)
+          else
+            buff.backdrop:SetBackdropBorderColor(1,0,0,1)
+          end
+        else
+          buff.backdrop:SetBackdropBorderColor(1,0,0,1)
+        end
+      else
+        buff.backdrop:SetBackdropBorderColor(br,bg,bb,ba)
       end
     elseif GetPlayerBuffTexture(buff.bid) and (( buff.btype == "HARMFUL" and C.buffs.debuffs == "1" ) or ( buff.btype == "HELPFUL" and C.buffs.buffs == "1" )) then
       -- Set Buff Texture and Border
@@ -172,10 +258,91 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     buff:SetScript("OnEnter", function()
       GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
       if this.mode == this.btype then
-        GameTooltip:SetPlayerBuff(this.bid)
+        -- NEW: Use GetSpellRec if we have spellId from Nampower
+        if this.spellId and GetSpellRec then
+          local spellRec = GetSpellRec(this.spellId)
+          if spellRec then
+            GameTooltip:AddLine(spellRec.name, 1, 1, 1)
+            if spellRec.rank and spellRec.rank ~= "" then
+              GameTooltip:AddLine(spellRec.rank, 0.5, 0.5, 0.5)
+            end
+            
+            local tooltipText = spellRec.tooltip or spellRec.description or ""
+            if tooltipText ~= "" then
+              -- Cross-spell references ($12345s1, $12345d1)
+              local crossRefs = {}
+              for refSpellId, valueType, index in string.gfind(tooltipText, "%$(%d+)([sd])(%d)") do
+                local refId = tonumber(refSpellId)
+                local idx = tonumber(index)
+                
+                if not crossRefs[refId] then
+                  crossRefs[refId] = GetSpellRec(refId)
+                end
+                
+                if crossRefs[refId] then
+                  local placeholder = "$" .. refSpellId .. valueType .. index
+                  local value = nil
+                  
+                  if valueType == "s" then
+                    if crossRefs[refId].effectBasePoints and crossRefs[refId].effectBasePoints[idx] then
+                      value = crossRefs[refId].effectBasePoints[idx] + 1
+                    end
+                  elseif valueType == "d" then
+                    local durationIndex = crossRefs[refId].durationIndex
+                    local durationTable = {
+                      [1] = 10, [3] = 30, [6] = 60, [8] = 120, [9] = 180,
+                      [10] = 300, [11] = 600, [21] = 3, [23] = 5, [27] = 15
+                    }
+                    value = durationTable[durationIndex]
+                  end
+                  
+                  if value then
+                    tooltipText = string.gsub(tooltipText, placeholder, value)
+                  end
+                end
+              end
+              
+              -- Standard placeholders ($s1, $S1, etc.)
+              if spellRec.effectBasePoints then
+                for i, basePoint in ipairs(spellRec.effectBasePoints) do
+                  local value = basePoint + 1
+                  tooltipText = string.gsub(tooltipText, "%$s" .. i, value)
+                  tooltipText = string.gsub(tooltipText, "%$S" .. i, value)
+                end
+              end
+              
+              -- Duration placeholder
+              if spellRec.durationIndex then
+                local durationTable = {
+                  [1] = 10, [3] = 30, [6] = 60, [8] = 120, [9] = 180,
+                  [10] = 300, [11] = 600, [21] = 3, [23] = 5, [27] = 15
+                }
+                local durationValue = durationTable[spellRec.durationIndex]
+                if durationValue then
+                  tooltipText = string.gsub(tooltipText, "%$d", durationValue)
+                end
+              end
+              
+              GameTooltip:AddLine(tooltipText, 1, 0.82, 0, 1)
+            end
+            GameTooltip:Show()
+          else
+            -- Fallback to Blizzard
+            GameTooltip:SetPlayerBuff(this.bid)
+          end
+        else
+          -- Fallback to Blizzard
+          GameTooltip:SetPlayerBuff(this.bid)
+        end
 
         if IsShiftKeyDown() then
-          local texture = GetPlayerBuffTexture(this.bid)
+          -- NEW: Use libdebuff icon if available
+          local texture
+          if this.spellId and libdebuff and libdebuff.GetSpellIcon then
+            texture = libdebuff:GetSpellIcon(this.spellId)
+          else
+            texture = GetPlayerBuffTexture(this.bid)
+          end
 
           local playerlist = ""
           local first = true
@@ -227,7 +394,33 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       elseif CancelItemTempEnchantment and this.mode and this.mode == "OFFHAND" then
         CancelItemTempEnchantment(2)
       else
-        CancelPlayerBuff(this.bid)
+        -- Use GetPlayerBuffID to find and cancel by SpellID
+        -- This method works correctly even after slot shifts
+        if this.spellId and GetPlayerBuffID then
+          local ix = 0
+          while true do
+            local blizzSlot = GetPlayerBuff(ix, this.btype)
+            if blizzSlot == -1 then break end
+            
+            -- Get SpellID from this Blizzard slot
+            local buffSpellId = GetPlayerBuffID(blizzSlot)
+            -- Handle negative SpellIDs (convert to positive)
+            buffSpellId = (buffSpellId < -1) and (buffSpellId + 65536) or buffSpellId
+            
+            if buffSpellId == this.spellId then
+              CancelPlayerBuff(blizzSlot)
+              return
+            end
+            
+            ix = ix + 1
+            
+            -- Safety: Don't loop forever
+            if ix > 32 then break end
+          end
+        else
+          -- Fallback if GetPlayerBuffID not available
+          CancelPlayerBuff(this.gid - 1)
+        end
       end
     end)
 
@@ -294,8 +487,25 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       if buff:IsShown() then
         local timeleft, stacks = 0, 0
         if buff.mode == buff.btype then
-          timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
-          stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
+          -- NEW: Use GetPlayerAuraDuration if we have targetSlot
+          if buff.targetSlot and GetPlayerAuraDuration then
+            local durationSpellId, durationMs = GetPlayerAuraDuration(buff.targetSlot - 1)
+            if durationSpellId and durationMs and durationMs > 0 then
+              timeleft = durationMs / 1000
+            end
+            -- Get stacks from GetUnitField
+            if GetUnitField and UnitExists then
+              local _, guid = UnitExists("player")
+              if guid then
+                local auraApplications = GetUnitField(guid, "auraApplications")
+                stacks = (auraApplications and auraApplications[buff.targetSlot]) or 0
+              end
+            end
+          else
+            -- Fallback
+            timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
+            stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
+          end
         elseif buff.mode == "MAINHAND" then
           timeleft = mhtime and mhtime / 1000 or 0
           stacks = mhcharge or 0
@@ -313,8 +523,26 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     for i = 1, 16 do
       local buff = buttons[i]
       if buff:IsShown() then
-        local timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
-        local stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
+        local timeleft, stacks = 0, 0
+        -- NEW: Use GetPlayerAuraDuration if we have targetSlot
+        if buff.targetSlot and GetPlayerAuraDuration then
+          local durationSpellId, durationMs = GetPlayerAuraDuration(buff.targetSlot - 1)
+          if durationSpellId and durationMs and durationMs > 0 then
+            timeleft = durationMs / 1000
+          end
+          -- Get stacks from GetUnitField
+          if GetUnitField and UnitExists then
+            local _, guid = UnitExists("player")
+            if guid then
+              local auraApplications = GetUnitField(guid, "auraApplications")
+              stacks = (auraApplications and auraApplications[buff.targetSlot]) or 0
+            end
+          end
+        else
+          -- Fallback
+          timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
+          stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
+        end
         buff.timer:SetText(timeleft > 0 and GetColoredTimeString(timeleft) or "")
         buff.stacks:SetText(stacks > 1 and stacks or "")
       end

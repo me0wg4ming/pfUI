@@ -90,9 +90,23 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       return remaining, texture, name, stacks
     elseif libdebuff and selfdebuff then
       local name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unit, id)
+      
+      -- Fallback: If UnitOwnDebuff returns nothing (e.g., after /reload when ownDebuffs cache is empty),
+      -- use UnitDebuff and filter by caster="player"
+      if not name then
+        name, rank, texture, stacks, dtype, duration, timeleft, caster = libdebuff:UnitDebuff(unit, id)
+        -- Only show if we are the caster
+        if caster ~= "player" then
+          return nil
+        end
+      end
+      
       return timeleft, texture, name, stacks
     elseif libdebuff then
       local name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unit, id)
+      if name then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[BUFFWATCH]|r UnitDebuff slot " .. id .. ": " .. name)
+      end
       return timeleft, texture, name, stacks
     end
   end
@@ -160,7 +174,20 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
   end
 
   local function StatusBarOnUpdate()
+    -- skip if parent unit is gone
+    if this.unit and this.unit ~= "player" and not UnitExists(this.unit) then
+      this:Hide()
+      return
+    end
+
     local remaining = this.endtime - GetTime()
+
+    -- hide fully expired bars (stops this OnUpdate)
+    if remaining <= -1 then
+      this:Hide()
+      return
+    end
+
     this.bar:SetValue(remaining > 0 and remaining or 0)
 
     if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end
@@ -382,11 +409,97 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     end
   end
 
-  -- Create a new Buff Bar
+  -- ============================================================================
+  -- EVENT-DRIVEN ARCHITECTURE (GUID-based)
+  -- 
+  -- libdebuff calls pfUI.buffwatch:OnAuraUpdate(guid) on every
+  -- AURA_CAST, DEBUFF_ADDED, DEBUFF_REMOVED. We cache the GUID on each frame
+  -- and match directly - no UnitExists("target") calls in the hot path.
+  --
+  -- OnUpdate is completely DISABLED when there's nothing to show.
+  -- It only gets enabled by events, and disables itself when unit is invalid.
+  -- ============================================================================
+
+  -- Registry: maps GUID -> list of frames tracking that GUID
+  local guidRegistry = {}
+  -- Also keep unit->frames for event-based lookups
+  local unitRegistry = {}
+
+  -- Cache player GUID once
+  local playerGUID = nil
+  local function GetPlayerGUID()
+    if not playerGUID then
+      local _, guid = UnitExists("player")
+      playerGUID = guid
+    end
+    return playerGUID
+  end
+
+  -- Register a frame for a specific GUID in the registry
+  local function RegisterGUID(frame, guid)
+    -- Unregister old GUID
+    if frame.guid and guidRegistry[frame.guid] then
+      for i, f in ipairs(guidRegistry[frame.guid]) do
+        if f == frame then
+          table.remove(guidRegistry[frame.guid], i)
+          break
+        end
+      end
+      if table.getn(guidRegistry[frame.guid]) == 0 then
+        guidRegistry[frame.guid] = nil
+      end
+    end
+
+    frame.guid = guid
+
+    -- Register new GUID
+    if guid then
+      if not guidRegistry[guid] then
+        guidRegistry[guid] = {}
+      end
+      table.insert(guidRegistry[guid], frame)
+    end
+  end
+
+  -- Hide all bars on a frame and disable its OnUpdate
+  local function SleepFrame(frame)
+    if frame.barsVisible then
+      for i = 1, table.getn(frame.bars) do
+        frame.bars[i]:Hide()
+      end
+      frame.barsVisible = false
+    end
+    frame.dirty = false
+    frame:SetScript("OnUpdate", nil)
+  end
+
+  -- Check if a frame's unit is valid for display
+  local function IsUnitValid(frame)
+    local unit = frame.unit
+    if unit == "player" then return true end
+    return UnitExists(unit) and not UnitIsDeadOrGhost(unit)
+  end
+
+  -- OnUpdate handler: processes dirty flag, then goes back to sleep
   local function BuffBarFrameOnUpdate()
-    if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .4 end
-    RefreshBuffBarFrame(this)
-    this:RefreshPosition()
+    if not IsUnitValid(this) then
+      SleepFrame(this)
+      return
+    end
+
+    if this.dirty then
+      this.dirty = false
+      RefreshBuffBarFrame(this)
+      this:RefreshPosition()
+      this.barsVisible = true
+    end
+  end
+
+  -- Wake up a frame: set dirty flag and enable OnUpdate
+  local function WakeFrame(frame)
+    if frame.dirty then return end
+    frame.dirty = true
+    frame:SetScript("OnUpdate", BuffBarFrameOnUpdate)
   end
 
   local function RefreshPosition(self)
@@ -416,16 +529,87 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     frame.durations = { }
     frame.charges = { }
     frame.buffs = { }
+    frame.dirty = false
+    frame.barsVisible = false
+    frame.guid = nil
     for i=1,32 do
       frame.buffs[i] = { }
     end
 
     frame.RefreshPosition = RefreshPosition
 
-    -- OnEvent (UNIT_AURA) doesn't trigger properly on buff refresh
-    frame:SetScript("OnUpdate", BuffBarFrameOnUpdate)
+    -- Start with OnUpdate disabled - events will wake us up
+    frame:SetScript("OnUpdate", nil)
+
+    -- Register for game events
+    frame:SetScript("OnEvent", function()
+      if event == "PLAYER_TARGET_CHANGED" then
+        if this.unit == "target" then
+          if IsUnitValid(this) then
+            local _, newGuid = UnitExists("target")
+            RegisterGUID(this, newGuid)
+            
+            -- Initialize ownDebuffs cache for this GUID (for /reload scenarios)
+            if libdebuff and newGuid and this.config.selfdebuff == "1" then
+              libdebuff:InitializeOwnDebuffsCache(newGuid)
+            end
+            
+            WakeFrame(this)
+          else
+            RegisterGUID(this, nil)
+            SleepFrame(this)
+          end
+        end
+      elseif event == "PLAYER_AURAS_CHANGED" then
+        WakeFrame(this)
+      elseif event == "UNIT_AURA" then
+        if IsUnitValid(this) then
+          WakeFrame(this)
+        end
+      end
+    end)
+
+    if strlower(unit) == "player" then
+      frame:RegisterEvent("PLAYER_AURAS_CHANGED")
+      RegisterGUID(frame, GetPlayerGUID())
+      WakeFrame(frame)
+    else
+      frame:RegisterEvent("UNIT_AURA")
+      frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+      if IsUnitValid(frame) then
+        local _, guid = UnitExists("target")
+        RegisterGUID(frame, guid)
+        WakeFrame(frame)
+      end
+    end
+
+    -- Keep in unit registry for fallback
+    local unitkey = strlower(unit)
+    if not unitRegistry[unitkey] then
+      unitRegistry[unitkey] = {}
+    end
+    table.insert(unitRegistry[unitkey], frame)
 
     return frame
+  end
+
+  -- ============================================================================
+  -- LIBDEBUFF CALLBACK: pfUI.buffwatch:OnAuraUpdate(guid)
+  -- Called by libdebuff on AURA_CAST, DEBUFF_ADDED, DEBUFF_REMOVED
+  -- Direct GUID lookup - no UnitExists() calls needed!
+  -- ============================================================================
+  pfUI.buffwatch = pfUI.buffwatch or {}
+  pfUI.buffwatch.OnAuraUpdate = function(self, guid)
+    if not guid then return end
+
+    local frames = guidRegistry[guid]
+    if frames then
+      for _, frame in ipairs(frames) do
+        if IsUnitValid(frame) then
+          WakeFrame(frame)
+        end
+      end
+    end
   end
 
   local function asc(a,b)

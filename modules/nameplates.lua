@@ -2,8 +2,22 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
-  -- check for SuperWoW support (use SUPERWOW_VERSION global)
-  local superwow_active = SUPERWOW_VERSION ~= nil
+  -- Check for Nampower support (preferred)
+  local hasNampower = false
+  if GetNampowerVersion then
+    local major, minor, patch = GetNampowerVersion()
+    patch = patch or 0
+    -- Minimum required version: 2.27.2
+    if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+      hasNampower = true
+    end
+  end
+  
+  -- Check for SuperWoW support (fallback)
+  local hasSuperwow = SUPERWOW_VERSION ~= nil
+  
+  -- Use either Nampower or SuperWoW for GetName(1) GUID support
+  local superwow_active = hasNampower or hasSuperwow
 
   -- Local function references for performance
   local GetTime = GetTime
@@ -467,7 +481,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
   -- No local event registration needed
 
   -- Callback from libdebuff when auras change (GUID-based, event-driven)
-  nameplates.OnAuraUpdate = function(self, guid)
+  nameplates.OnAuraUpdate = function(self, guid, forceRefresh)
     if not guid then return end
     
     -- GUID is actual GUID (0xF13000...) from SuperWoW/Nampower events
@@ -475,6 +489,12 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     if plate and plate.nameplate then
       -- Mark nameplate for aura update in next OnUpdate cycle
       plate.nameplate.auraUpdate = true
+      
+      -- Force cooldown refresh (used for melee-refreshed debuffs like Judgement)
+      -- This bypasses the 0.5s threshold check to ensure timer displays correctly
+      if forceRefresh then
+        plate.nameplate.forceDebuffRefresh = true
+      end
     end
   end
 
@@ -1197,7 +1217,10 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
             local cd = plate.debuffs[index].cd
             local newStart = GetTime() + timeleft - duration
             
-            if not cd.cachedStart or abs(cd.cachedStart - newStart) > 0.5 then
+            -- Force refresh bypasses the 0.5s threshold (used for melee-refreshed debuffs)
+            local forceUpdate = plate.forceDebuffRefresh
+            
+            if not cd.cachedStart or abs(cd.cachedStart - newStart) > 0.5 or forceUpdate then
               -- Update config flags only on first run or config change
               if not cd.configCached or cd.cachedAnim ~= cfg.debuffanim or cd.cachedText ~= cfg.debufftext then
                 cd.pfCooldownStyleAnimation = cfg.debuffanim
@@ -1296,6 +1319,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       nameplate.castUpdate = nil
       nameplate.targetUpdate = nil
       nameplate.comboUpdate = nil
+      nameplate.forceDebuffRefresh = nil  -- Clear force refresh flag
     end
 
     -- =========================================================================
