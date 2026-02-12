@@ -18,42 +18,92 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       buff.id = buff.gid
     end
     
-    -- NEW: Use GetUnitField + sorted slots to find correct buff/debuff
+    -- NEW: Use GetUnitField with Blizzard-visible filtering for HELPFUL buffs
     local useNampower = false
     local targetSlot = nil
     local spellId = nil
+    local texture = nil
+    local stacks = 0
     
     if GetUnitField and UnitExists then
       local _, guid = UnitExists("player")
       local auras = guid and GetUnitField(guid, "aura")
       
       if auras then
-        -- Collect occupied slots based on buff type
         local occupiedSlots = {}
         local startSlot, endSlot
         
         if buff.btype == "HELPFUL" then
-          -- Buffs: slots 1-32
+          -- BUFFS: Filter to only show Blizzard-visible buffs
+          -- Build lookup of which SpellIDs Blizzard can see
+          local blizzardVisibleBuffs = {}
+          
+          for i = 1, 32 do
+            local blizzTexture, blizzStacks = UnitBuff("player", i)
+            if not blizzTexture then break end
+            
+            -- Match this texture to a SpellID in GetUnitField
+            for fieldSlot = 1, 32 do
+              local sid = auras[fieldSlot]
+              if sid and sid > 0 and not blizzardVisibleBuffs[sid] then
+                local spellTexture = nil
+                if libdebuff and libdebuff.GetSpellIcon then
+                  spellTexture = libdebuff:GetSpellIcon(sid)
+                end
+                
+                if spellTexture == blizzTexture then
+                  blizzardVisibleBuffs[sid] = true
+                  break
+                end
+              end
+            end
+          end
+          
+          -- Now collect only filtered slots
           startSlot, endSlot = 1, 32
+          for fieldSlot = startSlot, endSlot do
+            local sid = auras[fieldSlot]
+            if sid and sid > 0 and blizzardVisibleBuffs[sid] then
+              table.insert(occupiedSlots, fieldSlot)
+            end
+          end
+          
+          -- Cache the filter result for unitframes.lua to use
+          if not pfUI_PlayerBuffFilter then pfUI_PlayerBuffFilter = {} end
+          pfUI_PlayerBuffFilter.visibleBuffs = blizzardVisibleBuffs
+          pfUI_PlayerBuffFilter.timestamp = GetTime()
         else
-          -- Debuffs: slots 33-48
+          -- DEBUFFS: Show all (no filtering)
           startSlot, endSlot = 33, 48
-        end
-        
-        for fieldSlot = startSlot, endSlot do
-          local sid = auras[fieldSlot]
-          if sid and sid > 0 then
-            table.insert(occupiedSlots, fieldSlot)
+          for fieldSlot = startSlot, endSlot do
+            local sid = auras[fieldSlot]
+            if sid and sid > 0 then
+              table.insert(occupiedSlots, fieldSlot)
+            end
           end
         end
         
         table.sort(occupiedSlots)
         
-        -- Use buff.gid for slot lookup
+        -- Get data for this buff's position
         targetSlot = occupiedSlots[buff.gid]
         if targetSlot then
           spellId = auras[targetSlot]
+          
+          -- Get texture from libdebuff
+          if libdebuff and libdebuff.GetSpellIcon then
+            texture = libdebuff:GetSpellIcon(spellId)
+          end
+          
+          -- Get stacks
+          local auraApps = GetUnitField(guid, "auraApplications")
+          stacks = (auraApps and auraApps[targetSlot] or 0)
+          
           useNampower = true
+          
+          -- Store on button for tooltip
+          buff.spellId = spellId
+          buff.targetSlot = targetSlot
         end
       end
     end
@@ -62,11 +112,8 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     if not useNampower then
       buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
     else
-      -- Store both for compatibility
-      buff.targetSlot = targetSlot  -- GetUnitField slot (1-based)
-      buff.spellId = spellId
-      -- Also get Blizzard slot for fallback
-      buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
+      -- We already have texture and stacks from Nampower
+      buff.bid = -1  -- Mark as Nampower-sourced
     end
 
     if not buff.backdrop then
@@ -140,6 +187,11 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       else
         buff.backdrop:SetBackdropBorderColor(br,bg,bb,ba)
       end
+    elseif useNampower and texture and (( buff.btype == "HARMFUL" and C.buffs.debuffs == "1" ) or ( buff.btype == "HELPFUL" and C.buffs.buffs == "1" )) then
+      -- NEW: Use Nampower data directly
+      buff.mode = buff.btype
+      buff.texture:SetTexture(texture)
+      buff.backdrop:SetBackdropBorderColor(br,bg,bb,ba)
     elseif GetPlayerBuffTexture(buff.bid) and (( buff.btype == "HARMFUL" and C.buffs.debuffs == "1" ) or ( buff.btype == "HELPFUL" and C.buffs.buffs == "1" )) then
       -- Set Buff Texture and Border
       buff.mode = buff.btype
@@ -257,52 +309,23 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
 
     buff:SetScript("OnEnter", function()
       GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
+      
       if this.mode == this.btype then
-        -- NEW: Use GetSpellRec if we have spellId from Nampower
+        -- Use GetSpellRec for Nampower tooltip
         if this.spellId and GetSpellRec then
           local spellRec = GetSpellRec(this.spellId)
+          
           if spellRec then
+            -- Name + Rank
             GameTooltip:AddLine(spellRec.name, 1, 1, 1)
             if spellRec.rank and spellRec.rank ~= "" then
               GameTooltip:AddLine(spellRec.rank, 0.5, 0.5, 0.5)
             end
             
+            -- Tooltip text with placeholder replacement
             local tooltipText = spellRec.tooltip or spellRec.description or ""
             if tooltipText ~= "" then
-              -- Cross-spell references ($12345s1, $12345d1)
-              local crossRefs = {}
-              for refSpellId, valueType, index in string.gfind(tooltipText, "%$(%d+)([sd])(%d)") do
-                local refId = tonumber(refSpellId)
-                local idx = tonumber(index)
-                
-                if not crossRefs[refId] then
-                  crossRefs[refId] = GetSpellRec(refId)
-                end
-                
-                if crossRefs[refId] then
-                  local placeholder = "$" .. refSpellId .. valueType .. index
-                  local value = nil
-                  
-                  if valueType == "s" then
-                    if crossRefs[refId].effectBasePoints and crossRefs[refId].effectBasePoints[idx] then
-                      value = crossRefs[refId].effectBasePoints[idx] + 1
-                    end
-                  elseif valueType == "d" then
-                    local durationIndex = crossRefs[refId].durationIndex
-                    local durationTable = {
-                      [1] = 10, [3] = 30, [6] = 60, [8] = 120, [9] = 180,
-                      [10] = 300, [11] = 600, [21] = 3, [23] = 5, [27] = 15
-                    }
-                    value = durationTable[durationIndex]
-                  end
-                  
-                  if value then
-                    tooltipText = string.gsub(tooltipText, placeholder, value)
-                  end
-                end
-              end
-              
-              -- Standard placeholders ($s1, $S1, etc.)
+              -- Replace $s1, $s2, etc. with effectBasePoints
               if spellRec.effectBasePoints then
                 for i, basePoint in ipairs(spellRec.effectBasePoints) do
                   local value = basePoint + 1
@@ -311,28 +334,23 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
                 end
               end
               
-              -- Duration placeholder
+              -- Replace $d with duration
               if spellRec.durationIndex then
                 local durationTable = {
                   [1] = 10, [3] = 30, [6] = 60, [8] = 120, [9] = 180,
-                  [10] = 300, [11] = 600, [21] = 3, [23] = 5, [27] = 15
+                  [10] = 300, [11] = 600, [21] = 3, [23] = 5, [27] = 15,
+                  [30] = 1800
                 }
-                local durationValue = durationTable[spellRec.durationIndex]
-                if durationValue then
-                  tooltipText = string.gsub(tooltipText, "%$d", durationValue)
+                local duration = durationTable[spellRec.durationIndex]
+                if duration then
+                  tooltipText = string.gsub(tooltipText, "%$d", duration)
                 end
               end
               
               GameTooltip:AddLine(tooltipText, 1, 0.82, 0, 1)
             end
             GameTooltip:Show()
-          else
-            -- Fallback to Blizzard
-            GameTooltip:SetPlayerBuff(this.bid)
           end
-        else
-          -- Fallback to Blizzard
-          GameTooltip:SetPlayerBuff(this.bid)
         end
 
         if IsShiftKeyDown() then

@@ -88,8 +88,25 @@ local function BuffOnUpdate()
       local auras = GetUnitField(guid, "aura")
       
       if auras then
-        -- Collect and sort occupied buff slots (1-32)
-        local occupiedSlots = GetSortedSlots(auras, 1, 32)
+        -- NEW: Use cached filter result (same as RefreshUnit)
+        local occupiedSlots = {}
+        
+        -- Use cached filter if available
+        if pfUI_PlayerBuffFilter and pfUI_PlayerBuffFilter.visibleBuffs then
+          local blizzardVisibleBuffs = pfUI_PlayerBuffFilter.visibleBuffs
+          
+          -- Collect only Blizzard-visible buff slots
+          for fieldSlot = 1, 32 do
+            local sid = auras[fieldSlot]
+            if sid and sid > 0 and blizzardVisibleBuffs[sid] then
+              table.insert(occupiedSlots, fieldSlot)
+            end
+          end
+          table.sort(occupiedSlots)
+        else
+          -- Fallback: no filtering (shouldn't happen but safety)
+          occupiedSlots = GetSortedSlots(auras, 1, 32)
+        end
         
         -- Now find the slot for this display position
         local targetSlot = occupiedSlots[this.id]
@@ -110,27 +127,15 @@ local function BuffOnUpdate()
               -- Buff has duration - show timer
               local timeleft = durationMs / 1000
               
-              -- Get texture for the key
-              local texture = nil
-              if libdebuff and libdebuff.GetSpellIcon then
-                texture = libdebuff:GetSpellIcon(spellId)
+              -- NEW: Update text timer (like buff.lua)
+              if this.timer then
+                this.timer:SetText(timeleft > 0 and GetColoredTimeString(timeleft) or "")
               end
-              
-              -- Build unique key (texture + spellId)
-              local key = (texture or "") .. spellId
-              
-              -- Track max duration for this buff
-              if not maxdurations[key] then
-                maxdurations[key] = timeleft
-              elseif maxdurations[key] < timeleft then
-                maxdurations[key] = timeleft
-              end
-              
-              local start = GetTime() + timeleft - maxdurations[key]
-              CooldownFrame_SetTimer(this.cd, start, maxdurations[key], 1)
             else
               -- Buff has NO duration (permanent/passive) - clear timer
-              CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+              if this.timer then
+                this.timer:SetText("")
+              end
             end
             return
           end
@@ -190,90 +195,52 @@ local function BuffOnEnter()
   if not parent.label then return end
 
   GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
-  if parent.label == "player" then
-    -- For player: Use GetUnitField + sorted slots (same as RefreshUnit and BuffOnUpdate)
-    if GetUnitField and UnitExists and GetSpellRec then
-      local _, guid = UnitExists("player")
-      local auras = guid and GetUnitField(guid, "aura")
+  
+  -- NEW: Use this.spellId that was set during RefreshUnit (works for ALL units)
+  if this.spellId and GetSpellRec then
+    local spellRec = GetSpellRec(this.spellId)
+    
+    if spellRec then
+      GameTooltip:AddLine(spellRec.name, 1, 1, 1)
+      if spellRec.rank and spellRec.rank ~= "" then
+        GameTooltip:AddLine(spellRec.rank, 0.5, 0.5, 0.5)
+      end
       
-      if auras then
-        -- Collect and sort occupied buff slots (1-32)
-        local occupiedSlots = GetSortedSlots(auras, 1, 32)
-        
-        -- Find the slot for this display position
-        local targetSlot = occupiedSlots[this.id]
-        
-        if targetSlot then
-          local spellId = auras[targetSlot]
-          local spellRec = GetSpellRec(spellId)
-          
-          if spellRec then
-            GameTooltip:AddLine(spellRec.name, 1, 1, 1)
-            if spellRec.rank and spellRec.rank ~= "" then
-              GameTooltip:AddLine(spellRec.rank, 0.5, 0.5, 0.5)
-            end
-            
-            -- Format tooltip (same as target frame)
-            local tooltipText = spellRec.tooltip or spellRec.description or ""
-            if tooltipText ~= "" then
-              -- Cross-spell references ($12345s1, $12345d1)
-              local crossRefs = {}
-              for refSpellId, valueType, index in string.gfind(tooltipText, "%$(%d+)([sd])(%d)") do
-                local refId = tonumber(refSpellId)
-                local idx = tonumber(index)
-                
-                if not crossRefs[refId] then
-                  crossRefs[refId] = GetSpellRec(refId)
-                end
-                
-                if crossRefs[refId] then
-                  local placeholder = "$" .. refSpellId .. valueType .. index
-                  local value = nil
-                  
-                  if valueType == "s" then
-                    if crossRefs[refId].effectBasePoints and crossRefs[refId].effectBasePoints[idx] then
-                      value = crossRefs[refId].effectBasePoints[idx] + 1
-                    end
-                  elseif valueType == "d" then
-                    local durationIndex = crossRefs[refId].durationIndex
-                    value = CROSSREF_DURATIONS[durationIndex]
-                  end
-                  
-                  if value then
-                    tooltipText = string.gsub(tooltipText, placeholder, value)
-                  end
-                end
-              end
-              
-              -- Standard placeholders ($s1, $S1, etc.)
-              if spellRec.effectBasePoints then
-                for i, basePoint in ipairs(spellRec.effectBasePoints) do
-                  local value = basePoint + 1
-                  tooltipText = string.gsub(tooltipText, "%$s" .. i, value)
-                  tooltipText = string.gsub(tooltipText, "%$S" .. i, value)
-                  tooltipText = string.gsub(tooltipText, "%$%/" .. "1000;S" .. i, math.floor(value/10))
-                end
-              end
-              
-              -- Duration placeholder ($d)
-              if spellRec.durationIndex then
-                local durationValue = STANDARD_DURATIONS[spellRec.durationIndex]
-                if durationValue then
-                  tooltipText = string.gsub(tooltipText, "%$d", durationValue)
-                end
-              end
-              
-              GameTooltip:AddLine(tooltipText, 1, 0.82, 0, 1)
-            end
-            
-            GameTooltip:Show()
-            return
+      -- Format tooltip
+      local tooltipText = spellRec.tooltip or spellRec.description or ""
+      if tooltipText ~= "" then
+        -- Standard placeholders ($s1, $S1, etc.)
+        if spellRec.effectBasePoints then
+          for i, basePoint in ipairs(spellRec.effectBasePoints) do
+            local value = basePoint + 1
+            tooltipText = string.gsub(tooltipText, "%$s" .. i, value)
+            tooltipText = string.gsub(tooltipText, "%$S" .. i, value)
           end
         end
+        
+        -- Duration placeholder ($d)
+        if spellRec.durationIndex then
+          local durationTable = {
+            [1] = 10, [3] = 30, [6] = 60, [8] = 120, [9] = 180,
+            [10] = 300, [11] = 600, [21] = 3, [23] = 5, [27] = 15,
+            [30] = 1800
+          }
+          local duration = durationTable[spellRec.durationIndex]
+          if duration then
+            tooltipText = string.gsub(tooltipText, "%$d", duration)
+          end
+        end
+        
+        GameTooltip:AddLine(tooltipText, 1, 0.82, 0, 1)
       end
+      
+      GameTooltip:Show()
+      return
     end
-    
-    -- Fallback to Blizzard tooltip
+  end
+  
+  -- Fallback to Blizzard
+  if parent.label == "player" then
     GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
   else
     -- For non-player units: Build tooltip from GetSpellRec data
@@ -1555,6 +1522,16 @@ function pfUI.uf:UpdateConfig()
       f.buffs[i].stacks:SetShadowColor(0, 0, 0)
       f.buffs[i].stacks:SetShadowOffset(0.8, -0.8)
       f.buffs[i].stacks:SetTextColor(1,1,.5)
+      
+      -- NEW: Create timer FontString (like buff.lua)
+      f.buffs[i].timer = f.buffs[i].timer or f.buffs[i]:CreateFontString(nil, "OVERLAY", f.buffs[i])
+      f.buffs[i].timer:SetFont(pfUI.font_unit, C.global.font_unit_size, "OUTLINE")
+      f.buffs[i].timer:SetPoint("CENTER", f.buffs[i], 0, 0)
+      f.buffs[i].timer:SetJustifyH("CENTER")
+      f.buffs[i].timer:SetJustifyV("CENTER")
+      f.buffs[i].timer:SetShadowColor(0, 0, 0)
+      f.buffs[i].timer:SetShadowOffset(0.8, -0.8)
+      f.buffs[i].timer:SetTextColor(1,1,1)
 
       f.buffs[i]:SetFrameLevel(12)
       f.buffs[i]:RegisterForClicks("RightButtonUp")
@@ -2723,10 +2700,76 @@ function pfUI.uf:RefreshUnit(unit, component)
       local auras = guid and GetUnitField(guid, "aura")
       
       if auras then
-        -- Collect and sort occupied buff slots (1-32)
-        local occupiedSlots = GetSortedSlots(auras, 1, 32)
+        -- For PLAYER: Use cached filter result to stay in sync with buff bar
+        local occupiedSlots = {}
         
-        -- Now display buffs based on sorted slots
+        if unit.label == "player" then
+          -- Try to use cached filter from buff bar (if available and recent)
+          local useCache = false
+          if pfUI_PlayerBuffFilter and pfUI_PlayerBuffFilter.timestamp then
+            local age = GetTime() - pfUI_PlayerBuffFilter.timestamp
+            if age < 0.5 then -- Cache valid for 0.5 seconds
+              useCache = true
+            end
+          end
+          
+          local blizzardVisibleBuffs = {}
+          
+          if useCache and pfUI_PlayerBuffFilter.visibleBuffs then
+            -- Use cached result
+            blizzardVisibleBuffs = pfUI_PlayerBuffFilter.visibleBuffs
+          else
+            -- Build fresh filter
+            for i = 1, 32 do
+              local blizzTexture, blizzStacks = UnitBuff("player", i)
+              if not blizzTexture then break end
+              
+              -- Match this texture to a SpellID in GetUnitField
+              for fieldSlot = 1, 32 do
+                local sid = auras[fieldSlot]
+                if sid and sid > 0 and not blizzardVisibleBuffs[sid] then
+                  local spellTexture = nil
+                  if libdebuff and libdebuff.GetSpellIcon then
+                    spellTexture = libdebuff:GetSpellIcon(sid)
+                  end
+                  
+                  if spellTexture == blizzTexture then
+                    blizzardVisibleBuffs[sid] = true
+                    break
+                  end
+                end
+              end
+            end
+            
+            -- Cache the result
+            if not pfUI_PlayerBuffFilter then pfUI_PlayerBuffFilter = {} end
+            pfUI_PlayerBuffFilter.visibleBuffs = blizzardVisibleBuffs
+            pfUI_PlayerBuffFilter.timestamp = GetTime()
+          end
+          
+          -- Collect only Blizzard-visible buff slots
+          for fieldSlot = 1, 32 do
+            local sid = auras[fieldSlot]
+            if sid and sid > 0 and blizzardVisibleBuffs[sid] then
+              table.insert(occupiedSlots, fieldSlot)
+            end
+          end
+          table.sort(occupiedSlots)
+        else
+          -- For other units: show all buffs
+          occupiedSlots = GetSortedSlots(auras, 1, 32)
+        end
+        
+        -- Now display buffs based on (filtered) sorted slots
+        -- FIRST: Clear all spellIds to avoid stale data
+        for i=1, unit.config.bufflimit do
+          if unit.buffs[i] then
+            unit.buffs[i].spellId = nil
+            unit.buffs[i].fieldSlot = nil
+          end
+        end
+        
+        -- THEN: Set data for visible buffs
         for i=1, unit.config.bufflimit do
           if not unit.buffs[i] then break end
           
@@ -2734,6 +2777,10 @@ function pfUI.uf:RefreshUnit(unit, component)
           
           if targetSlot then
             local spellId = auras[targetSlot]
+            
+            -- Store spellId for tooltip/click handlers
+            unit.buffs[i].spellId = spellId
+            unit.buffs[i].fieldSlot = targetSlot
             
             -- Get icon from libdebuff
             texture = nil
@@ -2744,9 +2791,36 @@ function pfUI.uf:RefreshUnit(unit, component)
             -- Get stacks from GetUnitField  
             local auraApplications = GetUnitField(guid, "auraApplications")
             stacks = (auraApplications and auraApplications[targetSlot]) or 0
+            
+            -- Get timer info from GetPlayerAuraDuration (for player only)
+            if unit.label == "player" and GetPlayerAuraDuration and unit.buffs[i].cd then
+              local _, duration, expirationTime = GetPlayerAuraDuration(targetSlot - 1) -- 0-based
+              
+              -- DEBUG
+              DEFAULT_CHAT_FRAME:AddMessage("[TIMER] Icon " .. i .. ": duration=" .. tostring(duration) .. 
+                ", cd exists=" .. tostring(unit.buffs[i].cd ~= nil))
+              
+              if duration and duration > 0 then
+                -- Convert duration from milliseconds to seconds
+                local durationSec = duration / 1000
+                -- Calculate start time (when buff was applied)
+                local startTime = (expirationTime / 1000) - durationSec
+                
+                DEFAULT_CHAT_FRAME:AddMessage("[TIMER] Setting timer: start=" .. startTime .. ", duration=" .. durationSec)
+                CooldownFrame_SetTimer(unit.buffs[i].cd, startTime, durationSec, 1)
+              else
+                DEFAULT_CHAT_FRAME:AddMessage("[TIMER] Clearing timer (duration=0)")
+                CooldownFrame_SetTimer(unit.buffs[i].cd, 0, 0, 0)
+              end
+            else
+              DEFAULT_CHAT_FRAME:AddMessage("[TIMER] Icon " .. i .. ": SKIPPED (label=" .. tostring(unit.label) .. 
+                ", hasAPI=" .. tostring(GetPlayerAuraDuration ~= nil) .. ", hasCd=" .. tostring(unit.buffs[i].cd ~= nil) .. ")")
+            end
           else
             texture = nil
             stacks = 0
+            unit.buffs[i].spellId = nil
+            unit.buffs[i].fieldSlot = nil
           end
           
           unit.buffs[i].texture:SetTexture(texture)
