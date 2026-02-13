@@ -70,7 +70,6 @@ local forcedDurations = {
   ["Hurricane"]                 = { duration = 10, refreshOnMelee = false, applicatorSpells = false },
   ["Consecration"]              = { duration = 8,  refreshOnMelee = false, applicatorSpells = false },
   ["Blizzard"]                  = { duration = 8,  refreshOnMelee = false, applicatorSpells = false },
-  ["Hellfire"]                  = { duration = 15, refreshOnMelee = false, applicatorSpells = false },
   ["Rain of Fire"]              = { duration = 8,  refreshOnMelee = false, applicatorSpells = false },
   ["Flamestrike"]               = { duration = 8,  refreshOnMelee = false, applicatorSpells = false },
 
