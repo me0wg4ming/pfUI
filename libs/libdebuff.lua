@@ -574,20 +574,13 @@ local function GetDebuffSlotMap(guidOrUnit)
       return nil
     end
   else
-    -- It's a GUID (string starting with "0x") - we need to find the matching unitToken
-    -- For now, only support "target" since that's what buffwatch uses
-    if UnitExists and UnitExists("target") then
-      local _, targetGuid = UnitExists("target")
-      if targetGuid == guid then
-        unitToken = "target"
-      end
-    end
-    if not unitToken then
-      return nil -- Can't map GUID to unitToken
-    end
+    -- It's a GUID (string starting with "0x")
+    -- CRITICAL FIX: Use the GUID directly as unitToken!
+    -- Nampower's UnitExists() and GetUnitField() accept GUID strings directly
+    unitToken = guid
   end
   
-  -- Check cache first
+  -- Check cache first (use GUID as key for consistency across calls)
   local now = GetTime()
   local cached = slotMapCache[guid]
   if cached and cached.map and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
@@ -1006,6 +999,10 @@ end
 
 local cache = {}
 
+-- ============================================================================
+-- API: UnitDebuff
+-- ============================================================================
+
 function libdebuff:UnitDebuff(unit, displaySlot)
   local unitname = UnitName(unit)
   local unitlevel = UnitLevel(unit)
@@ -1046,7 +1043,8 @@ function libdebuff:UnitDebuff(unit, displaySlot)
     end
     
     -- IN RANGE: Get current slot map from GetUnitField (cached 50ms)
-    local slotMap = GetDebuffSlotMap(guid)
+    -- CRITICAL: Pass unitToken, not GUID! GetDebuffSlotMap needs unitToken for GetUnitField calls
+    local slotMap = GetDebuffSlotMap(unit)
     
     if not slotMap or not slotMap[displaySlot] then
       return nil
@@ -1262,7 +1260,8 @@ function libdebuff:UnitOwnDebuff(unit, id)
     local _, guid = UnitExists(unit)
     if guid and ownDebuffs[guid] then
       -- Get GetDebuffSlotMap to verify which spells are actually in debuff slots (Bit 3 check)
-      local debuffSlotMap = GetDebuffSlotMap(guid)
+      -- CRITICAL: Pass unitToken (e.g. "target"), not GUID! GetDebuffSlotMap needs unitToken for GetUnitField calls
+      local debuffSlotMap = GetDebuffSlotMap(unit)
       local debuffSpellNames = {}
       if debuffSlotMap then
         for _, slotData in pairs(debuffSlotMap) do
@@ -1277,9 +1276,10 @@ function libdebuff:UnitOwnDebuff(unit, id)
       for spellName, data in pairs(ownDebuffs[guid]) do
         local timeleft = (data.startTime + data.duration) - now
         if timeleft > -1 then  -- Grace period
-          -- FIX: Only include if spell is in an actual debuff slot (Bit 3 = 1)
-          -- This filters out HOTs like Rejuvenation on friendly targets
-          if debuffSpellNames[spellName] then
+          -- FIX: Include spells that are in debuff slots OR are Ground AoE spells (Consecration, Hurricane, etc.)
+          -- Ground AoE spells don't appear in debuff slots but are still valid debuffs that should be shown
+          local isGroundAoE = libspelldata and libspelldata:HasForcedDuration(spellName)
+          if debuffSpellNames[spellName] or isGroundAoE then
             local count = table.getn(sortedDebuffs) + 1
             sortedDebuffs[count] = {
               spellName = spellName,
@@ -2419,10 +2419,10 @@ if hasNampower then
       displayToAura[guid] = displayToAura[guid] or {}
       displayToAura[guid][displaySlot] = auraSlot
       
-      if debugStats.enabled and IsCurrentTarget(guid) then
+      if debugStats.enabled and (IsCurrentTarget(guid) or spellName == "Consecration") then
         local stackStr = stacks and stacks > 1 and string.format(" x%d", stacks) or ""
-        DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ff00[DEBUFF_ADDED]|r display=%d aura=%d %s%s caster=%s isOurs=%s", 
-          GetDebugTimestamp(), displaySlot, auraSlot, spellName, stackStr, DebugGuid(casterGuid), tostring(isOurs)))
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ff00[DEBUFF_ADDED]|r display=%d aura=%d %s%s caster=%s isOurs=%s guid=%s", 
+          GetDebugTimestamp(), displaySlot, auraSlot, spellName, stackStr, DebugGuid(casterGuid), tostring(isOurs), DebugGuid(guid)))
       end
       
       -- libspelldata: Create timer for forced-duration spells (now that we have casterGuid from passive proc detection)

@@ -1186,8 +1186,16 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       -- update all debuff icons
       for i = 1, 16 do
         local effect, rank, texture, stacks, dtype, duration, timeleft
-
-        if unitstr and C.nameplates.selfdebuff == "1" and libdebuff then
+        
+        -- Try GUID-based lookup first (works for all nameplates with Nampower)
+        local guid = superwow_active and plate.parent:GetName(1) or nil
+        if guid and libdebuff then
+          if C.nameplates.selfdebuff == "1" then
+            effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(guid, i)
+          else
+            effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(guid, i)
+          end
+        elseif unitstr and C.nameplates.selfdebuff == "1" and libdebuff then
           effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, i)
         elseif unitstr and libdebuff then
           effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
