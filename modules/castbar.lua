@@ -155,8 +155,8 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
             local useItemName = nil
             if pfUI.libdebuff_casts or pfUI.libdebuff_item_icons then
               local castGuid = nil
-              if this.unitstr == "player" and GetPlayerGUID then
-                castGuid = GetPlayerGUID()
+              if this.unitstr == "player" and GetPlayerGuid then
+                castGuid = GetPlayerGuid()
               elseif this.unitstr and UnitExists then
                 local _, guid = UnitExists(this.unitstr)
                 castGuid = guid

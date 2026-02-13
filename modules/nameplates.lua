@@ -108,7 +108,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end end
 
   -- Player GUID for filtering
-  local _, PlayerGUID = UnitExists("player")
+  local _, playerGuid = UnitExists("player")
 
   -- ============================================================================
   -- OPTIMIZATION: Config caching
@@ -511,7 +511,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
       if event == "PLAYER_ENTERING_WORLD" then
-        _, PlayerGUID = UnitExists("player")
+        _, playerGuid = UnitExists("player")
         CacheConfig()
         this:SetGameVariables()
       end

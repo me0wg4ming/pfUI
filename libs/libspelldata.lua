@@ -182,10 +182,12 @@ local carnageCallback = nil  -- registered by libdebuff
 
 -- Player GUID cache
 local cachedPlayerGuid = nil
-local function GetPlayerGUID()
+local function GetPlayerGuid()
   if not cachedPlayerGuid and UnitExists then
-    local _, guid = UnitExists("player")
-    cachedPlayerGuid = guid
+    local exists, guid = UnitExists("player")
+    if exists and guid then
+      cachedPlayerGuid = guid
+    end
   end
   return cachedPlayerGuid
 end
@@ -214,7 +216,7 @@ talentFrame:SetScript("OnEvent", function()
   UpdateCarnageRank()
   -- Cache player GUID on login
   if event == "PLAYER_ENTERING_WORLD" then
-    GetPlayerGUID()
+    GetPlayerGuid()
   end
 end)
 
@@ -381,7 +383,7 @@ function lib:ShouldCheckCarnage(spellName, casterGuid, targetGuid, numHit)
   if playerClass ~= "DRUID" then return false end
   if carnageRank < 1 then return false end
   if spellName ~= "Ferocious Bite" then return false end
-  if casterGuid ~= GetPlayerGUID() then return false end
+  if casterGuid ~= GetPlayerGuid() then return false end
   if not targetGuid or (numHit and numHit == 0) then return false end
   return true
 end
