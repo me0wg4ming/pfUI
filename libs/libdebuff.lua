@@ -1055,7 +1055,8 @@ function libdebuff:UnitDebuff(unit, displaySlot)
     texture = slotData.texture                                   
     stacks = slotData.stacks                                     
     dtype = slotData.dtype                                       
-    local auraSlot = slotData.auraSlot  
+    local auraSlot = slotData.auraSlot
+    local spellId = slotData.spellId
     
     -- Get caster info for this slot
     local slotCasterGuid, isOurs = GetSlotCaster(guid, auraSlot, effect)
@@ -1121,7 +1122,7 @@ function libdebuff:UnitDebuff(unit, displaySlot)
       end
     end
     
-    return effect, rank, texture, stacks, dtype, duration, timeleft, caster
+    return effect, rank, texture, stacks, dtype, duration, timeleft, caster, spellId
   end
 
   -- ============================================================================
@@ -2419,7 +2420,7 @@ if hasNampower then
       displayToAura[guid] = displayToAura[guid] or {}
       displayToAura[guid][displaySlot] = auraSlot
       
-      if debugStats.enabled and (IsCurrentTarget(guid) or spellName == "Consecration") then
+      if debugStats.enabled then
         local stackStr = stacks and stacks > 1 and string.format(" x%d", stacks) or ""
         DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ff00[DEBUFF_ADDED]|r display=%d aura=%d %s%s caster=%s isOurs=%s guid=%s", 
           GetDebugTimestamp(), displaySlot, auraSlot, spellName, stackStr, DebugGuid(casterGuid), tostring(isOurs), DebugGuid(guid)))

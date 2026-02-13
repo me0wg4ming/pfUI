@@ -261,10 +261,60 @@ local function DebuffOnEnter()
   if not this:GetParent().label then return end
 
   GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
-  if this:GetParent().label == "player" then
+  
+  local parent = this:GetParent()
+  local unitstr = parent.label .. (parent.id or "")
+  
+  if parent.label == "player" then
     GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
+  elseif libdebuff then
+    local selfdebuff = parent.config and parent.config.selfdebuff == "1"
+    
+    -- For "only own debuffs" mode: find the REAL game slot by matching spell name AND caster
+    if selfdebuff then
+      local ownDebuffName = libdebuff:UnitOwnDebuff(unitstr, this.id)
+      
+      if ownDebuffName then
+        -- Search through all game slots to find OUR debuff with matching name
+        for gameSlot = 1, 16 do
+          local gameName, _, _, _, _, _, _, gameCaster = libdebuff:UnitDebuff(unitstr, gameSlot)
+          if gameName == ownDebuffName and gameCaster == "player" then
+            GameTooltip:SetUnitDebuff(unitstr, gameSlot)
+            GameTooltip:Show()
+            return
+          end
+        end
+      end
+    else
+      -- Normal mode: try SetUnitDebuff first (best quality, shows full Blizzard tooltip)
+      GameTooltip:SetUnitDebuff(unitstr, this.id)
+      
+      -- Check if tooltip was populated (some debuffs don't work with SetUnitDebuff)
+      if GameTooltip:NumLines() > 0 then
+        GameTooltip:Show()
+        return
+      end
+    end
+    
+    -- Fallback: Build tooltip from GetSpellRec ONLY if SetUnitDebuff completely failed
+    -- Note: GetSpellRec descriptions contain unprocessed variables like $8418s1
+    -- Only use as last resort when no other tooltip is available
+    local name, rank, texture, stacks, dtype, duration, timeleft, caster, spellId
+    if selfdebuff then
+      name, rank, texture, stacks, dtype, duration, timeleft, caster, spellId = libdebuff:UnitOwnDebuff(unitstr, this.id)
+    else
+      name, rank, texture, stacks, dtype, duration, timeleft, caster, spellId = libdebuff:UnitDebuff(unitstr, this.id)
+    end
+    
+    if name then
+      -- Simple fallback: just show spell name
+      GameTooltip:ClearLines()
+      GameTooltip:AddLine(name, 1, 1, 1)
+      GameTooltip:Show()
+    end
   else
-    GameTooltip:SetUnitDebuff(this:GetParent().label .. this:GetParent().id, this.id)
+    -- No libdebuff: use vanilla API
+    GameTooltip:SetUnitDebuff(unitstr, this.id)
   end
 end
 
