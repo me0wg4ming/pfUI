@@ -7,6 +7,62 @@ setfenv(1, pfUI:GetEnvironment())
 gfind = string.gmatch or string.gfind
 mod = math.mod or mod
 
+local loadstring_cache = {}
+local loadstring_cache_size = 0
+local LOADSTRING_CACHE_MAX_SIZE = 1024 -- in practice such a max-size is more than enough  we will rarely have to wipe the cache during the session
+-- [ TryMemoizedFuncLoadstringForSpellCasts ]
+-- Returns a function for the given string if the given msg is a string and a valid
+-- lua-function can indeed be loaded from it, otherwise nil.
+--
+-- If msg is an actual raw-lua-function is passed it is returned as-is without any processing.
+-- This allows to use both raw functions and string-based scriptlets with the same API.
+--
+-- If msg is any other type (number, boolean, ...) then nil is returned.
+--
+-- The function is memoized for better performance on repeated calls with the same string.
+--
+-- The cache is automatically cleared when it exceeds a certain size (1024 entries) to prevent abuse.
+--
+-- In practice it is very unlikely to have more than a few dozen different scriptlets during a session,
+-- so cache-nuking should be a very rare event.
+function pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
+    local msgType = type(msg)
+    if msgType == "function" then --10 order
+        return msg -- return as-is
+    end
+
+    if msgType ~= "string" then --20 order
+        return nil -- numbers and the like are not valid for loadstring
+    end
+
+    local result = loadstring_cache[msg]
+    if result ~= nil then -- already seen?
+        return result
+    end
+
+    result = loadstring(msg)
+    if result == nil then -- invalid code
+        return nil
+    end
+
+    if loadstring_cache_size > LOADSTRING_CACHE_MAX_SIZE then --90 just in case
+        loadstring_cache = {}
+        loadstring_cache_size = 0
+    end
+
+    loadstring_cache[msg] = result --                    order
+    loadstring_cache_size = loadstring_cache_size + 1 -- order
+
+    return result
+
+    --10  special cases for when using /pfcast with funcs or scriptlets   if a raw func is passed we dont need to
+    --    to loadstring it all
+    --
+    --20  if the user passes a direct integer-spell-id or something else, we should not attempt to loadstring it
+    --
+    --90  prevent abuse by capping the cache size
+end
+
 -- [ strsplit ]
 -- Splits a string using a delimiter.
 -- 'delimiter'  [string]        characters that will be interpreted as delimiter
