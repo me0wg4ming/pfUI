@@ -49,7 +49,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
   -- Add native mouseover support
   if SUPERWOW_VERSION and pfUI.uf and pfUI.uf.mouseover then
     _G.SlashCmdList.PFCAST = function(msg)
-      local func = loadstring(msg or "")
+      local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
       local unit = "mouseover"
 
       if not UnitExists(unit) then

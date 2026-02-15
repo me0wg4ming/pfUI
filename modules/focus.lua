@@ -77,7 +77,7 @@ function SlashCmdList.PFCASTFOCUS(msg)
     end
   end
 
-  local func = loadstring(msg or "")
+  local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
   if func then
     func()
   else
