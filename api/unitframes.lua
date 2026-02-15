@@ -19,6 +19,16 @@ pfUI.uf.delayed = {}
 -- =====================================================
 pfUI.uf.unitmap = {}  -- Maps "raid1" -> frame, "party2" -> frame, etc.
 
+-- GUID-based Roster Tracking for Smart Updates
+-- Only updates frames where the unit actually changed, not ALL 40 frames
+pfUI.uf.guidTracker = {
+  frameToGuid = {},  -- Maps frame -> guid
+}
+
+function pfUI.uf.ClearGuidTracking()
+  pfUI.uf.guidTracker.frameToGuid = {}
+end
+
 pfUI.uf.RebuildUnitmap = function()
   -- Clear old mappings
   for k in pairs(pfUI.uf.unitmap) do
@@ -30,14 +40,12 @@ pfUI.uf.RebuildUnitmap = function()
     for i = 1, 40 do
       local frame = pfUI.uf.raid[i]
       if frame and frame.label then
-        -- Always map by raid index for event handling
-        if frame.cache_raid and frame.cache_raid > 0 then
-          pfUI.uf.unitmap["raid" .. frame.cache_raid] = frame
-        end
-        -- Also map by current label for direct access
+        -- Map by current unit assignment (label..id) for event routing
+        -- Note: Do NOT map by cache_raid (frame position) - after raid.lua
+        -- sorts frames, cache_raid != id, and the cache_raid mapping would
+        -- overwrite correct label..id mappings from earlier iterations.
         if frame.id and frame.id ~= 0 and frame.id ~= "" then
-          local unitstr = frame.label .. frame.id
-          pfUI.uf.unitmap[unitstr] = frame
+          pfUI.uf.unitmap[frame.label .. frame.id] = frame
         elseif frame.label == "player" then
           pfUI.uf.unitmap["player"] = frame
         end
@@ -116,23 +124,45 @@ local glow2 = {
   insets = {left = 0, right = 0, top = 0, bottom = 0},
 }
 
+local function DoNothing()
+  return
+end
+
 local maxdurations = {}
 local function BuffOnUpdate()
   if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
-  local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
-  local texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
+  local bid = GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL")
+  local timeleft = GetPlayerBuffTimeLeft(bid)
+  local texture = GetPlayerBuffTexture(bid)
   local start = 0
 
-  if timeleft > 0 then
-    if not maxdurations[texture] then
-      maxdurations[texture] = timeleft
-    elseif maxdurations[texture] and maxdurations[texture] < timeleft then
-      maxdurations[texture] = timeleft
-    end
-    start = GetTime() + timeleft - maxdurations[texture]
+  -- slot is empty (buff expired or doesn't exist), clear timer and bail
+  if not texture then
+    CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    return
   end
 
-  CooldownFrame_SetTimer(this.cd, start, maxdurations[texture], timeleft > 0 and 1 or 0)
+  -- Get buff name for unique key (two buffs could share same texture)
+  local name = ""
+  if libtipscan then
+    scanner = scanner or libtipscan:GetScanner("unitframes")
+    if scanner then
+      scanner:SetPlayerBuff(bid)
+      name = scanner:Line(1) or ""
+    end
+  end
+  local key = texture .. name
+
+  if timeleft > 0 then
+    if not maxdurations[key] then
+      maxdurations[key] = timeleft
+    elseif maxdurations[key] and maxdurations[key] < timeleft then
+      maxdurations[key] = timeleft
+    end
+    start = GetTime() + timeleft - maxdurations[key]
+  end
+
+  CooldownFrame_SetTimer(this.cd, start, maxdurations[key], timeleft > 0 and 1 or 0)
 end
 
 local function TargetBuffOnUpdate()
@@ -152,6 +182,7 @@ local function TargetDebuffOnUpdate()
   if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
   
   local parent = this:GetParent()
+  if not parent.label then return end
   local unitstr = parent.label .. (parent.id or "")
   
   -- Use libdebuff for timer info if available
@@ -193,6 +224,9 @@ local function BuffOnEnter()
 
   if IsShiftKeyDown() then
     local texture = parent.label == "player" and GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL")) or UnitBuff(parent.label .. parent.id, this.id)
+
+    -- slot is empty, nothing to compare against
+    if not texture then return end
 
     local playerlist = ""
     local first = true
@@ -241,20 +275,38 @@ end
 
 local function DebuffOnUpdate()
   if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
-  local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
-  local texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
+  local bid = GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL")
+  local timeleft = GetPlayerBuffTimeLeft(bid)
+  local texture = GetPlayerBuffTexture(bid)
   local start = 0
 
-  if timeleft > 0 then
-    if not maxdurations[texture] then
-      maxdurations[texture] = timeleft
-    elseif maxdurations[texture] and maxdurations[texture] < timeleft then
-      maxdurations[texture] = timeleft
-    end
-    start = GetTime() + timeleft - maxdurations[texture]
+  -- slot is empty (debuff expired or doesn't exist), clear timer and bail
+  if not texture then
+    CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    return
   end
 
-  CooldownFrame_SetTimer(this.cd, start, maxdurations[texture], timeleft > 0 and 1 or 0)
+  -- Get debuff name for unique key (two debuffs could share same texture)
+  local name = ""
+  if libtipscan then
+    scanner = scanner or libtipscan:GetScanner("unitframes")
+    if scanner then
+      scanner:SetPlayerBuff(bid)
+      name = scanner:Line(1) or ""
+    end
+  end
+  local key = texture .. name
+
+  if timeleft > 0 then
+    if not maxdurations[key] then
+      maxdurations[key] = timeleft
+    elseif maxdurations[key] and maxdurations[key] < timeleft then
+      maxdurations[key] = timeleft
+    end
+    start = GetTime() + timeleft - maxdurations[key]
+  end
+
+  CooldownFrame_SetTimer(this.cd, start, maxdurations[key], timeleft > 0 and 1 or 0)
 end
 
 local function DebuffOnEnter()
@@ -263,6 +315,7 @@ local function DebuffOnEnter()
   GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
   
   local parent = this:GetParent()
+  if not parent.label then return end
   local unitstr = parent.label .. (parent.id or "")
   
   if parent.label == "player" then
@@ -364,6 +417,72 @@ function pfUI.api.UnitHasAggro(unit)
   return aggrodata[unit].state
 end
 
+-- ============================================================================
+-- GetUnitStats - Nampower Integration for Health + Power
+-- Returns: hp, maxHp, power, maxPower, powerType
+-- Uses GetUnitField when available (faster, works with Nampower cache),
+-- falls back to standard Blizzard API.
+-- ============================================================================
+function pfUI.api.GetUnitStats(unitstr)
+  -- Try Nampower's GetUnitField first
+  if GetUnitField then
+    local exists = _G.UnitExists(unitstr)
+    if exists then
+      local _, guid = _G.UnitExists(unitstr)
+      if guid then
+        local hp = GetUnitField(guid, "health")
+        local maxHp = GetUnitField(guid, "maxHealth")
+
+        if hp and hp > 0 and maxHp and maxHp > 0 then
+          -- Get power type from bytes0
+          local powerType
+          local bytes0 = GetUnitField(guid, "bytes0")
+          if bytes0 then
+            local temp = math.floor(bytes0 / 16777216)
+            powerType = temp - math.floor(temp / 256) * 256
+          else
+            powerType = UnitPowerType(unitstr) or 0
+          end
+
+          -- Get power values based on type
+          local power, maxPower
+          if powerType == 1 then
+            -- Rage (Nampower stores rage * 10)
+            local rage = GetUnitField(guid, "power2")
+            power = rage and math.floor(rage / 10) or UnitMana(unitstr)
+            maxPower = 100
+          elseif powerType == 3 then
+            -- Energy
+            power = GetUnitField(guid, "power4") or UnitMana(unitstr)
+            if power then power = math.floor(power) end
+            maxPower = GetUnitField(guid, "maxPower4") or UnitManaMax(unitstr)
+          elseif powerType == 2 then
+            -- Focus (Hunter pets)
+            power = GetUnitField(guid, "power3") or UnitMana(unitstr)
+            if power then power = math.floor(power) end
+            maxPower = GetUnitField(guid, "maxPower3") or UnitManaMax(unitstr)
+          else
+            -- Mana (default)
+            power = GetUnitField(guid, "power1") or UnitMana(unitstr)
+            maxPower = GetUnitField(guid, "maxPower1") or UnitManaMax(unitstr)
+          end
+
+          return hp, maxHp, power or 0, maxPower or 1, powerType
+        end
+      end
+    end
+  end
+
+  -- Fallback to standard Blizzard API
+  local hp = UnitHealth(unitstr) or 0
+  local maxHp = UnitHealthMax(unitstr) or 1
+  local powerType = UnitPowerType(unitstr) or 0
+  local power = UnitMana(unitstr) or 0
+  local maxPower = UnitManaMax(unitstr) or 1
+
+  return hp, maxHp, power, maxPower, powerType
+end
+
 pfUI.uf.glow = CreateFrame("Frame")
 pfUI.uf.glow:SetScript("OnUpdate", function()
   local fpsmod = GetFramerate() / 30
@@ -376,7 +495,7 @@ pfUI.uf.glow:SetScript("OnUpdate", function()
 end)
 
 pfUI.uf.glow.mod = 0
-pfUI.uf.glow.val = 0
+pfUI.uf.glow.val = 0.6
 
 function pfUI.uf.glow.UpdateGlowAnimation()
   this:SetAlpha(pfUI.uf.glow.val)
@@ -902,10 +1021,38 @@ function pfUI.uf:UpdateConfig()
       f.buffs[i].stacks:SetShadowOffset(0.8, -0.8)
       f.buffs[i].stacks:SetTextColor(1,1,.5)
 
-      f.buffs[i].cd = f.buffs[i].cd or CreateFrame(COOLDOWN_FRAME_TYPE, f.buffs[i]:GetName() .. "Cooldown", f.buffs[i], "CooldownFrameTemplate")
+      -- Create CD frame if it doesn't exist
+      if not f.buffs[i].cd then
+        if cooldown_anim == 1 then
+          f.buffs[i].cd = CreateFrame(COOLDOWN_FRAME_TYPE, f.buffs[i]:GetName() .. "Cooldown", f.buffs[i], "CooldownFrameTemplate")
+        else
+          f.buffs[i].cd = CreateFrame("Frame", f.buffs[i]:GetName() .. "Cooldown", f.buffs[i])
+          f.buffs[i].cd.AdvanceTime = DoNothing
+          f.buffs[i].cd.SetSequence = DoNothing
+          f.buffs[i].cd.SetSequenceTime = DoNothing
+        end
+      end
+
+      -- Always update CD properties (in case size changed)
+      local cdScale = f.config.buffsize / 32
+      f.buffs[i].cd:ClearAllPoints()
+      f.buffs[i].cd:SetScale(cdScale)
+      f.buffs[i].cd:SetAllPoints(f.buffs[i])
+      f.buffs[i].cd:SetFrameLevel(14)
       f.buffs[i].cd.pfCooldownType = "ALL"
       f.buffs[i].cd.pfCooldownStyleText = cooldown_text
       f.buffs[i].cd.pfCooldownStyleAnimation = cooldown_anim
+      f.buffs[i].cd:SetAlpha(cooldown_anim == 1 and 1 or 0)
+
+      -- immediately show/hide existing cooldown text
+      if f.buffs[i].cd.pfCooldownText then
+        if cooldown_text == 1 then
+          f.buffs[i].cd.pfCooldownText:Show()
+        else
+          f.buffs[i].cd.pfCooldownText:Hide()
+        end
+      end
+
       f.buffs[i].id = i
       f.buffs[i]:Hide()
 
@@ -981,10 +1128,39 @@ function pfUI.uf:UpdateConfig()
       f.debuffs[i].stacks:SetShadowColor(0, 0, 0)
       f.debuffs[i].stacks:SetShadowOffset(0.8, -0.8)
       f.debuffs[i].stacks:SetTextColor(1,1,.5)
-      f.debuffs[i].cd = f.debuffs[i].cd or CreateFrame(COOLDOWN_FRAME_TYPE, f.debuffs[i]:GetName() .. "Cooldown", f.debuffs[i], "CooldownFrameTemplate")
+
+      -- Create CD frame if it doesn't exist
+      if not f.debuffs[i].cd then
+        if cooldown_anim == 1 then
+          f.debuffs[i].cd = CreateFrame(COOLDOWN_FRAME_TYPE, f.debuffs[i]:GetName() .. "Cooldown", f.debuffs[i], "CooldownFrameTemplate")
+        else
+          f.debuffs[i].cd = CreateFrame("Frame", f.debuffs[i]:GetName() .. "Cooldown", f.debuffs[i])
+          f.debuffs[i].cd.AdvanceTime = DoNothing
+          f.debuffs[i].cd.SetSequence = DoNothing
+          f.debuffs[i].cd.SetSequenceTime = DoNothing
+        end
+      end
+
+      -- Always update CD properties (in case size changed)
+      local cdScale = f.config.debuffsize / 32
+      f.debuffs[i].cd:ClearAllPoints()
+      f.debuffs[i].cd:SetScale(cdScale)
+      f.debuffs[i].cd:SetAllPoints(f.debuffs[i])
+      f.debuffs[i].cd:SetFrameLevel(14)
       f.debuffs[i].cd.pfCooldownType = "ALL"
       f.debuffs[i].cd.pfCooldownStyleText = cooldown_text
       f.debuffs[i].cd.pfCooldownStyleAnimation = cooldown_anim
+      f.debuffs[i].cd:SetAlpha(cooldown_anim == 1 and 1 or 0)
+
+      -- immediately show/hide existing cooldown text
+      if f.debuffs[i].cd.pfCooldownText then
+        if cooldown_text == 1 then
+          f.debuffs[i].cd.pfCooldownText:Show()
+        else
+          f.debuffs[i].cd.pfCooldownText:Hide()
+        end
+      end
+
       f.debuffs[i].id = i
       f.debuffs[i]:Hide()
 
@@ -1040,8 +1216,18 @@ function pfUI.uf.OnEvent()
   -- abort on broken unitframes (e.g focus)
   if not this.label then return end
 
+  -- Handle shutdown to prevent crash 132
+  if event == "PLAYER_LOGOUT" then
+    this:UnregisterAllEvents()
+    this:SetScript("OnEvent", nil)
+    this:SetScript("OnUpdate", nil)
+    return
+  end
+
   -- update regular frames
   if event == "PLAYER_ENTERING_WORLD" then
+    -- Clear GUID tracking on zone change for full rebuild
+    if pfUI.uf.ClearGuidTracking then pfUI.uf.ClearGuidTracking() end
     this.update_full = true
   elseif this.label == "target" and event == "PLAYER_TARGET_CHANGED" and not pfScanActive == true then
     this.update_full = true
@@ -1090,6 +1276,20 @@ function pfUI.uf.OnUpdate()
   if this.label == "raid" or this.label == "party" then
     if (this.throttleTick or 0) > now then return end
     this.throttleTick = now + 0.1
+
+    -- Lightweight fallback: if no event-based update arrived for 0.5s,
+    -- force a base refresh to catch missed UNIT_HEALTH events.
+    -- This is much cheaper than Master's heartbeat polling since it only
+    -- triggers update_base (HP/MP bars) rather than a full refresh.
+    if not this.update_full and not this.update_base then
+      if not this.lastEventTick then this.lastEventTick = now end
+      if (now - this.lastEventTick) > 0.5 then
+        this.update_base = true
+        this.lastEventTick = now
+      end
+    else
+      this.lastEventTick = now
+    end
   elseif this.label then
     if (this.throttleTick or 0) > now then return end
     this.throttleTick = now + 0.025
@@ -1198,7 +1398,7 @@ function pfUI.uf.OnUpdate()
     local unit = this.label .. this.id
     local heal = libpredict:UnitGetIncomingHeals(unit)
     local ress = libpredict:UnitHasIncomingResurrection(unit)
-    local health, maxHealth = UnitHealth(unit), UnitHealthMax(unit)
+    local health, maxHealth = pfUI.api.GetUnitStats(unit)
 
     if heal - health - maxHealth ~= this.predictstate then
       local overhealperc = tonumber(this.config.overhealperc)
@@ -1361,6 +1561,7 @@ function pfUI.uf:EnableEvents()
   if f.label == "raid" or f.label == "party" then
     -- Only register non-UNIT_* events ourselves
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:RegisterEvent("PLAYER_LOGOUT")
     f:RegisterEvent("PARTY_MEMBERS_CHANGED")
     f:RegisterEvent("PARTY_LEADER_CHANGED")
     f:RegisterEvent("RAID_ROSTER_UPDATE")
@@ -1375,6 +1576,7 @@ function pfUI.uf:EnableEvents()
   else
     -- All other frames: Normal event registration
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:RegisterEvent("PLAYER_LOGOUT")
     f:RegisterEvent("UNIT_DISPLAYPOWER")
     f:RegisterEvent("UNIT_HEALTH")
     f:RegisterEvent("UNIT_MAXHEALTH")
@@ -2038,11 +2240,13 @@ function pfUI.uf:RefreshUnit(unit, component)
           end
 
           -- match filter
-          for _, filter in pairs(unit.indicator_custom) do
-            if filter == string.lower(name) then
-              pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
-              pos = pos + 1
-              break
+          if name then
+            for _, filter in pairs(unit.indicator_custom) do
+              if filter == string.lower(name) then
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
+                pos = pos + 1
+                break
+              end
             end
           end
         end
@@ -2060,11 +2264,13 @@ function pfUI.uf:RefreshUnit(unit, component)
           end
 
           -- match filter
-          for _, filter in pairs(unit.indicator_custom) do
-            if filter == string.lower(name) then
-              pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
-              pos = pos + 1
-              break
+          if name then
+            for _, filter in pairs(unit.indicator_custom) do
+              if filter == string.lower(name) then
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
+                pos = pos + 1
+                break
+              end
             end
           end
         end
@@ -2122,9 +2328,11 @@ function pfUI.uf:RefreshUnit(unit, component)
 
   -- base frame
   if component == "all" or component == "base" then
-    -- Unit HP/MP
-    local hp, hpmax = UnitHealth(unitstr), UnitHealthMax(unitstr)
-    local power, powermax = UnitMana(unitstr), UnitManaMax(unitstr)
+    -- Unit HP/MP with Nampower Integration
+    local hp, hpmax, power, powermax = pfUI.api.GetUnitStats(unitstr)
+
+    -- Store original values for color calculations (before invert_healthbar modifies hp)
+    local hp_orig, hpmax_orig = hp, hpmax
 
     if unit.config.invert_healthbar == "1" then
       hp = hpmax - hp
@@ -2144,7 +2352,7 @@ function pfUI.uf:RefreshUnit(unit, component)
     local custom = unit.config.defcolor == "0" and unit.config.custom or C.unitframes.custom
 
     local r, g, b, a = .2, .2, .2, 1
-    if customfullhp == "1" and UnitHealth(unitstr) == UnitHealthMax(unitstr) then
+    if customfullhp == "1" and hp_orig == hpmax_orig then
       r, g, b, a = GetStringColor(customcolor)
       custom_active = true
     elseif custom == "0" then
@@ -2169,8 +2377,8 @@ function pfUI.uf:RefreshUnit(unit, component)
       r, g, b, a = GetStringColor(customcolor)
       custom_active = true
     elseif custom == "2" then
-      if UnitHealthMax(unitstr) > 0 then
-        r, g, b = GetColorGradient(UnitHealth(unitstr) / UnitHealthMax(unitstr))
+      if hpmax_orig > 0 then
+        r, g, b = GetColorGradient(hp_orig / hpmax_orig)
       else
         r, g, b = 0, 0, 0
       end
@@ -2182,7 +2390,7 @@ function pfUI.uf:RefreshUnit(unit, component)
 
     if customfade == "1" then
       -- fade custom color into default color
-      local perc = UnitHealth(unitstr) / UnitHealthMax(unitstr)
+      local perc = hpmax_orig > 0 and (hp_orig / hpmax_orig) or 0
       local cr, cg, cb, ca = GetStringColor(customcolor)
 
       r = (cr*perc) + (r*(1-perc))
@@ -2217,9 +2425,28 @@ function pfUI.uf:RefreshUnit(unit, component)
       unit.hpCenterText:SetText(pfUI.uf:GetStatusValue(unit, "hpcenter"))
       unit.hpRightText:SetText(pfUI.uf:GetStatusValue(unit, "hpright"))
 
-      unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
-      unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
-      unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
+      -- Hide power bar text for NPCs without real power (power == 0)
+      local isNPC = not UnitIsPlayer(unitstr) and not UnitPlayerControlled(unitstr)
+      local npcNoPower = isNPC and (not power or power == 0)
+
+      local cfgLeft = unit.config.txtpowerleft
+      local cfgCenter = unit.config.txtpowercenter
+      local cfgRight = unit.config.txtpowerright
+      if npcNoPower and cfgLeft and strfind(cfgLeft, "power") then
+        unit.powerLeftText:SetText("")
+      else
+        unit.powerLeftText:SetText(pfUI.uf:GetStatusValue(unit, "powerleft"))
+      end
+      if npcNoPower and cfgCenter and strfind(cfgCenter, "power") then
+        unit.powerCenterText:SetText("")
+      else
+        unit.powerCenterText:SetText(pfUI.uf:GetStatusValue(unit, "powercenter"))
+      end
+      if npcNoPower and cfgRight and strfind(cfgRight, "power") then
+        unit.powerRightText:SetText("")
+      else
+        unit.powerRightText:SetText(pfUI.uf:GetStatusValue(unit, "powerright"))
+      end
 
       if UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
         unit.hp.bar:SetStatusBarColor(.5,.5,.5,.5)
@@ -2353,7 +2580,16 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks, start, duration)
     frame.icon[pos].stacks:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon[pos].stacks:SetJustifyH("RIGHT")
     frame.icon[pos].stacks:SetJustifyV("BOTTOM")
-    frame.icon[pos].cd = CreateFrame(COOLDOWN_FRAME_TYPE, nil, frame.icon[pos])
+    -- Check if parent frame has cooldown animation enabled
+    local parent_cooldown_anim = frame.config and tonumber(frame.config.cooldown_anim) or 1
+    if parent_cooldown_anim == 1 then
+      frame.icon[pos].cd = CreateFrame(COOLDOWN_FRAME_TYPE, nil, frame.icon[pos])
+    else
+      frame.icon[pos].cd = CreateFrame("Frame", nil, frame.icon[pos])
+      frame.icon[pos].cd.AdvanceTime = DoNothing
+      frame.icon[pos].cd.SetSequence = DoNothing
+      frame.icon[pos].cd.SetSequenceTime = DoNothing
+    end
     frame.icon[pos].cd.pfCooldownStyleAnimation = 0
     frame.icon[pos].cd.pfCooldownType = "ALL"
     frame.icon[pos].cd:SetFrameLevel(48)
@@ -2665,8 +2901,7 @@ function pfUI.uf:GetStatusValue(unit, pos)
   end
 
 
-  local mp, mpmax = UnitMana(unitstr), UnitManaMax(unitstr)
-  local hp, hpmax = UnitHealth(unitstr), UnitHealthMax(unitstr)
+  local hp, hpmax, mp, mpmax = pfUI.api.GetUnitStats(unitstr)
   local rhp, rhpmax = hp, hpmax
 
   if pfUI.libhealth and pfUI.libhealth.enabled then
@@ -2756,7 +2991,7 @@ function pfUI.uf:GetStatusValue(unit, pos)
   elseif config == "powermax" then
     return unit:GetColor("power") .. pfUI.api.Abbreviate(mpmax)
   elseif config == "powerperc" then
-    local perc = UnitManaMax(unitstr) > 0 and ceil(mp / mpmax * 100) or 0
+    local perc = mpmax > 0 and ceil(mp / mpmax * 100) or 0
     return unit:GetColor("power") .. perc
   elseif config == "powermiss" then
     local power = ceil(mp - mpmax)
@@ -2817,8 +3052,9 @@ function pfUI.uf.GetColor(self, preset)
     b = UnitReactionColor[UnitReaction(unitstr, "player")].b
 
   elseif preset == "health" and config["healthcolor"] == "1" then
-    if UnitHealthMax(unitstr) > 0 then
-      r, g, b = GetColorGradient(UnitHealth(unitstr) / UnitHealthMax(unitstr))
+    local ghp, ghpmax = pfUI.api.GetUnitStats(unitstr)
+    if ghpmax and ghpmax > 0 then
+      r, g, b = GetColorGradient(ghp / ghpmax)
     else
       r, g, b = 0, 0, 0
     end
