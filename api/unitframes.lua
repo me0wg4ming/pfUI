@@ -1703,8 +1703,16 @@ function pfUI.uf:CreateUnitFrame(unit, id, config, tick)
   f.powerCenterText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
 
   f.incHeal = CreateFrame("Frame", nil, f.hp)
-  f.incHeal.texture = f.incHeal:CreateTexture(nil, "BACKGROUND")
-  f.incHeal.texture:SetAllPoints()
+  -- Texture lives on hp.bar for correct draw order:
+  -- hp.bar.bg (BACKGROUND) < incHeal (BORDER) < hp.bar.bar (NORMAL)
+  f.incHeal.texture = f.hp.bar:CreateTexture(nil, "BORDER")
+  f.incHeal.texture:SetAllPoints(f.incHeal)
+  -- Override Show/Hide since texture lives on hp.bar, not incHeal
+  f.incHeal._Show = f.incHeal.Show
+  f.incHeal._Hide = f.incHeal.Hide
+  f.incHeal.Show = function(self) self:_Show() self.texture:Show() end
+  f.incHeal.Hide = function(self) self:_Hide() self.texture:Hide() end
+  f.incHeal.texture:Hide()
 
   f.ressIcon = CreateFrame("Frame", nil, f.hp.bar)
   f.ressIcon.texture = f.ressIcon:CreateTexture(nil,"BACKGROUND")
