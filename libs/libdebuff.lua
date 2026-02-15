@@ -1336,7 +1336,7 @@ end
 -- API: GetBestAuraCast (for libpredict HoT tracking)
 -- ============================================================================
 
-function libdebuff:GetBestAuraCast(guid, spellName)
+function libdebuff.GetBestAuraCast(guid, spellName)
   if not guid or not spellName then return nil end
   
   -- Check ownDebuffs first (for our casts)
