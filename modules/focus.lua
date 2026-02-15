@@ -77,7 +77,7 @@ function SlashCmdList.PFCASTFOCUS(msg)
     end
   end
 
-  local func = loadstring(msg or "")
+  local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
   if func then
     func()
   else
@@ -95,7 +95,7 @@ function SlashCmdList.PFCASTFOCUS(msg)
 end
 
 SLASH_PFSWAPFOCUS1, SLASH_PFSWAPFOCUS2 = '/swapfocus', '/pfswapfocus'
-function SlashCmdList.PFSWAPFOCUS(msg)
+function SlashCmdList.PFSWAPFOCUS()
   if not pfUI.uf or not pfUI.uf.focus then return end
 
   local oldunit = UnitExists("target") and strlower(UnitName("target"))

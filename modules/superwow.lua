@@ -112,7 +112,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     QueueFunction(function()
       local pfCombatText_AddMessage = _G.CombatText_AddMessage
       _G.CombatText_AddMessage = function(message, a, b, c, d, e, f)
-        local match, _, hex = string.find(message, ".+ %[(0x.+)%]")
+        local _, _, hex = string.find(message, ".+ %[(0x.+)%]")
         if hex and UnitName(hex) then
           message = string.gsub(message, hex, UnitName(hex))
         end
@@ -125,7 +125,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
   -- Add native mouseover support
   if SUPERWOW_VERSION and pfUI.uf and pfUI.uf.mouseover then
     _G.SlashCmdList.PFCAST = function(msg)
-      local func = loadstring(msg or "")
+      local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
       local unit = "mouseover"
 
       if not UnitExists(unit) then
@@ -505,6 +505,34 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
       end
 
       return guid
+    end
+
+    -- optimize the builtin /castfocus and /pfcastfocus slash commands when possible by using superwow
+    -- to cast directly to the focus-target-unit-guid thus skipping the need for complex target-swapping
+    local legacy_cast_focus = SlashCmdList.PFCASTFOCUS
+    function SlashCmdList.PFCASTFOCUS(msg)
+      local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg) --10 caution
+      if func then --10 caution
+        legacy_cast_focus(func)
+        return
+      end
+
+      if not pfUI.uf.focus.label then --50
+        UIErrorsFrame:AddMessage(SPELL_FAILED_BAD_TARGETS, 1, 0, 0)
+        return
+      end
+
+      CastSpellByName(msg, pfUI.uf.focus.label) --90
+
+      --10  if the spellcast is in fact raw lua-function we cant cast by guid    we have to fallback
+      --    to the legacy method which does support func-scriptlets
+      --
+      --50  the superwow-approach requires just the unit-guid-label   it doesnt care about the focus.id
+      --    which is typically dud anyway
+      --
+      --90  by using superwow to cast directly to a unit-guid we completely sidestep the complex mechanics
+      --    of target-swapping altogether which is the entire point here for vastly improved ui-performance
+      --    when spamming spells
     end
 
     -- extend the builtin /focus slash command
