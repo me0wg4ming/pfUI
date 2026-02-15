@@ -53,14 +53,50 @@ local scanner = libtipscan:GetScanner("libcast")
 local libcast = CreateFrame("Frame", "pfEnemyCast")
 local player = UnitName("player")
 
-UnitChannelInfo = _G.UnitChannelInfo or function(unit)
+-- Store original SuperWoW UnitChannelInfo if it exists
+local SuperWoW_UnitChannelInfo = _G.UnitChannelInfo
+
+UnitChannelInfo = function(unit)
   -- convert to name if unitstring was given
-  unit = pfValidUnits[unit] and UnitName(unit) or unit
+  local unitName = pfValidUnits[unit] and UnitName(unit) or unit
+  
+  -- For player: ALWAYS use libcast.db because it handles channel updates correctly
+  local isPlayer = unit == "player" or unitName == player
+  
+  if isPlayer then
+    local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
+    local db = libcast.db[player]
 
+    if db and db.cast and db.start + db.casttime / 1000 > GetTime() then
+      if not db.channel then return end
+      cast = db.cast
+      nameSubtext = db.rank
+      text = ""
+      texture = db.icon
+      startTime = db.start * 1000
+      endTime = startTime + db.casttime
+      isTradeSkill = nil
+    elseif db then
+      db.cast = nil
+      db.rank = nil
+      db.start = nil
+      db.casttime = nil
+      db.icon = nil
+      db.channel = nil
+    end
+
+    return cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
+  end
+  
+  -- For non-player units: use SuperWoW if available, otherwise use libcast.db
+  if SuperWoW_UnitChannelInfo then
+    return SuperWoW_UnitChannelInfo(unit)
+  end
+  
+  -- Fallback to libcast.db for non-player units
   local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
-  local db = libcast.db[unit]
+  local db = libcast.db[unitName]
 
-  -- clean legacy values
   if db and db.cast and db.start + db.casttime / 1000 > GetTime() then
     if not db.channel then return end
     cast = db.cast
@@ -71,7 +107,6 @@ UnitChannelInfo = _G.UnitChannelInfo or function(unit)
     endTime = startTime + db.casttime
     isTradeSkill = nil
   elseif db then
-    -- remove cast action to the database
     db.cast = nil
     db.rank = nil
     db.start = nil
@@ -83,14 +118,51 @@ UnitChannelInfo = _G.UnitChannelInfo or function(unit)
   return cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
 end
 
-UnitCastingInfo = _G.UnitCastingInfo or function(unit)
+-- Store original SuperWoW UnitCastingInfo if it exists
+local SuperWoW_UnitCastingInfo = _G.UnitCastingInfo
+
+UnitCastingInfo = function(unit)
   -- convert to name if unitstring was given
-  unit = pfValidUnits[unit] and UnitName(unit) or unit
+  local unitName = pfValidUnits[unit] and UnitName(unit) or unit
+  
+  -- For player: ALWAYS use libcast.db because it handles pushback correctly
+  -- SuperWoW's UnitCastingInfo doesn't track SPELLCAST_DELAYED events
+  local isPlayer = unit == "player" or unitName == player
+  
+  if isPlayer then
+    local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
+    local db = libcast.db[player]
 
+    if db and db.cast and db.start + db.casttime / 1000 > GetTime() then
+      if db.channel then return end
+      cast = db.cast
+      nameSubtext = db.rank or ""
+      text = ""
+      texture = db.icon
+      startTime = db.start * 1000
+      endTime = startTime + db.casttime
+      isTradeSkill = nil
+    elseif db then
+      db.cast = nil
+      db.rank = nil
+      db.start = nil
+      db.casttime = nil
+      db.icon = nil
+      db.channel = nil
+    end
+
+    return cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
+  end
+  
+  -- For non-player units: use SuperWoW if available, otherwise use libcast.db
+  if SuperWoW_UnitCastingInfo then
+    return SuperWoW_UnitCastingInfo(unit)
+  end
+  
+  -- Fallback to libcast.db for non-player units
   local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
-  local db = libcast.db[unit]
+  local db = libcast.db[unitName]
 
-  -- clean legacy values
   if db and db.cast and db.start + db.casttime / 1000 > GetTime() then
     if db.channel then return end
     cast = db.cast
@@ -101,7 +173,6 @@ UnitCastingInfo = _G.UnitCastingInfo or function(unit)
     endTime = startTime + db.casttime
     isTradeSkill = nil
   elseif db then
-    -- remove cast action to the database
     db.cast = nil
     db.rank = nil
     db.start = nil
@@ -182,17 +253,31 @@ libcast:RegisterEvent("SPELLCAST_CHANNEL_STOP")
 libcast:RegisterEvent("SPELLCAST_CHANNEL_UPDATE")
 
 local mob, spell, icon, _
+
 libcast:SetScript("OnEvent", function()
   -- Fill database with player casts
   if event == "SPELLCAST_START" then
     icon = L["spells"][arg1] and L["spells"][arg1].icon and string.format("%s%s", "Interface\\Icons\\", L["spells"][arg1].icon) or lastcasttex
-    -- add cast action to the database
-    this.db[player].cast = arg1
-    this.db[player].rank = lastrank
-    this.db[player].start = GetTime()
-    this.db[player].casttime = arg2
-    this.db[player].icon = icon
-    this.db[player].channel = nil
+    
+    -- Check if SuperWoW already set the cast data (with correct haste-adjusted casttime)
+    -- If so, only update icon if needed, don't overwrite casttime
+    local superWowAlreadySet = this.db[player].cast == arg1 and this.db[player].casttime and this.db[player].casttime > 0
+    
+    if superWowAlreadySet then
+      -- SuperWoW already set correct casttime, only update icon if better
+      if icon and not this.db[player].icon then
+        this.db[player].icon = icon
+      end
+    else
+      -- No SuperWoW data, use SPELLCAST_START data
+      this.db[player].cast = arg1
+      this.db[player].rank = lastrank
+      this.db[player].start = GetTime()
+      this.db[player].casttime = arg2
+      this.db[player].icon = icon
+      this.db[player].channel = nil
+    end
+    
     if not L["spells"][arg1] or not L["spells"][arg1].icon or not L["spells"][arg1].t then
       L["spells"][arg1] = L["spells"][arg1] or { }
       L["spells"][arg1].icon = L["spells"][arg1].icon or icon
@@ -214,7 +299,9 @@ libcast:SetScript("OnEvent", function()
     end
   elseif event == "SPELLCAST_DELAYED" then
     if this.db[player].cast then
-      this.db[player].start = this.db[player].start + arg1/1000
+      -- Pushback: increase casttime instead of shifting start
+      -- arg1 is the delay amount in milliseconds
+      this.db[player].casttime = this.db[player].casttime + arg1
     end
   elseif event == "SPELLCAST_CHANNEL_START" then
     -- add cast action to the database
@@ -224,6 +311,7 @@ libcast:SetScript("OnEvent", function()
     this.db[player].casttime = arg1
     this.db[player].icon = L["spells"][arg2] and L["spells"][arg2].icon and string.format("%s%s", "Interface\\Icons\\", L["spells"][arg2].icon) or lastcasttex
     this.db[player].channel = true
+    
     lastcasttex, lastrank = nil, nil
   elseif event == "SPELLCAST_CHANNEL_STOP" then
     if this.db[player] and this.db[player].channel then

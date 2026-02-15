@@ -455,6 +455,8 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
   if C.chat.global.tabmouse == "1" then
     pfUI.chat.mouseovertab = CreateFrame("Frame")
     pfUI.chat.mouseovertab:SetScript("OnUpdate", function()
+      -- throttle
+      if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + pfUI.throttle:Get("chat_tab") end  -- Default: Normal (10 FPS)
 
       if pfUI.chat.hideLock then return end
 
@@ -725,6 +727,12 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
     end
   end)
 
+  local function GetPlayerLevel(name)
+    if not pfUI_playerDB then return nil end
+    if not pfUI_playerDB[name] then return nil end
+    return pfUI_playerDB[name].level
+  end
+
   local function ScanWhoName(name)
     -- abort if another query is ongoing
     if who_query.pending then return end
@@ -779,6 +787,25 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
         if C.chat.text.tintunknown == "1" or match then
           text = string.gsub(text, "|Hplayer:"..name.."|h%["..real.."%]|h(.-:-)",
             left..color.."|Hplayer:"..name.."|h" .. color .. real .. "|h|r"..right.."%1")
+        end
+      end
+    end
+
+    -- display player levels if available
+    if C.chat.text.playerlevel == "1" then
+      for name in gfind(text, "|Hplayer:(.-)|h") do
+        local real, _ = strsplit(":", name)
+        local level = GetPlayerLevel(real)
+
+        if level and level > 0 then
+          local levelcolor = rgbhex(GetDifficultyColor(level))
+          -- Add level after the player name, before the closing bracket
+          text = string.gsub(text, "(|Hplayer:" .. name .. "|h.-|h|r)" .. right,
+            "%1 " .. levelcolor .. level .. "|r" .. right)
+        elseif level and level <= 0 then
+          -- Show ?? for unknown levels (e.g. -1 from UnitLevel)
+          text = string.gsub(text, "(|Hplayer:" .. name .. "|h.-|h|r)" .. right,
+            "%1 |cffff0000??|r" .. right)
         end
       end
     end

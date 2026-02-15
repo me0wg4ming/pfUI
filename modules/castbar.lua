@@ -1,8 +1,21 @@
-pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
+pfUI:RegisterModule("castbar", "vanilla", function ()
+  local superwow_active = HasSuperWoW()
+
   local font = C.castbar.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
   local font_size = C.castbar.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
   local rawborder, default_border = GetBorderSize("unitframes")
   local cbtexture = pfUI.media[C.appearance.castbar.texture]
+
+  -- Helper function for castbar timer formatting
+  local function FormatCastbarTime(value)
+    if C.unitframes.castbardecimals == "1" then
+      -- 1 decimal, always floor
+      return string.format("%.1f", floor(value * 10) / 10)
+    else
+      -- 2 decimals (default)
+      return string.format("%.2f", value)
+    end
+  end
 
   local function CreateCastbar(name, parent, unitstr, unitname)
     local cb = CreateFrame("Frame", name, parent or UIParent)
@@ -64,7 +77,12 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
     cb.bar.lag:SetPoint("BOTTOMRIGHT", cb.bar, "BOTTOMRIGHT", 0, 0)
     cb.bar.lag:SetTexture(1,.2,.2,.2)
 
+    -- OnUpdate script with throttle for performance optimization
     cb:SetScript("OnUpdate", function()
+      -- Throttle for performance
+      if (this.tick or 0) > GetTime() then return end
+      this.tick = GetTime() + 0.020 -- ~60 FPS for smooth castbar
+      
       if this.drag and this.drag:IsShown() then
         this:SetAlpha(1)
         return
@@ -86,10 +104,19 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
       local query = this.unitstr ~= "" and this.unitstr or this.unitname
       if not query then return end
 
-      -- transform all non player unitstrings to unit guids
-      if superwow_active and this.unitstr and not UnitIsUnit(this.unitstr, 'player') then
+      -- transform unitstrings to unit guids when SuperWoW is active
+      -- SuperWoW stores cast data by GUID for all units INCLUDING player
+      -- BUT: For player casts, we need to use libcast data because it handles pushback correctly
+      local useLibcastForPlayer = this.unitstr == "player"
+      
+      if superwow_active and this.unitstr and not useLibcastForPlayer then
         local _, guid = UnitExists(this.unitstr)
         query = guid or query
+      end
+      
+      -- For player: use player name to query libcast.db directly
+      if useLibcastForPlayer then
+        query = UnitName("player")
       end
 
       local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
@@ -122,8 +149,37 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
             this.icon:Show()
             this.icon:SetHeight(size)
             this.icon:SetWidth(size)
-            this.icon.texture:SetTexture(texture)
+            
+            -- Override with item icon from libdebuff_casts or persistent item icon cache
+            local useTexture = texture
+            local useItemName = nil
+            if pfUI.libdebuff_casts or pfUI.libdebuff_item_icons then
+              local castGuid = nil
+              if this.unitstr == "player" and GetPlayerGUID then
+                castGuid = GetPlayerGUID()
+              elseif this.unitstr and UnitExists then
+                local _, guid = UnitExists(this.unitstr)
+                castGuid = guid
+              end
+              if castGuid then
+                -- First check active cast data
+                if pfUI.libdebuff_casts and pfUI.libdebuff_casts[castGuid] and pfUI.libdebuff_casts[castGuid].itemID then
+                  useTexture = pfUI.libdebuff_casts[castGuid].icon or texture
+                -- Fallback to persistent item icon cache
+                elseif pfUI.libdebuff_item_icons and pfUI.libdebuff_item_icons[castGuid] then
+                  useTexture = pfUI.libdebuff_item_icons[castGuid].icon or texture
+                  useItemName = pfUI.libdebuff_item_icons[castGuid].name
+                end
+              end
+            end
+            
+            this.icon.texture:SetTexture(useTexture)
             this.bar:SetPoint("TOPLEFT", this.icon, "TOPRIGHT", this.spacing, 0)
+            
+            -- Override spell name with item name for item-triggered casts
+            if useItemName and this.showname then
+              this.bar.left:SetText(useItemName .. " " .. rank)
+            end
           else
             this.bar:SetPoint("TOPLEFT", this, 0, 0)
             this.icon:Hide()
@@ -149,10 +205,10 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
 
         if this.showtimer then
           if this.delay and this.delay > 0 then
-            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. round(this.delay,1) .. " |r "
-            this.bar.right:SetText(delay .. string.format("%.1f",cur) .. " / " .. round(max,1))
+            local delay = "|cffffaaaa" .. (channel and "-" or "+") .. FormatCastbarTime(this.delay) .. " |r "
+            this.bar.right:SetText(delay .. FormatCastbarTime(cur) .. " / " .. FormatCastbarTime(max))
           else
-            this.bar.right:SetText(string.format("%.1f",cur) .. " / " .. round(max,1))
+            this.bar.right:SetText(FormatCastbarTime(cur) .. " / " .. FormatCastbarTime(max))
           end
         end
 
@@ -162,6 +218,7 @@ pfUI:RegisterModule("castbar", "vanilla:tbc", function ()
         this.bar:SetValue(100)
         this.fadeout = 1
         this.delay = 0
+        this.itemIconApplied = nil
       end
     end)
 

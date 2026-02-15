@@ -1,6 +1,82 @@
 -- Compatibility layer to use castbars provided by SuperWoW:
 -- https://github.com/balakethelock/SuperWoW
 
+-- DLL Status Check Command (always available)
+SLASH_PFDLLSTATUS1 = "/pfdll"
+SlashCmdList["PFDLLSTATUS"] = function()
+  local chat = DEFAULT_CHAT_FRAME
+  chat:AddMessage("|cff33ffccpfUI|r: DLL Status Check")
+
+  -- SuperWoW
+  if SUPERWOW_VERSION then
+    chat:AddMessage("  |cff00ff00SuperWoW|r: v" .. tostring(SUPERWOW_VERSION))
+  elseif SpellInfo or SetAutoloot then
+    chat:AddMessage("  |cffffff00SuperWoW|r: Detected (old version)")
+  else
+    chat:AddMessage("  |cffff0000SuperWoW|r: Not detected")
+  end
+
+  -- Nampower
+  if GetNampowerVersion then
+    chat:AddMessage("  |cff00ff00Nampower|r: v" .. tostring(GetNampowerVersion()))
+  else
+    chat:AddMessage("  |cffff0000Nampower|r: Not detected")
+  end
+
+  -- UnitXP
+  local hasUnitXP = pcall(UnitXP, "nop", "nop")
+  if hasUnitXP then
+    chat:AddMessage("  |cff00ff00UnitXP_SP3|r: Detected")
+  else
+    chat:AddMessage("  |cffff0000UnitXP_SP3|r: Not detected")
+  end
+
+  -- Check if castbar exists for indicator positioning
+  if pfUI.castbar and pfUI.castbar.player then
+    chat:AddMessage("  |cff00ff00Castbar|r: Available for indicator anchoring")
+  else
+    chat:AddMessage("  |cffffff00Castbar|r: Not available (indicators use fallback position)")
+  end
+
+  -- Check indicator frames
+  if pfUI.uf and pfUI.uf.target then
+    chat:AddMessage("  |cff00ff00Target frame|r: exists")
+    if pfUI.uf.target.behindIndicator then
+      chat:AddMessage("  |cff00ff00Behind indicator|r: created")
+    else
+      chat:AddMessage("  |cffff0000Behind indicator|r: NOT created")
+    end
+    if pfUI.uf.target.losIndicator then
+      chat:AddMessage("  |cff00ff00LOS indicator|r: created")
+    else
+      chat:AddMessage("  |cffff0000LOS indicator|r: NOT created")
+    end
+  else
+    chat:AddMessage("  |cffff0000Target frame|r: NOT found")
+  end
+end
+
+-- UnitXP Behind/LOS test command
+SLASH_PFBEHIND1 = "/pfbehind"
+SlashCmdList["PFBEHIND"] = function()
+  local chat = DEFAULT_CHAT_FRAME
+  if not UnitExists("target") then
+    chat:AddMessage("|cff33ffccpfUI|r: No target")
+    return
+  end
+
+  local hasUnitXP = pcall(UnitXP, "nop", "nop")
+  if not hasUnitXP then
+    chat:AddMessage("|cff33ffccpfUI|r: UnitXP not available")
+    return
+  end
+
+  local successB, behind = pcall(UnitXP, "behind", "player", "target")
+  local successL, inSight = pcall(UnitXP, "inSight", "player", "target")
+
+  chat:AddMessage("|cff33ffccpfUI|r: Behind=" .. tostring(behind) .. " LOS=" .. tostring(inSight))
+end
+
 pfUI:RegisterModule("superwow", "vanilla", function ()
   if SetAutoloot and SpellInfo and not SUPERWOW_VERSION then
     -- Turn every enchanting link that we create in the enchanting frame,
@@ -85,15 +161,42 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
   end
 
   -- Add support for druid mana bars
-  if SUPERWOW_VERSION and pfUI.uf and pfUI.uf.player and pfUI_config.unitframes.druidmanabar == "1" then
-    local parent = pfUI.uf.player.power.bar
-    local config = pfUI.uf.player.config
-    local mana = config.defcolor == "0" and config.manacolor or pfUI_config.unitframes.manacolor
-    local r, g, b, a = pfUI.api.strsplit(",", mana)
-    local _, default_border = GetBorderSize("unitframes")
-    local _, class = UnitClass("player")
-    local width = config.pwidth ~= "-1" and config.pwidth or config.width
+  -- Uses Nampower's GetUnitField to get base mana when in shapeshift form
+  local hasNampower = (GetUnitField ~= nil)
 
+  -- Add support for player secondary power bar (shows base mana when in shapeshift form)
+  -- Works with SuperWoW OR Nampower - both extend UnitMana() to return base mana as second value
+  -- Only for Druids (only class that can shapeshift in Vanilla)
+  -- Controlled by "Show Druid Mana Bar" setting
+  local _, playerClass = UnitClass("player")
+  if hasNampower and pfUI.uf and pfUI.uf.player and playerClass == "DRUID" and pfUI_config.unitframes.druidmanabar == "1" then
+    local rawborder, default_border = GetBorderSize("unitframes")
+    local config = pfUI.uf.player.config
+
+    -- Create secondary mana bar below the power bar
+    local playerMana = CreateFrame("StatusBar", "pfPlayerSecondaryMana", pfUI.uf.player)
+    playerMana:SetFrameStrata(pfUI.uf.player:GetFrameStrata())
+    playerMana:SetFrameLevel(pfUI.uf.player:GetFrameLevel() + 5)
+    playerMana:SetStatusBarTexture(pfUI.media[config.pbartexture])
+    
+    -- Mana color
+    local manacolor = config.defcolor == "0" and config.manacolor or C.unitframes.manacolor
+    local r, g, b, a = pfUI.api.strsplit(",", manacolor)
+    playerMana:SetStatusBarColor(r, g, b, a)
+    
+    -- Use SAME size as normal power bar (pwidth/pheight from config)
+    local width = config.pwidth ~= "-1" and config.pwidth or config.width
+    local height = config.pheight
+    playerMana:SetWidth(width)
+    playerMana:SetHeight(height)
+    playerMana:SetPoint("TOPLEFT", pfUI.uf.player.power, "BOTTOMLEFT", 0, -2*default_border - (config.pspace or 0))
+    playerMana:SetPoint("TOPRIGHT", pfUI.uf.player.power, "BOTTOMRIGHT", 0, -2*default_border - (config.pspace or 0))
+    playerMana:Hide()
+
+    CreateBackdrop(playerMana)
+    CreateBackdropShadow(playerMana)
+
+    -- Text overlay - same font settings as power bar
     local fontname = pfUI.font_unit
     local fontsize = tonumber(pfUI_config.global.font_unit_size)
     local fontstyle = pfUI_config.global.font_unit_style
@@ -104,74 +207,284 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
       fontstyle = config.customfont_style
     end
 
-    local druidmana = CreateFrame("StatusBar", "pfDruidMana", UIParent)
-    druidmana:SetFrameStrata(parent:GetFrameStrata())
-    druidmana:SetFrameLevel(parent:GetFrameLevel() + 16)
-    druidmana:SetStatusBarTexture(pfUI.media[config.pbartexture])
-    druidmana:SetStatusBarColor(r, g, b, a)
-    druidmana:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", 0, -2*default_border - config.pspace)
-    druidmana:SetPoint("TOPRIGHT", parent, "BOTTOMRIGHT", 0, -2*default_border - config.pspace)
-    druidmana:SetWidth(width)
-    druidmana:SetHeight(tonumber(pfUI_config.unitframes.druidmanaheight) or 6)
-    druidmana:EnableMouse(true)
-    druidmana:Hide()
+    playerMana.text = playerMana:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    playerMana.text:SetFontObject(GameFontWhite)
+    playerMana.text:SetFont(fontname, fontsize, fontstyle)
+    playerMana.text:SetPoint("CENTER", playerMana, "CENTER", 0, 0)
+    
+    -- Set text color like normal power bar (mana = type 0)
+    local tr, tg, tb = 1, 1, 1
+    if config["powercolor"] == "1" then
+      tr = ManaBarColor[0].r
+      tg = ManaBarColor[0].g
+      tb = ManaBarColor[0].b
+    end
+    if C.unitframes.pastel == "1" then
+      tr, tg, tb = (tr + .75) * .5, (tg + .75) * .5, (tb + .75) * .5
+    end
+    playerMana.text:SetTextColor(tr, tg, tb, 1)
 
-    UpdateMovable(druidmana)
-    CreateBackdrop(druidmana)
-    CreateBackdropShadow(druidmana)
-
-    druidmana:RegisterEvent("UNIT_MANA")
-    druidmana:RegisterEvent("UNIT_MAXMANA")
-    druidmana:RegisterEvent("UNIT_DISPLAYPOWER")
-    druidmana:SetScript("OnEvent", function()
-      if UnitPowerType("player") == 0 then
-        this:Hide()
+    -- Update function
+    local function UpdatePlayerSecondaryMana()
+      local powerType = UnitPowerType("player")
+      
+      -- Only show when NOT using mana (i.e., in Bear/Cat form)
+      if powerType == 0 then
+        playerMana:Hide()
         return
       end
 
-      local _, mana = UnitMana("player")
-      local _, max = UnitManaMax("player")
-      local perc = math.ceil(mana / max * 100)
-      if perc == 100 then
-        this.text:SetText(string.format("%s", Abbreviate(mana)))
-      else
-        this.text:SetText(string.format("%s - %s%%", Abbreviate(mana), perc))
+      -- Get base mana using Nampower's GetUnitField
+      local baseMana, baseMaxMana
+      
+      if GetUnitField then
+        local _, guid = UnitExists("player")
+        if guid then
+          baseMana = GetUnitField(guid, "power1")
+          baseMaxMana = GetUnitField(guid, "maxPower1")
+        end
       end
-      this:SetMinMaxValues(0, max)
-      this:SetValue(mana)
-      this:Show()
+
+      -- Round down power values (Nampower can return decimals, especially for rage)
+      if baseMana then baseMana = math.floor(baseMana) end
+      if baseMaxMana then baseMaxMana = math.floor(baseMaxMana) end
+
+      if type(baseMana) ~= "number" or type(baseMaxMana) ~= "number" or baseMaxMana == 0 then
+        playerMana:Hide()
+        return
+      end
+
+      -- Update bar
+      playerMana:SetMinMaxValues(0, baseMaxMana)
+      playerMana:SetValue(baseMana)
+
+      -- Update text based on power text config (uses same setting as normal power bar)
+      -- Check txtpowercenter first (centered text), then txtpowerright, then txtpowerleft
+      local textConfig = config.txtpowercenter or config.txtpowerright or config.txtpowerleft
+      
+      if not textConfig or textConfig == "" or textConfig == "none" then
+        -- No text configured - hide text
+        playerMana.text:SetText("")
+      elseif textConfig == "power" then
+        playerMana.text:SetText(Abbreviate(baseMana))
+      elseif textConfig == "powermax" then
+        playerMana.text:SetText(Abbreviate(baseMaxMana))
+      elseif textConfig == "powerperc" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        playerMana.text:SetText(perc)
+      elseif textConfig == "powermiss" then
+        local miss = math.ceil(baseMana - baseMaxMana)
+        playerMana.text:SetText(miss == 0 and "0" or Abbreviate(miss))
+      elseif textConfig == "powerdyn" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          playerMana.text:SetText(Abbreviate(baseMana))
+        else
+          playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      elseif textConfig == "powerminmax" then
+        playerMana.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
+      else
+        -- Default: show dynamic (value + percentage if not full)
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          playerMana.text:SetText(Abbreviate(baseMana))
+        else
+          playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      end
+
+      playerMana:Show()
+    end
+
+    -- Register events
+    playerMana:RegisterEvent("UNIT_MANA")
+    playerMana:RegisterEvent("UNIT_MAXMANA")
+    playerMana:RegisterEvent("UNIT_DISPLAYPOWER")
+    playerMana:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+    playerMana:RegisterEvent("PLAYER_LOGOUT")
+    playerMana:SetScript("OnEvent", function()
+      -- Handle shutdown to prevent crash 132
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        return
+      end
+      if arg1 == nil or arg1 == "player" then
+        UpdatePlayerSecondaryMana()
+      end
     end)
 
-    druidmana.text = druidmana:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
-    druidmana.text:SetFontObject(GameFontWhite)
-    druidmana.text:SetFont(fontname, fontsize, fontstyle)
-    druidmana.text:SetPoint("RIGHT", -2*(default_border + config.txtpowerrightoffx), 0)
-    druidmana.text:SetPoint("LEFT", 2*(default_border + config.txtpowerrightoffx), 0)
-    druidmana.text:SetJustifyH("RIGHT")
+    -- Initial update
+    UpdatePlayerSecondaryMana()
 
-    if config["powercolor"] == "1" then
-      local r = ManaBarColor[0].r
-      local g = ManaBarColor[0].g
-      local b = ManaBarColor[0].b
-
-      if pfUI_config.unitframes.pastel == "1" then
-        druidmana.text:SetTextColor((r+.75)*.5, (g+.75)*.5, (b+.75)*.5, 1)
-      else
-        druidmana.text:SetTextColor(r, g, b, a)
-      end
-    end
-
-    if pfUI_config.unitframes.druidmanatext == "1" then
-      druidmana.text:Show()
-    else
-      druidmana.text:Hide()
-    end
-
-    if class ~= "DRUID" then
-      druidmana:UnregisterAllEvents()
-      druidmana:Hide()
-    end
+    -- Store reference
+    pfUI.uf.player.secondaryMana = playerMana
   end
+
+  -- Add support for target secondary power bar (shows base mana when target is in shapeshift form)
+  -- Works with SuperWoW OR Nampower - both extend UnitMana() to return base mana as second value
+  -- Controlled by "Show Druid Mana Bar" setting - available for ALL classes
+  if hasNampower and pfUI.uf and pfUI.uf.target and pfUI_config.unitframes.druidmanabar == "1" then
+    local rawborder, default_border = GetBorderSize("unitframes")
+    local config = pfUI.uf.target.config
+
+    -- Create secondary mana bar below the power bar
+    local targetMana = CreateFrame("StatusBar", "pfTargetSecondaryMana", pfUI.uf.target)
+    targetMana:SetFrameStrata(pfUI.uf.target:GetFrameStrata())
+    targetMana:SetFrameLevel(pfUI.uf.target:GetFrameLevel() + 5)
+    targetMana:SetStatusBarTexture(pfUI.media[config.pbartexture])
+    
+    -- Mana color
+    local manacolor = config.defcolor == "0" and config.manacolor or C.unitframes.manacolor
+    local r, g, b, a = pfUI.api.strsplit(",", manacolor)
+    targetMana:SetStatusBarColor(r, g, b, a)
+    
+    -- Use SAME size as normal power bar (pwidth/pheight from config)
+    local width = config.pwidth ~= "-1" and config.pwidth or config.width
+    local height = config.pheight  -- Same height as power bar!
+    targetMana:SetWidth(width)
+    targetMana:SetHeight(height)
+    targetMana:SetPoint("TOPLEFT", pfUI.uf.target.power, "BOTTOMLEFT", 0, -2*default_border - (config.pspace or 0))
+    targetMana:SetPoint("TOPRIGHT", pfUI.uf.target.power, "BOTTOMRIGHT", 0, -2*default_border - (config.pspace or 0))
+    targetMana:Hide()
+
+    CreateBackdrop(targetMana)
+    CreateBackdropShadow(targetMana)
+
+    -- Text overlay - same font settings as power bar
+    local fontname = pfUI.font_unit
+    local fontsize = tonumber(pfUI_config.global.font_unit_size)
+    local fontstyle = pfUI_config.global.font_unit_style
+
+    if config.customfont == "1" then
+      fontname = pfUI.media[config.customfont_name]
+      fontsize = tonumber(config.customfont_size)
+      fontstyle = config.customfont_style
+    end
+
+    targetMana.text = targetMana:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    targetMana.text:SetFontObject(GameFontWhite)
+    targetMana.text:SetFont(fontname, fontsize, fontstyle)
+    targetMana.text:SetPoint("CENTER", targetMana, "CENTER", 0, 0)
+    
+    -- Set text color like normal power bar (mana = type 0)
+    -- Uses powercolor setting and pastel effect
+    local function UpdateTextColor()
+      local tr, tg, tb = 1, 1, 1
+      if config["powercolor"] == "1" then
+        tr = ManaBarColor[0].r
+        tg = ManaBarColor[0].g
+        tb = ManaBarColor[0].b
+      end
+      if C.unitframes.pastel == "1" then
+        tr, tg, tb = (tr + .75) * .5, (tg + .75) * .5, (tb + .75) * .5
+      end
+      targetMana.text:SetTextColor(tr, tg, tb, 1)
+    end
+    UpdateTextColor()
+
+    -- Update function
+    local function UpdateTargetSecondaryMana()
+      if not UnitExists("target") then
+        targetMana:Hide()
+        return
+      end
+
+      local powerType = UnitPowerType("target")
+      
+      -- Only show if target is NOT using mana (i.e., in shapeshift form with energy/rage)
+      if powerType == 0 then
+        -- Target is using mana as primary power - no need for secondary bar
+        targetMana:Hide()
+        return
+      end
+
+      -- Get base mana using Nampower's GetUnitField
+      local baseMana, baseMaxMana
+      
+      if GetUnitField then
+        local _, guid = UnitExists("target")
+        if guid then
+          baseMana = GetUnitField(guid, "power1")
+          baseMaxMana = GetUnitField(guid, "maxPower1")
+        end
+      end
+
+      -- Round down power values (Nampower can return decimals, especially for rage)
+      if baseMana then baseMana = math.floor(baseMana) end
+      if baseMaxMana then baseMaxMana = math.floor(baseMaxMana) end
+
+      -- Check if we got valid mana values
+      if type(baseMana) ~= "number" or type(baseMaxMana) ~= "number" or baseMaxMana == 0 then
+        targetMana:Hide()
+        return
+      end
+
+      -- Update bar
+      targetMana:SetMinMaxValues(0, baseMaxMana)
+      targetMana:SetValue(baseMana)
+
+      -- Update text based on power text config (uses same setting as normal power bar)
+      local textConfig = config.txtpowercenter or config.txtpowerright or config.txtpowerleft
+      
+      if not textConfig or textConfig == "" or textConfig == "none" then
+        targetMana.text:SetText("")
+      elseif textConfig == "power" then
+        targetMana.text:SetText(Abbreviate(baseMana))
+      elseif textConfig == "powermax" then
+        targetMana.text:SetText(Abbreviate(baseMaxMana))
+      elseif textConfig == "powerperc" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        targetMana.text:SetText(perc)
+      elseif textConfig == "powermiss" then
+        local miss = math.ceil(baseMana - baseMaxMana)
+        targetMana.text:SetText(miss == 0 and "0" or Abbreviate(miss))
+      elseif textConfig == "powerdyn" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          targetMana.text:SetText(Abbreviate(baseMana))
+        else
+          targetMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      elseif textConfig == "powerminmax" then
+        targetMana.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
+      else
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          targetMana.text:SetText(Abbreviate(baseMana))
+        else
+          targetMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      end
+
+      targetMana:Show()
+    end
+
+    -- Register events
+    targetMana:RegisterEvent("PLAYER_TARGET_CHANGED")
+    targetMana:RegisterEvent("UNIT_MANA")
+    targetMana:RegisterEvent("UNIT_MAXMANA")
+    targetMana:RegisterEvent("UNIT_DISPLAYPOWER")
+    targetMana:RegisterEvent("PLAYER_LOGOUT")
+    targetMana:SetScript("OnEvent", function()
+      -- Handle shutdown to prevent crash 132
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        return
+      end
+      if event == "PLAYER_TARGET_CHANGED" then
+        UpdateTargetSecondaryMana()
+      elseif arg1 == "target" then
+        UpdateTargetSecondaryMana()
+      end
+    end)
+
+    -- Store reference
+    pfUI.uf.target.secondaryMana = targetMana
+  end
+
 
   -- Add support for guid based focus frame
   if SUPERWOW_VERSION and pfUI.uf and pfUI.uf.focus then
@@ -252,36 +565,221 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
   end
 
-  -- Enhance libdebuff with SuperWoW data
-  local superdebuff = CreateFrame("Frame")
-  superdebuff:RegisterEvent("UNIT_CASTEVENT")
-  superdebuff:SetScript("OnEvent", function()
-    -- variable assignments
-    local caster, target, event, spell = arg1, arg2, arg3
+  -- NOTE: SuperWoW libdebuff enhancement removed.
+  -- UNIT_CASTEVENT fires before resist/miss/dodge events arrive,
+  -- which breaks the failed spell detection system in libdebuff.
+  -- DoT timers use the standard hook-based fallback instead.
 
-    -- skip other caster and empty target events
-    local _, guid = UnitExists("player")
-    if caster ~= guid then return end
-    if event ~= "CAST" then return end
-    if not target or target == "" then return end
+  -- TrackUnit API for adding group members to minimap
+  -- Tracks friendly units on the minimap for easier group coordination
+  if TrackUnit and C.unitframes.track_group == "1" then
+    local trackFrame = CreateFrame("Frame")
+    trackFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
+    trackFrame:RegisterEvent("RAID_ROSTER_UPDATE")
+    trackFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    trackFrame:RegisterEvent("PLAYER_LOGOUT")
 
-    -- assign all required data
-    local unit = UnitName(target)
-    local unitlevel = UnitLevel(target)
-    local effect, rank = SpellInfo(spell)
-    local duration = libdebuff:GetDuration(effect, rank)
-    caster = "player"
+    trackFrame:SetScript("OnEvent", function()
+      -- Handle shutdown to prevent crash 132
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        return
+      end
 
-    -- add effect to current debuff data
-    libdebuff:AddEffect(unit, unitlevel, effect, duration, caster)
-  end)
+      -- Track party members
+      for i = 1, 4 do
+        local unit = "party" .. i
+        if UnitExists(unit) and UnitIsConnected(unit) then
+          pcall(TrackUnit, unit)
+        end
+      end
 
-  -- Enhance libcast with SuperWoW data
+      -- Track raid members
+      for i = 1, 40 do
+        local unit = "raid" .. i
+        if UnitExists(unit) and UnitIsConnected(unit) and not UnitIsUnit(unit, "player") then
+          pcall(TrackUnit, unit)
+        end
+      end
+    end)
+  end
+
+  -- Raid Marker Targeting API
+  -- Allows targeting units by raid marker ("mark1" to "mark8")
+  if SUPERWOW_VERSION then
+    pfUI.api.GetMarkedUnit = function(markIndex)
+      local markUnit = "mark" .. markIndex
+      if UnitExists(markUnit) then
+        return markUnit
+      end
+      return nil
+    end
+
+    pfUI.api.TargetMark = function(markIndex)
+      local markUnit = "mark" .. markIndex
+      if UnitExists(markUnit) then
+        TargetUnit(markUnit)
+        return true
+      end
+      return false
+    end
+
+    -- Get owner of pet/totem using "owner" suffix
+    pfUI.api.GetUnitOwner = function(unit)
+      local ownerUnit = unit .. "owner"
+      if UnitExists(ownerUnit) then
+        return UnitName(ownerUnit), ownerUnit
+      end
+      return nil
+    end
+  end
+
+  -- Enhanced SpellInfo API wrapper
+  if SpellInfo then
+    pfUI.api.GetSpellInfo = function(spellId)
+      local name, rank, texture, minRange, maxRange = SpellInfo(spellId)
+      return {
+        name = name,
+        rank = rank,
+        texture = texture,
+        minRange = minRange,
+        maxRange = maxRange,
+        spellId = spellId
+      }
+    end
+  end
+
+  -- Clickthrough Mode API
+  -- Allows clicking through corpses to loot underneath
+  if Clickthrough then
+    pfUI.api.SetClickthrough = function(enabled)
+      Clickthrough(enabled and 1 or 0)
+    end
+
+    pfUI.api.GetClickthrough = function()
+      return Clickthrough() == 1
+    end
+
+    pfUI.api.ToggleClickthrough = function()
+      local current = Clickthrough()
+      Clickthrough(current == 1 and 0 or 1)
+      return Clickthrough() == 1
+    end
+
+    -- Add slash command for clickthrough toggle
+    SLASH_PFCLICKTHROUGH1 = "/clickthrough"
+    SLASH_PFCLICKTHROUGH2 = "/ct"
+    SlashCmdList["PFCLICKTHROUGH"] = function()
+      local enabled = pfUI.api.ToggleClickthrough()
+      DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpfUI|r: Clickthrough mode " .. (enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r"))
+    end
+  end
+
+  -- Autoloot Control API
+  if SetAutoloot then
+    pfUI.api.SetAutoloot = function(enabled)
+      SetAutoloot(enabled and 1 or 0)
+    end
+
+    pfUI.api.GetAutoloot = function()
+      return SetAutoloot() == 1
+    end
+
+    pfUI.api.ToggleAutoloot = function()
+      local current = SetAutoloot()
+      SetAutoloot(current == 1 and 0 or 1)
+      return SetAutoloot() == 1
+    end
+  end
+
+  -- GetPlayerBuffID wrapper
+  if GetPlayerBuffID then
+    pfUI.api.GetPlayerBuffSpellId = function(buffIndex)
+      return GetPlayerBuffID(buffIndex)
+    end
+  end
+
+  -- CombatLogAdd wrapper for logging
+  if CombatLogAdd then
+    pfUI.api.LogToCombatLog = function(text, raw)
+      CombatLogAdd(text, raw and 1 or nil)
+    end
+  end
+
+  -- Local Raid Markers (marks only visible to self)
+  if SetRaidTarget then
+    local origSetRaidTarget = SetRaidTarget
+    pfUI.api.SetLocalRaidTarget = function(unit, index)
+      origSetRaidTarget(unit, index, "local")
+    end
+  end
+
+  -- Enhanced GetContainerItemInfo for charges
+  -- SuperWoW returns charges as negative numbers
+  pfUI.api.GetItemCharges = function(bag, slot)
+    local texture, count = GetContainerItemInfo(bag, slot)
+    if count and count < 0 then
+      return math.abs(count) -- Return positive charge count
+    end
+    return nil -- Not a charged item
+  end
+
+  -- Weapon Enchant Info on other players
+  if GetWeaponEnchantInfo then
+    local origGetWeaponEnchantInfo = GetWeaponEnchantInfo
+    pfUI.api.GetUnitWeaponEnchants = function(unit)
+      if unit and unit ~= "player" then
+        local mhName, ohName = GetWeaponEnchantInfo(unit)
+        return {
+          mainHand = mhName,
+          offHand = ohName,
+        }
+      else
+        local hasMainHandEnchant, mainHandExpiration, mainHandCharges, hasOffHandEnchant, offHandExpiration, offHandCharges = origGetWeaponEnchantInfo()
+        return {
+          mainHand = hasMainHandEnchant and true or false,
+          mainHandExpiration = mainHandExpiration,
+          mainHandCharges = mainHandCharges,
+          offHand = hasOffHandEnchant and true or false,
+          offHandExpiration = offHandExpiration,
+          offHandCharges = offHandCharges,
+        }
+      end
+    end
+  end
+
+  -- Enhance libcast with SuperWoW data for NPCs and other players
+  -- Player casts use SPELLCAST_* events for proper pushback handling
   local supercast = CreateFrame("Frame")
+  local playerGuid = nil
+
+  supercast:RegisterEvent("PLAYER_ENTERING_WORLD")
   supercast:RegisterEvent("UNIT_CASTEVENT")
+  supercast:RegisterEvent("PLAYER_LOGOUT")
   supercast:SetScript("OnEvent", function()
-    if not supercast.init then
-      -- disable combat parsing events in superwow mode
+    -- Handle shutdown to prevent crash 132
+    if event == "PLAYER_LOGOUT" then
+      this:UnregisterAllEvents()
+      this:SetScript("OnEvent", nil)
+      return
+    end
+
+    if event == "PLAYER_ENTERING_WORLD" then
+      -- Cache player GUID
+      if UnitExists then
+        local _, guid = UnitExists("player")
+        playerGuid = guid
+      end
+      return
+    end
+
+    local guid = arg1
+    local isPlayer = guid == playerGuid
+    
+    -- For non-player units: disable combat parsing events (one-time init)
+    if not isPlayer and not supercast.init then
+      -- disable combat parsing events in superwow mode (for non-player units)
       libcast:UnregisterEvent("CHAT_MSG_SPELL_SELF_DAMAGE")
       libcast:UnregisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
       libcast:UnregisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF")
@@ -304,13 +802,10 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
 
     if arg3 == "START" or arg3 == "CAST" or arg3 == "CHANNEL" then
-      -- human readable argument list
-      local guid = arg1
-      -- local target = arg2
+      local target = arg2
       local event_type = arg3
       local spell_id = arg4
       local timer = arg5
-      -- local start = GetTime()
 
       -- get spell info from spell id
       local spell, icon, _
@@ -332,28 +827,30 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
         end
       end
 
+      -- For player: store in libcast.db[playerName] so pushback tracking works
+      -- For others: store by GUID
+      local dbKey = isPlayer and UnitName("player") or guid
+      
       -- add cast action to the database
-      if not libcast.db[guid] then libcast.db[guid] = {} end
-      libcast.db[guid].cast = spell
-      libcast.db[guid].rank = nil
-      libcast.db[guid].start = GetTime()
-      libcast.db[guid].casttime = timer
-      libcast.db[guid].icon = icon
-      libcast.db[guid].channel = event_type == "CHANNEL" or false
-
-      -- write state variable
-      superwow_active = true
+      if not libcast.db[dbKey] then libcast.db[dbKey] = {} end
+      libcast.db[dbKey].cast = spell
+      libcast.db[dbKey].rank = nil
+      libcast.db[dbKey].start = GetTime()
+      libcast.db[dbKey].casttime = timer or 0
+      libcast.db[dbKey].icon = icon
+      libcast.db[dbKey].channel = event_type == "CHANNEL" or false
     elseif arg3 == "FAIL" then
-      local guid = arg1
-
-      -- delete all cast entries of guid
-      if libcast.db[guid] then
-        libcast.db[guid].cast = nil
-        libcast.db[guid].rank = nil
-        libcast.db[guid].start = nil
-        libcast.db[guid].casttime = nil
-        libcast.db[guid].icon = nil
-        libcast.db[guid].channel = nil
+      -- For player: use playerName, for others: use GUID
+      local dbKey = isPlayer and UnitName("player") or guid
+      
+      -- delete all cast entries
+      if libcast.db[dbKey] then
+        libcast.db[dbKey].cast = nil
+        libcast.db[dbKey].rank = nil
+        libcast.db[dbKey].start = nil
+        libcast.db[dbKey].casttime = nil
+        libcast.db[dbKey].icon = nil
+        libcast.db[dbKey].channel = nil
       end
     end
   end)

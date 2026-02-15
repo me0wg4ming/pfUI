@@ -72,4 +72,7 @@
   <Include file="..\modules\macrotweak.lua"/>
   <Include file="..\modules\turtle-wow.lua"/>
   <Include file="..\modules\superwow.lua"/>
+  <Include file="..\modules\nampower.lua"/>
+  <Include file="..\modules\unitxp.lua"/>
+  <Include file="..\modules\bgscore.lua"/>
 </Ui>

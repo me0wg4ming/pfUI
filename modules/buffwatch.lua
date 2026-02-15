@@ -125,7 +125,23 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     if this.unit == "player" then
       GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,this.type))
     elseif this.type == "HARMFUL" then
-      GameTooltip:SetUnitDebuff(this.unit, this.id)
+      -- For "only own debuffs" mode: find the REAL slot by matching spell name AND caster
+      local config = this.parent and this.parent.config
+      if config and config.selfdebuff == "1" and libdebuff then
+        local ownDebuffName = libdebuff:UnitOwnDebuff(this.unit, this.id)
+        if ownDebuffName then
+          -- Search through all game slots to find OUR debuff with matching name
+          for gameSlot = 1, 16 do
+            local gameName, _, _, _, _, _, _, gameCaster = libdebuff:UnitDebuff(this.unit, gameSlot)
+            if gameName == ownDebuffName and gameCaster == "player" then
+              GameTooltip:SetUnitDebuff(this.unit, gameSlot)
+              break
+            end
+          end
+        end
+      else
+        GameTooltip:SetUnitDebuff(this.unit, this.id)
+      end
     elseif this.type == "HELPFUL" then
       GameTooltip:SetUnitBuff(this.unit, this.id)
     end
@@ -261,7 +277,14 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
         and data[3] and data[3] ~= "" -- buff has a name
         and data[4] and data[4] ~= "" -- buff has a texture
       then
-        local uuid = data[4] .. data[3] -- we use that to cache some values for buffs
+        -- For player: no slot in uuid (slots shift when other buffs expire)
+        -- For target: include slot (multiple players can have same debuff, slot identifies who)
+        local uuid
+        if frame.unit == "player" then
+          uuid = data[4] .. data[3] -- texture + name only
+        else
+          uuid = data[4] .. data[3] .. data[2] -- texture + name + slot
+        end
 
         -- update bar data
         frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)

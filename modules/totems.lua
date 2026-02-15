@@ -27,11 +27,12 @@ pfUI:RegisterModule("totems", "vanilla:tbc", function ()
   totems.OnEnter = function(self)
     if not this.id then return end
     local active, name, start, duration, icon = GetTotemInfo(this.id)
+    if not name or not active then return end  -- Prüfen ob name gültig ist
     local color = slots[this.id]
     GameTooltip:SetOwner(this, "ANCHOR_LEFT")
     GameTooltip:SetText(name, color.r+.2, color.g+.2, color.b+.2)
     GameTooltip:Show()
-  end
+end
 
   totems.OnLeave = function(self)
     GameTooltip:Hide()

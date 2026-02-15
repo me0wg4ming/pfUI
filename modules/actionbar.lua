@@ -1,4 +1,4 @@
-pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
+pfUI:RegisterModule("actionbar", "vanilla", function ()
   local _, class = UnitClass("player")
   local color = RAID_CLASS_COLORS[class]
   local cr, cg, cb = color.r , color.g, color.b
@@ -668,7 +668,10 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
       start, duration, enable = GetActionCooldown(button.id)
     end
 
-    CooldownFrame_SetTimer(button.cd, start, duration, enable)
+    -- Nil-protect: GetActionCooldown can return nil during macro parsing/indexing
+    if start and duration then
+      CooldownFrame_SetTimer(button.cd, start, duration, enable or 1)
+    end
   end
 
   local _, active
@@ -755,8 +758,13 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
   end
 
   local self, button, unlock
+  -- Main update loop with throttle for performance optimization
   local function BarsUpdate(self)
     self = self or this
+
+    -- Throttle for performance
+    if (this.tick_main or 0) > GetTime() then return end
+    this.tick_main = GetTime() + 0.025
 
     -- update buttons whenever a button drag is assumed
     AssumeButtonDrag()
@@ -912,24 +920,40 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
   end
 
   local cat, stealth
-  local function IsCatStealth()
+  local inCatForm = nil  -- cached from buff scan
+  local prowlActive = nil  -- tracks if prowl is active
+  
+  -- Full scan for cat form and prowl (only on login/reload)
+  local function FullScan()
     if class ~= "DRUID" then return nil end
-    cat, stealth = nil, nil
-
+    
+    local foundCat, foundStealth = nil, nil
+    
     for i = 0, 31 do
       local texture = GetPlayerBuffTexture(i)
       if not texture then break end
 
-      -- catform icon detected
       if strfind(texture, "Ability_Druid_CatForm") then
-        if stealth then return true end
-        cat = true
+        foundCat = true
       end
 
-      -- stealth icon detected
       if strfind(texture, "Ability_Ambush") then
-        if cat then return true end
-        stealth = true
+        foundStealth = true
+      end
+    end
+    
+    inCatForm = foundCat
+    prowlActive = foundCat and foundStealth
+    return prowlActive
+  end
+  
+  -- Quick scan only for prowl (when we know we're in cat form)
+  local function HasProwlBuff()
+    for i = 0, 31 do
+      local texture = GetPlayerBuffTexture(i)
+      if not texture then break end
+      if strfind(texture, "Ability_Ambush") then
+        return true
       end
     end
     return nil
@@ -956,7 +980,76 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
     end
 
     -- setup page switch frame
+    local prowling = nil
     local pageswitch = CreateFrame("Frame", "pfActionBarPageSwitch", UIParent)
+    pageswitch:RegisterEvent("PLAYER_AURAS_CHANGED")
+    pageswitch:RegisterEvent("PLAYER_ENTERING_WORLD")
+    pageswitch:RegisterEvent("UNIT_CASTEVENT")
+    pageswitch:RegisterEvent("PLAYER_LOGOUT")
+    pageswitch:SetScript("OnEvent", function()
+      -- Handle shutdown to prevent crash 132
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        this:SetScript("OnUpdate", nil)
+        return
+      end
+      
+      if class ~= "DRUID" then return end
+      
+      -- On login/reload: full scan
+      if event == "PLAYER_ENTERING_WORLD" then
+        prowling = FullScan()
+        return
+      end
+      
+      -- UNIT_CASTEVENT: detect Prowl cast instantly
+      -- Prowl Spell IDs: 5215 (Rank 1), 6783 (Rank 2), 9913 (Rank 3)
+      if event == "UNIT_CASTEVENT" then
+        local guid, target, cEvent, spellId = arg1, arg2, arg3, arg4
+        local _, playerGuid = UnitExists("player")
+        if guid == playerGuid and cEvent == "CAST" then
+          if spellId == 5215 or spellId == 6783 or spellId == 9913 then
+            -- Prowl cast detected
+            inCatForm = true
+            prowlActive = true
+            prowling = true
+          elseif spellId == 768 then
+            -- Cat Form cast (Spell ID 768)
+            inCatForm = true
+          end
+        end
+        return
+      end
+      
+      -- PLAYER_AURAS_CHANGED: smart scanning
+      if event == "PLAYER_AURAS_CHANGED" then
+        if prowlActive then
+          -- We were prowling, check if still prowling
+          if HasProwlBuff() then
+            prowling = true
+          else
+            -- Prowl ended
+            prowlActive = nil
+            prowling = nil
+            -- Also check if still in cat form
+            inCatForm = nil
+            for i = 0, 31 do
+              local texture = GetPlayerBuffTexture(i)
+              if not texture then break end
+              if strfind(texture, "Ability_Druid_CatForm") then
+                inCatForm = true
+                break
+              end
+            end
+          end
+        elseif not inCatForm then
+          -- Not in cat form, do a full scan (might have just shifted)
+          prowling = FullScan()
+        end
+        -- If inCatForm but not prowlActive, no scan needed (wait for UNIT_CASTEVENT)
+      end
+    end)
     pageswitch:SetScript("OnUpdate", function()
       -- switch actionbar page depending on meta key that is pressed
       if C.bars.pagemastershift == "1" and IsShiftKeyDown() then
@@ -974,10 +1067,9 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
 
       -- switch actionbar page if druid stealth is detected
       if C.bars.druidstealth == "1" then
-        local stealth = IsCatStealth()
-        if stealth and _G.CURRENT_ACTIONBAR_PAGE == 1 then
+        if prowling and _G.CURRENT_ACTIONBAR_PAGE == 1 then
           SwitchBar(prowl)
-        elseif not stealth and _G.CURRENT_ACTIONBAR_PAGE == 8 then
+        elseif not prowling and _G.CURRENT_ACTIONBAR_PAGE == 8 then
           SwitchBar(default)
         end
       end
@@ -1109,39 +1201,6 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
       buttoncache[id] = f
     end
 
-    -- set required attributes for regular tbc buttons
-    if pfUI.client > 11200 then
-      if bar == 11 then
-        f:SetAttribute("type", "spell")
-        f:SetAttribute('spell', select(2, GetShapeshiftFormInfo(button)))
-      elseif bar == 12 then
-        f:SetAttribute("type1", "pet")
-        f:SetAttribute("action1", button)
-        f:SetAttribute("type2", "macro")
-        f:SetAttribute("macrotext2", "/click PetActionButton".. button .. " RightButton")
-      else
-        bars[bar]:SetAttribute("addchild", f)
-        f:SetAttribute("type", "action")
-        f:SetAttribute("action", id)
-        f:SetAttribute("checkselfcast", true)
-        f:SetAttribute("useparent-unit", true)
-        f:SetAttribute("useparent-statebutton", true)
-
-        for state = 0, 11 do -- add custom states
-          local action = ((state == 0 and bar or state)-1)*12+button
-          f:SetAttribute(string.format("*type-S%d", state), "action")
-          f:SetAttribute(string.format("*type-S%dRight", state), "action")
-          f:SetAttribute(string.format("*action-S%d", state), action)
-          f:SetAttribute(string.format("*action-S%dRight", state), action)
-          if C.bars.rightself == "1" then
-            f:SetAttribute(string.format("*unit-S%dRight", state), "player")
-          else
-            f:SetAttribute(string.format("*unit-S%dRight", state), nil)
-          end
-        end
-      end
-    end
-
     -- set keydown option
     if C.bars.keydown == "1" then
       f:RegisterForClicks("LeftButtonDown", "RightButtonDown")
@@ -1183,8 +1242,8 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
     f.count:SetJustifyH("RIGHT")
     f.count:SetJustifyV("BOTTOM")
 
-    -- macro spell scan
-    if C.bars.macroscan == "0" then
+    -- macro spell scan (disabled when macro addons are loaded)
+    if C.bars.macroscan == "0" or pfUI:MacroAddonsLoaded() then
       f.scanmacro, f.spellslot, f.booktype = nil, nil, nil
     else
       f.scanmacro = true
@@ -1653,9 +1712,13 @@ pfUI:RegisterModule("actionbar", "vanilla:tbc", function ()
       end
     end)
 
-    -- limit events to one per second and smoothen action scanning
+    -- Reagent counter update with throttle for performance optimization
     reagentcounter:SetScript("OnUpdate", function()
-      -- scan one action slot per frame
+      -- Throttle entire function to 10 FPS for smooth scanning
+      if (this.tick_update or 0) > GetTime() then return end
+      this.tick_update = GetTime() + 0.1
+      
+      -- scan one action slot per update
       if this.scan and this.scan <= 120 then
         UpdateSlot(this.scan)
         this.scan = this.scan + 1

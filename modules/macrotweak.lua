@@ -1,4 +1,7 @@
 pfUI:RegisterModule("macrotweak", "vanilla", function ()
+  -- disable macrotweak when macro addons are loaded
+  if IsAddOnLoaded("Supermacro") or IsAddOnLoaded("SuperCleveRoidMacros") or IsAddOnLoaded("UltimaMacros") then return end
+
   -- do not write macro calls into chat input history
   if ChatFrameEditBox._AddHistoryLine then
     local userinput
