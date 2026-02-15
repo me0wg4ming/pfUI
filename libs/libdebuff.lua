@@ -37,18 +37,34 @@ local scanner = libtipscan:GetScanner("libdebuff")
 local _, class = UnitClass("player")
 local lastspell
 
+-- Safe wrapper for Nampower C-API calls to prevent client crashes
+local function SafeGetUnitField(unit, field)
+  if not unit or not GetUnitField then return nil end
+  local ok, result = pcall(GetUnitField, unit, field)
+  if ok then return result end
+  return nil
+end
+
+local function SafeGetSpellRecField(spellId, field)
+  if not spellId or not GetSpellRecField then return nil end
+  local ok, result = pcall(GetSpellRecField, spellId, field)
+  if ok then return result end
+  return nil
+end
+
 -- GetSpellNameAndRank wrapper: Use GetSpellRec (Nampower/Turtle WoW)
 -- Returns: name, rank, texture
 local function GetSpellNameAndRank(spellId)
   if not spellId then return nil, nil, nil end
   
   if GetSpellRec then
-    local data = GetSpellRec(spellId)
-    if data and data.name then
+    local ok, data = pcall(GetSpellRec, spellId)
+    if ok and data and data.name then
       local texture = nil
       -- Get texture from spellIconID if available
       if data.spellIconID and GetSpellIconTexture then
-        texture = GetSpellIconTexture(data.spellIconID)
+        local ok2, tex = pcall(GetSpellIconTexture, data.spellIconID)
+        texture = ok2 and tex or nil
         -- GetSpellIconTexture may return short name, needs full path
         if texture and not string.find(texture, "\\") then
           texture = "Interface\\Icons\\" .. texture
@@ -413,9 +429,10 @@ function libdebuff:GetSpellIcon(spellId)
   local texture = nil
   
   if GetSpellRecField and GetSpellIconTexture then
-    local spellIconId = GetSpellRecField(spellId, "spellIconID")
+    local spellIconId = SafeGetSpellRecField(spellId, "spellIconID")
     if spellIconId and type(spellIconId) == "number" and spellIconId > 0 then
-      texture = GetSpellIconTexture(spellIconId)
+      local ok, tex = pcall(GetSpellIconTexture, spellIconId)
+      texture = ok and tex or nil
       -- GetSpellIconTexture may return short name OR full path
       -- Only add prefix if it's a short name (no backslash)
       if texture and not string.find(texture, "\\") then
@@ -481,11 +498,11 @@ local function GetBuffSlotMap(guid)
     return cached.buffMap
   end
   
-  local auras = GetUnitField(guid, "aura")
+  local auras = SafeGetUnitField(guid, "aura")
   if not auras then return nil end
   
   -- Fetch stacks array
-  local auraApps = GetUnitField(guid, "auraApplications")
+  local auraApps = SafeGetUnitField(guid, "auraApplications")
   
   if debugStats.enabled then
     debugStats.getunitfield_calls = debugStats.getunitfield_calls + 1
@@ -504,7 +521,7 @@ local function GetBuffSlotMap(guid)
       -- Get spell name: Try DBC first (works out of range!), using GetSpellRec
       local spellName = nil
       if GetSpellRecField then
-        spellName = GetSpellRecField(spellId, "name")
+        spellName = SafeGetSpellRecField(spellId, "name")
         -- Empty string = not found, treat as nil
         if spellName == "" then
           spellName = nil
@@ -588,13 +605,13 @@ local function GetDebuffSlotMap(guidOrUnit)
   end
   
   -- GetUnitField needs unitToken, not GUID!
-  local auras = GetUnitField(unitToken, "aura")
+  local auras = SafeGetUnitField(unitToken, "aura")
   if not auras then 
     return nil 
   end
   
   -- Fetch stacks array (reusable reference - extract values immediately)
-  local auraApps = GetUnitField(unitToken, "auraApplications")
+  local auraApps = SafeGetUnitField(unitToken, "auraApplications")
   
   if debugStats.enabled then
     debugStats.getunitfield_calls = debugStats.getunitfield_calls + 1
@@ -613,7 +630,7 @@ local function GetDebuffSlotMap(guidOrUnit)
       -- Get spell name: Try DBC first (works out of range!), using GetSpellRec
       local spellName = nil
       if GetSpellRecField then
-        spellName = GetSpellRecField(spellId, "name")
+        spellName = SafeGetSpellRecField(spellId, "name")
         -- Empty string = not found, treat as nil
         if spellName == "" then
           spellName = nil
@@ -626,7 +643,7 @@ local function GetDebuffSlotMap(guidOrUnit)
       -- Get debuff type from SpellRec DBC (always works)
       local dtype = nil
       if GetSpellRecField then
-        local dispelId = GetSpellRecField(spellId, "dispel")
+        local dispelId = SafeGetSpellRecField(spellId, "dispel")
         if dispelId and dispelId > 0 then
           dtype = dispelTypeMap[dispelId]
         end
@@ -1303,7 +1320,7 @@ function libdebuff:UnitOwnDebuff(unit, id)
         -- Get dtype from SpellRec DBC via stored spellId
         local entryDtype = nil
         if entry.data.spellId and GetSpellRecField then
-          local dispelId = GetSpellRecField(entry.data.spellId, "dispel")
+          local dispelId = SafeGetSpellRecField(entry.data.spellId, "dispel")
           if dispelId and dispelId > 0 then
             entryDtype = dispelTypeMap[dispelId]
           end
@@ -1967,9 +1984,9 @@ if hasNampower then
       
       -- Rank aus spellId ermitteln
       local rankNum = 0
-      local rankString = GetSpellRecField(spellId, "rank")
+      local rankString = SafeGetSpellRecField(spellId, "rank")
       if rankString and rankString ~= "" then
-        rankNum = tonumber((string.gsub(rankString, "Rank ", ""))) or 0
+        rankNum = tonumber((string.gsub(rankString, "%D+", ""))) or 0
       end
       
       local duration = durationMs and (durationMs / 1000) or 0

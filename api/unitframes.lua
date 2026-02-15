@@ -429,14 +429,17 @@ function pfUI.api.GetUnitStats(unitstr)
     local exists = _G.UnitExists(unitstr)
     if exists then
       local _, guid = _G.UnitExists(unitstr)
-      if guid then
-        local hp = GetUnitField(guid, "health")
-        local maxHp = GetUnitField(guid, "maxHealth")
+      if guid and type(guid) == "string" then
+        local ok, hp = pcall(GetUnitField, guid, "health")
+        if not ok then hp = nil end
+        local ok2, maxHp = pcall(GetUnitField, guid, "maxHealth")
+        if not ok2 then maxHp = nil end
 
         if hp and hp > 0 and maxHp and maxHp > 0 then
           -- Get power type from bytes0
           local powerType
-          local bytes0 = GetUnitField(guid, "bytes0")
+          local ok3, bytes0 = pcall(GetUnitField, guid, "bytes0")
+          if not ok3 then bytes0 = nil end
           if bytes0 then
             local temp = math.floor(bytes0 / 16777216)
             powerType = temp - math.floor(temp / 256) * 256
@@ -448,23 +451,30 @@ function pfUI.api.GetUnitStats(unitstr)
           local power, maxPower
           if powerType == 1 then
             -- Rage (Nampower stores rage * 10)
-            local rage = GetUnitField(guid, "power2")
+            local ok4, rage = pcall(GetUnitField, guid, "power2")
+            if not ok4 then rage = nil end
             power = rage and math.floor(rage / 10) or UnitMana(unitstr)
             maxPower = 100
           elseif powerType == 3 then
             -- Energy
-            power = GetUnitField(guid, "power4") or UnitMana(unitstr)
+            local ok4, p = pcall(GetUnitField, guid, "power4")
+            power = (ok4 and p) or UnitMana(unitstr)
             if power then power = math.floor(power) end
-            maxPower = GetUnitField(guid, "maxPower4") or UnitManaMax(unitstr)
+            local ok5, mp = pcall(GetUnitField, guid, "maxPower4")
+            maxPower = (ok5 and mp) or UnitManaMax(unitstr)
           elseif powerType == 2 then
             -- Focus (Hunter pets)
-            power = GetUnitField(guid, "power3") or UnitMana(unitstr)
+            local ok4, p = pcall(GetUnitField, guid, "power3")
+            power = (ok4 and p) or UnitMana(unitstr)
             if power then power = math.floor(power) end
-            maxPower = GetUnitField(guid, "maxPower3") or UnitManaMax(unitstr)
+            local ok5, mp = pcall(GetUnitField, guid, "maxPower3")
+            maxPower = (ok5 and mp) or UnitManaMax(unitstr)
           else
             -- Mana (default)
-            power = GetUnitField(guid, "power1") or UnitMana(unitstr)
-            maxPower = GetUnitField(guid, "maxPower1") or UnitManaMax(unitstr)
+            local ok4, p = pcall(GetUnitField, guid, "power1")
+            power = (ok4 and p) or UnitMana(unitstr)
+            local ok5, mp = pcall(GetUnitField, guid, "maxPower1")
+            maxPower = (ok5 and mp) or UnitManaMax(unitstr)
           end
 
           return hp, maxHp, power or 0, maxPower or 1, powerType
@@ -1703,8 +1713,16 @@ function pfUI.uf:CreateUnitFrame(unit, id, config, tick)
   f.powerCenterText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
 
   f.incHeal = CreateFrame("Frame", nil, f.hp)
-  f.incHeal.texture = f.incHeal:CreateTexture(nil, "BACKGROUND")
-  f.incHeal.texture:SetAllPoints()
+  -- Texture lives on hp.bar for correct draw order:
+  -- hp.bar.bg (BACKGROUND) < incHeal (BORDER) < hp.bar.bar (NORMAL)
+  f.incHeal.texture = f.hp.bar:CreateTexture(nil, "BORDER")
+  f.incHeal.texture:SetAllPoints(f.incHeal)
+  -- Override Show/Hide since texture lives on hp.bar, not incHeal
+  f.incHeal._Show = f.incHeal.Show
+  f.incHeal._Hide = f.incHeal.Hide
+  f.incHeal.Show = function(self) self:_Show() self.texture:Show() end
+  f.incHeal.Hide = function(self) self:_Hide() self.texture:Hide() end
+  f.incHeal.texture:Hide()
 
   f.ressIcon = CreateFrame("Frame", nil, f.hp.bar)
   f.ressIcon.texture = f.ressIcon:CreateTexture(nil,"BACKGROUND")
