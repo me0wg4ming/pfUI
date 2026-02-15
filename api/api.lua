@@ -27,7 +27,7 @@ end
 -- return:      [boolean]       result of the check.
 function pfUI.api.isempty(tbl)
   if not tbl then return true end
-  for k, v in pairs(tbl) do
+  for _ in pairs(tbl) do
     return false
   end
   return true
@@ -80,8 +80,12 @@ function pfUI.api.RunOOC(func)
   if not frame then
     frame = CreateFrame("Frame")
     frame:SetScript("OnUpdate", function()
-      if InCombatLockdown and InCombatLockdown() then return end
-      for key, func in pairs(queue) do func(); queue[key] = nil end
+        if InCombatLockdown and InCombatLockdown() then return end
+
+        for k, f in pairs(queue) do
+            f()
+            queue[k] = nil
+        end
     end)
   end
 
