@@ -90,59 +90,52 @@ function SlashCmdList.PFCASTFOCUS(msg)
   local focusGUID = pfUI.uf.focus.label
   local hasGUID = focusGUID and focusGUID ~= ""
   
-  -- Nampower path with GUID targeting (if available and we have GUID focus)
-  if hasGUID and CastSpellByNameNoQueue then
-    local _, currentGUID = nil, nil
-    if UnitExists then
-      _, currentGUID = UnitExists("target")
-    end
-    local player = UnitIsUnit("target", "player")
-    
-    -- Target focus by GUID
-    if TargetByGUID then
-      TargetByGUID(focusGUID)
-    else
-      -- Fallback: use GUID as unitstring (works on Turtle)
+  -- Nampower with NEW unitStr targeting support (no target toggle needed!)
+  if hasGUID and CastSpellByName then
+    if func then
+      -- For lua functions, we still need target toggle (function might use UnitName("target") etc)
+      local _, currentGUID = nil, nil
+      if UnitExists then
+        _, currentGUID = UnitExists("target")
+      end
+      local player = UnitIsUnit("target", "player")
+      
+      -- Target focus by GUID
       TargetUnit(focusGUID)
-    end
-    
-    -- Verify we actually targeted the focus
-    local _, targetGUID = nil, nil
-    if UnitExists then
-      _, targetGUID = UnitExists("target")
-    end
-    
-    if targetGUID ~= focusGUID then
+      
+      -- Verify we actually targeted the focus
+      local _, targetGUID = nil, nil
+      if UnitExists then
+        _, targetGUID = UnitExists("target")
+      end
+      
+      if targetGUID ~= focusGUID then
+        -- Restore original target and fail
+        if currentGUID then
+          TargetUnit(currentGUID)
+        elseif player then
+          TargetUnit("player")
+        else
+          TargetLastTarget()
+        end
+        UIErrorsFrame:AddMessage(SPELL_FAILED_BAD_TARGETS, 1, 0, 0)
+        return
+      end
+      
+      -- Execute function
+      func()
+      
       -- Restore original target
-      if currentGUID and TargetByGUID then
-        TargetByGUID(currentGUID)
-      elseif currentGUID then
+      if currentGUID then
         TargetUnit(currentGUID)
       elseif player then
         TargetUnit("player")
       else
         TargetLastTarget()
       end
-      UIErrorsFrame:AddMessage(SPELL_FAILED_BAD_TARGETS, 1, 0, 0)
-      return
-    end
-    
-    -- Execute the spell cast
-    if func then
-      func()
     else
-      CastSpellByNameNoQueue(msg)
-    end
-    
-    -- Restore original target
-    if currentGUID and TargetByGUID then
-      TargetByGUID(currentGUID)
-    elseif currentGUID then
-      TargetUnit(currentGUID)
-    elseif player then
-      TargetUnit("player")
-    else
-      TargetLastTarget()
+      -- Direct spell cast with GUID - NO TARGET TOGGLE! 🎉
+      CastSpellByName(msg, focusGUID)
     end
     
     return
