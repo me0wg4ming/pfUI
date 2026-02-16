@@ -104,23 +104,71 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       local query = this.unitstr ~= "" and this.unitstr or this.unitname
       if not query then return end
 
-      -- transform unitstrings to unit guids when SuperWoW is active
+      -- Check if we have a GUID-based focus (Turtle WoW native GUID)
+      local focusGuid = nil
+      if this.unitstr and string.find(this.unitstr, "^0x") then
+        focusGuid = this.unitstr
+      end
+
+      -- DEBUG: Print info when we have a focus GUID
+      if focusGuid and this.debug_timer and (GetTime() - this.debug_timer) > 2 then
+        this.debug_timer = GetTime()
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccFocus Castbar Debug:|r")
+        DEFAULT_CHAT_FRAME:AddMessage("  focusGuid: " .. tostring(focusGuid))
+        DEFAULT_CHAT_FRAME:AddMessage("  libdebuff_casts exists: " .. tostring(pfUI.libdebuff_casts ~= nil))
+        if pfUI.libdebuff_casts then
+          DEFAULT_CHAT_FRAME:AddMessage("  libdebuff_casts[guid]: " .. tostring(pfUI.libdebuff_casts[focusGuid] ~= nil))
+          if pfUI.libdebuff_casts[focusGuid] then
+            local cd = pfUI.libdebuff_casts[focusGuid]
+            DEFAULT_CHAT_FRAME:AddMessage("    spellName: " .. tostring(cd.spellName))
+            DEFAULT_CHAT_FRAME:AddMessage("    event: " .. tostring(cd.event))
+            DEFAULT_CHAT_FRAME:AddMessage("    endTime: " .. tostring(cd.endTime))
+            DEFAULT_CHAT_FRAME:AddMessage("    GetTime: " .. tostring(GetTime()))
+          end
+        end
+      end
+      if not this.debug_timer then this.debug_timer = 0 end
+
+      -- Try libdebuff_casts first for GUID-based units (works with Turtle GUID + Nampower events)
+      local cast, nameSubtext, text, texture, startTime, endTime
+      if focusGuid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[focusGuid] then
+        local castData = pfUI.libdebuff_casts[focusGuid]
+        if castData.event == "START" and castData.endTime and castData.endTime > GetTime() then
+          cast = castData.spellName
+          texture = castData.icon
+          startTime = castData.startTime * 1000  -- libdebuff uses seconds, castbar expects milliseconds
+          endTime = castData.endTime * 1000
+          nameSubtext = ""  -- Rank info not available in libdebuff_casts
+          
+          -- DEBUG: Confirm we're using libdebuff data
+          if not this.debug_confirmed then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00Focus Castbar: Using libdebuff_casts data!|r")
+            this.debug_confirmed = true
+          end
+        end
+      end
+
+      -- Fallback: transform unitstrings to unit guids when SuperWoW is active
       -- SuperWoW stores cast data by GUID for all units INCLUDING player
       -- BUT: For player casts, we need to use libcast data because it handles pushback correctly
       local useLibcastForPlayer = this.unitstr == "player"
       
-      if superwow_active and this.unitstr and not useLibcastForPlayer then
+      if not cast and superwow_active and this.unitstr and not useLibcastForPlayer then
         local _, guid = UnitExists(this.unitstr)
         query = guid or query
       end
       
       -- For player: use player name to query libcast.db directly
-      if useLibcastForPlayer then
+      if not cast and useLibcastForPlayer then
         query = UnitName("player")
       end
 
-      local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
-      if not cast then
+      -- Fallback: Try UnitCastingInfo if we haven't found cast data yet
+      if not cast and UnitCastingInfo then
+        cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
+      end
+      
+      if not cast and UnitChannelInfo then
         -- scan for channel spells if no cast was found
         channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(query)
         cast = channel

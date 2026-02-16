@@ -1153,7 +1153,16 @@ if hasNampower then
       
       if not casterGuid or not spellId then return end
       
-      local spellName = SpellInfo and SpellInfo(spellId) or nil
+      -- Get spell name - try Nampower first, then SuperWoW
+      local spellName = nil
+      if GetSpellRec then
+        local rec = GetSpellRec(spellId)
+        spellName = rec and rec.name or nil
+      end
+      if not spellName and SpellInfo then
+        spellName = SpellInfo(spellId)
+      end
+      
       local icon = libdebuff:GetSpellIcon(spellId)
       
       -- Use item icon for item-triggered casts
