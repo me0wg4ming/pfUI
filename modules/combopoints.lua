@@ -26,13 +26,14 @@ pfUI:RegisterModule("combopoints", "vanilla:tbc", function ()
     pfUI.combopoints[point].tex = pfUI.combopoints[point]:CreateTexture("OVERLAY")
     pfUI.combopoints[point].tex:SetAllPoints(pfUI.combopoints[point])
 
-    if point < 3 then
-      pfUI.combopoints[point].tex:SetTexture(1, .3, .3, .75)
-    elseif point < 4 then
-      pfUI.combopoints[point].tex:SetTexture(1, 1, .3, .75)
-    else
-      pfUI.combopoints[point].tex:SetTexture(.3, 1, .3, .75)
-    end
+    -- if point < 3 then
+    --   pfUI.combopoints[point].tex:SetTexture(1, .3, .3, .75)
+    -- elseif point < 4 then
+    --   pfUI.combopoints[point].tex:SetTexture(1, 1, .3, .75)
+    -- else
+    --   pfUI.combopoints[point].tex:SetTexture(.3, 1, .3, .75)
+    -- end
+    pfUI.combopoints[point].tex:SetTexture(1, 1, 0, 1)
 
     UpdateMovable(pfUI.combopoints[point])
     CreateBackdrop(pfUI.combopoints[point])
