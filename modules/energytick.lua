@@ -48,7 +48,7 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
         else
           this.badtick = diff
         end
-      elseif this.mode == "ENERGY" and diff > 0 then
+      elseif this.mode == "ENERGY" and diff > 19 then
         if not this.ignoreNextGain then
           this.target = 2
         end
