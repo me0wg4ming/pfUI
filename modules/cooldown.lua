@@ -103,9 +103,9 @@ pfUI:RegisterModule("cooldown", "vanilla:tbc", function ()
     end
 
     -- don't draw global cooldowns
-    if this.pfCooldownType == "NOGCD" and duration < tonumber(C.appearance.cd.threshold) then
-      start, duration = 0, 0
-    end
+    --if this.pfCooldownType == "NOGCD" and duration < tonumber(C.appearance.cd.threshold) then
+    --  start, duration = 0, 0
+    --end
 
     -- disable GCDs on non pfUI frames
     if not this.pfCooldownType and duration < tonumber(C.appearance.cd.threshold) then
