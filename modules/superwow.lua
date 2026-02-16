@@ -188,7 +188,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     local width = config.pwidth ~= "-1" and config.pwidth or config.width
     local height = config.pheight
     playerMana:SetWidth(width)
-    playerMana:SetHeight(height)
+    playerMana:SetHeight(3)
     playerMana:SetPoint("TOPLEFT", pfUI.uf.player.power, "BOTTOMLEFT", 0, -2*default_border - (config.pspace or 0))
     playerMana:SetPoint("TOPRIGHT", pfUI.uf.player.power, "BOTTOMRIGHT", 0, -2*default_border - (config.pspace or 0))
     playerMana:Hide()
