@@ -110,25 +110,6 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         focusGuid = this.unitstr
       end
 
-      -- DEBUG: Print info when we have a focus GUID
-      if focusGuid and this.debug_timer and (GetTime() - this.debug_timer) > 2 then
-        this.debug_timer = GetTime()
-        DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccFocus Castbar Debug:|r")
-        DEFAULT_CHAT_FRAME:AddMessage("  focusGuid: " .. tostring(focusGuid))
-        DEFAULT_CHAT_FRAME:AddMessage("  libdebuff_casts exists: " .. tostring(pfUI.libdebuff_casts ~= nil))
-        if pfUI.libdebuff_casts then
-          DEFAULT_CHAT_FRAME:AddMessage("  libdebuff_casts[guid]: " .. tostring(pfUI.libdebuff_casts[focusGuid] ~= nil))
-          if pfUI.libdebuff_casts[focusGuid] then
-            local cd = pfUI.libdebuff_casts[focusGuid]
-            DEFAULT_CHAT_FRAME:AddMessage("    spellName: " .. tostring(cd.spellName))
-            DEFAULT_CHAT_FRAME:AddMessage("    event: " .. tostring(cd.event))
-            DEFAULT_CHAT_FRAME:AddMessage("    endTime: " .. tostring(cd.endTime))
-            DEFAULT_CHAT_FRAME:AddMessage("    GetTime: " .. tostring(GetTime()))
-          end
-        end
-      end
-      if not this.debug_timer then this.debug_timer = 0 end
-
       -- Try libdebuff_casts first for GUID-based units (works with Turtle GUID + Nampower events)
       local cast, nameSubtext, text, texture, startTime, endTime
       if focusGuid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[focusGuid] then
@@ -139,12 +120,6 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
           startTime = castData.startTime * 1000  -- libdebuff uses seconds, castbar expects milliseconds
           endTime = castData.endTime * 1000
           nameSubtext = ""  -- Rank info not available in libdebuff_casts
-          
-          -- DEBUG: Confirm we're using libdebuff data
-          if not this.debug_confirmed then
-            DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00Focus Castbar: Using libdebuff_casts data!|r")
-            this.debug_confirmed = true
-          end
         end
       end
 
