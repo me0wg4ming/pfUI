@@ -262,37 +262,37 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
       -- Check txtpowercenter first (centered text), then txtpowerright, then txtpowerleft
       local textConfig = config.txtpowercenter or config.txtpowerright or config.txtpowerleft
       
-      if not textConfig or textConfig == "" or textConfig == "none" then
-        -- No text configured - hide text
-        playerMana.text:SetText("")
-      elseif textConfig == "power" then
-        playerMana.text:SetText(Abbreviate(baseMana))
-      elseif textConfig == "powermax" then
-        playerMana.text:SetText(Abbreviate(baseMaxMana))
-      elseif textConfig == "powerperc" then
-        local perc = math.ceil(baseMana / baseMaxMana * 100)
-        playerMana.text:SetText(perc)
-      elseif textConfig == "powermiss" then
-        local miss = math.ceil(baseMana - baseMaxMana)
-        playerMana.text:SetText(miss == 0 and "0" or Abbreviate(miss))
-      elseif textConfig == "powerdyn" then
-        local perc = math.ceil(baseMana / baseMaxMana * 100)
-        if perc == 100 then
-          playerMana.text:SetText(Abbreviate(baseMana))
-        else
-          playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
-        end
-      elseif textConfig == "powerminmax" then
-        playerMana.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
-      else
-        -- Default: show dynamic (value + percentage if not full)
-        local perc = math.ceil(baseMana / baseMaxMana * 100)
-        if perc == 100 then
-          playerMana.text:SetText(Abbreviate(baseMana))
-        else
-          playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
-        end
-      end
+      -- if not textConfig or textConfig == "" or textConfig == "none" then
+      --   -- No text configured - hide text
+      --   playerMana.text:SetText("")
+      -- elseif textConfig == "power" then
+      --   playerMana.text:SetText(Abbreviate(baseMana))
+      -- elseif textConfig == "powermax" then
+      --   playerMana.text:SetText(Abbreviate(baseMaxMana))
+      -- elseif textConfig == "powerperc" then
+      --   local perc = math.ceil(baseMana / baseMaxMana * 100)
+      --   playerMana.text:SetText(perc)
+      -- elseif textConfig == "powermiss" then
+      --   local miss = math.ceil(baseMana - baseMaxMana)
+      --   playerMana.text:SetText(miss == 0 and "0" or Abbreviate(miss))
+      -- elseif textConfig == "powerdyn" then
+      --   local perc = math.ceil(baseMana / baseMaxMana * 100)
+      --   if perc == 100 then
+      --     playerMana.text:SetText(Abbreviate(baseMana))
+      --   else
+      --     playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+      --   end
+      -- elseif textConfig == "powerminmax" then
+      --   playerMana.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
+      -- else
+      --   -- Default: show dynamic (value + percentage if not full)
+      --   local perc = math.ceil(baseMana / baseMaxMana * 100)
+      --   if perc == 100 then
+      --     playerMana.text:SetText(Abbreviate(baseMana))
+      --   else
+      --     playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+      --   end
+      -- endend
 
       playerMana:Show()
     end
