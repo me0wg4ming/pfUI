@@ -189,6 +189,10 @@ pfUI.libdebuff_recent_casts = pfUI.libdebuff_recent_casts or {}
 local recentCasts = pfUI.libdebuff_recent_casts
 local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
 
+-- Captured combo points from SPELL_CAST_EVENT (before client consumes them)
+-- SPELL_CAST_EVENT fires BEFORE UnitAura updates, so GetComboPoints() still works
+local capturedCP = nil
+
 -- ============================================================================
 -- STATIC POPUP DIALOGS
 -- ============================================================================
@@ -251,17 +255,38 @@ local debuffOverwritePairs = {
 }
 
 -- Combopoint-based abilities: Only show timers for OUR casts
+-- Format: [spellName] = { base = N, perCP = N }
+-- Duration formula: duration = base + combopoints * perCP
 local combopointAbilities = {
-  ["Rip"] = true,
-  ["Rupture"] = true,
-  ["Kidney Shot"] = true,
-  ["Slice and Dice"] = true,
-  ["Expose Armor"] = true,
+  -- Druid
+  ["Rip"]          = { base = 8,  perCP = 2 },
+
+  -- Rogue
+  ["Rupture"]      = { base = 6,  perCP = 2 },
+  ["Kidney Shot"]  = { base = 1,  perCP = 1 },
+  ["Slice and Dice"] = { base = 9, perCP = 3 },
+  ["Expose Armor"] = { base = 30, perCP = 0 },  -- fixed 30s
 }
 
 -- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
+
+-- Check if spell is a combo-point ability
+local function IsComboPointAbility(spellName)
+  if not spellName then return false end
+  return combopointAbilities[spellName] ~= nil
+end
+
+-- Get combo-point spell data (base duration and per-CP bonus)
+local function GetComboPointData(spellName)
+  if not spellName then return nil, nil end
+  local cpData = combopointAbilities[spellName]
+  if cpData then
+    return cpData.base, cpData.perCP
+  end
+  return nil, nil
+end
 
 -- Player GUID Cache
 local playerGUID = nil
@@ -1119,6 +1144,7 @@ if hasNampower then
   frame:RegisterEvent("SPELL_GO_SELF")
   frame:RegisterEvent("SPELL_GO_OTHER")
   frame:RegisterEvent("SPELL_FAILED_OTHER")
+  frame:RegisterEvent("SPELL_CAST_EVENT")
   frame:RegisterEvent("AURA_CAST_ON_SELF")
   frame:RegisterEvent("AURA_CAST_ON_OTHER")
   frame:RegisterEvent("DEBUFF_ADDED_OTHER")
@@ -1265,6 +1291,29 @@ if hasNampower then
         pfUI.libdebuff_casts[casterGuid] = nil
       end
       
+    elseif event == "SPELL_CAST_EVENT" then
+      -- Capture combo points BEFORE they're consumed
+      -- This event fires when YOU cast a spell (before server processes it)
+      local success = arg1
+      local spellId = arg2
+      
+      if success ~= 1 or not spellId then return end
+      
+      -- Get spell name
+      local spellName = nil
+      if GetSpellRec then
+        local rec = GetSpellRec(spellId)
+        spellName = rec and rec.name or nil
+      end
+      if not spellName and SpellInfo then
+        spellName = SpellInfo(spellId)
+      end
+      
+      -- Only capture CPs for combo-point abilities
+      if spellName and IsComboPointAbility(spellName) then
+        capturedCP = GetComboPoints() or 0
+      end
+      
     elseif event == "AURA_CAST_ON_SELF" or event == "AURA_CAST_ON_OTHER" then
       local spellId = arg1
       local casterGuid = arg2
@@ -1312,18 +1361,31 @@ if hasNampower then
         debugStats.aura_cast = debugStats.aura_cast + 1
       end
       
-      -- CP-based spells: Use GetDuration for our casts
-      if isOurs and combopointAbilities[spellName] then
-        duration = libdebuff:GetDuration(spellName, rankNum)
-      end
-      
-      -- CP-based spells: Force duration=0 for others (unknown!)
-      if not isOurs and combopointAbilities[spellName] then
-        if spellName == "Expose Armor" then
-          duration = 30  -- Fixed duration for Expose Armor
+      -- Combo-point abilities: Calculate duration based on CPs used
+      if IsComboPointAbility(spellName) then
+        if isOurs then
+          -- OWN casts: use captured CPs from SPELL_CAST_EVENT (if available)
+          local cp = capturedCP or 0
+          local base, perCP = GetComboPointData(spellName)
+          if base and perCP then
+            duration = base + cp * perCP
+          else
+            -- Fallback to legacy database
+            duration = libdebuff:GetDuration(spellName, rankNum)
+          end
+          capturedCP = nil  -- consumed
         else
-          duration = 0
+          -- OTHER players: CP unknown, no timer (except Expose Armor = fixed 30s)
+          local base, perCP = GetComboPointData(spellName)
+          if perCP and perCP == 0 and base then
+            duration = base  -- fixed duration (Expose Armor)
+          else
+            duration = 0  -- CP unknown for other players
+          end
         end
+      elseif duration == 0 then
+        -- Non-CP managed spells: use database if AURA_CAST returned 0
+        duration = libdebuff:GetDuration(spellName, rankNum) or 0
       end
       
       -- Store in allAuraCasts
