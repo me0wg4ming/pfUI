@@ -479,6 +479,305 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
     end
   end
 
-  -- NOTE: HoT Detection (AURA_CAST events) removed - OnHotApplied callback was never implemented in libpredict
-  -- NOTE: Swing Timer removed - GetSwingTimers() was never called anywhere
+  -- Druid Secondary Mana Bar
+  -- Shows base mana when druid is in shapeshift form (Bear/Cat uses Rage/Energy)
+  -- Uses Nampower's GetUnitField to get base mana values
+  -- Controlled by "Show Druid Mana Bar" setting in GUI
+  local _, playerClass = UnitClass("player")
+  
+  if GetUnitField and pfUI.uf and pfUI.uf.player and playerClass == "DRUID" and pfUI_config.unitframes.druidmanabar == "1" then
+    local rawborder, default_border = GetBorderSize("unitframes")
+    local config = pfUI.uf.player.config
+
+    -- Create secondary mana bar below the power bar
+    local playerMana = CreateFrame("StatusBar", "pfPlayerSecondaryMana", pfUI.uf.player)
+    playerMana:SetFrameStrata(pfUI.uf.player:GetFrameStrata())
+    playerMana:SetFrameLevel(pfUI.uf.player:GetFrameLevel() + 5)
+    playerMana:SetStatusBarTexture(pfUI.media[config.pbartexture])
+    
+    -- Mana color
+    local manacolor = config.defcolor == "0" and config.manacolor or C.unitframes.manacolor
+    local r, g, b, a = pfUI.api.strsplit(",", manacolor)
+    playerMana:SetStatusBarColor(r, g, b, a)
+    
+    -- Use SAME size as normal power bar
+    local width = config.pwidth ~= "-1" and config.pwidth or config.width
+    local height = config.pheight
+    playerMana:SetWidth(width)
+    playerMana:SetHeight(height)
+    playerMana:SetPoint("TOPLEFT", pfUI.uf.player.power, "BOTTOMLEFT", 0, -2*default_border - (config.pspace or 0))
+    playerMana:SetPoint("TOPRIGHT", pfUI.uf.player.power, "BOTTOMRIGHT", 0, -2*default_border - (config.pspace or 0))
+    playerMana:Hide()
+
+    CreateBackdrop(playerMana)
+    CreateBackdropShadow(playerMana)
+
+    -- Text overlay - same font settings as power bar
+    local fontname = pfUI.font_unit
+    local fontsize = tonumber(pfUI_config.global.font_unit_size)
+    local fontstyle = pfUI_config.global.font_unit_style
+
+    if config.customfont == "1" then
+      fontname = pfUI.media[config.customfont_name]
+      fontsize = tonumber(config.customfont_size)
+      fontstyle = config.customfont_style
+    end
+
+    playerMana.text = playerMana:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    playerMana.text:SetFontObject(GameFontWhite)
+    playerMana.text:SetFont(fontname, fontsize, fontstyle)
+    playerMana.text:SetPoint("CENTER", playerMana, "CENTER", 0, 0)
+    
+    -- Set text color like normal power bar (mana = type 0)
+    local tr, tg, tb = 1, 1, 1
+    if config["powercolor"] == "1" then
+      tr = ManaBarColor[0].r
+      tg = ManaBarColor[0].g
+      tb = ManaBarColor[0].b
+    end
+    if C.unitframes.pastel == "1" then
+      tr, tg, tb = (tr + .75) * .5, (tg + .75) * .5, (tb + .75) * .5
+    end
+    playerMana.text:SetTextColor(tr, tg, tb, 1)
+
+    -- Update function
+    local function UpdatePlayerSecondaryMana()
+      local powerType = UnitPowerType("player")
+      
+      -- Only show when NOT using mana (i.e., in Bear/Cat form)
+      if powerType == 0 then
+        playerMana:Hide()
+        return
+      end
+
+      -- Get base mana using Nampower's GetUnitField
+      local baseMana, baseMaxMana
+      local _, guid = UnitExists("player")
+      
+      if guid then
+        baseMana = GetUnitField(guid, "power1")
+        baseMaxMana = GetUnitField(guid, "maxPower1")
+      end
+
+      -- Round down power values (Nampower can return decimals)
+      if baseMana then baseMana = math.floor(baseMana) end
+      if baseMaxMana then baseMaxMana = math.floor(baseMaxMana) end
+
+      if type(baseMana) ~= "number" or type(baseMaxMana) ~= "number" or baseMaxMana == 0 then
+        playerMana:Hide()
+        return
+      end
+
+      -- Update bar
+      playerMana:SetMinMaxValues(0, baseMaxMana)
+      playerMana:SetValue(baseMana)
+
+      -- Update text based on power text config
+      local textConfig = config.txtpowercenter or config.txtpowerright or config.txtpowerleft
+      
+      if not textConfig or textConfig == "" or textConfig == "none" then
+        playerMana.text:SetText("")
+      elseif textConfig == "power" then
+        playerMana.text:SetText(Abbreviate(baseMana))
+      elseif textConfig == "powermax" then
+        playerMana.text:SetText(Abbreviate(baseMaxMana))
+      elseif textConfig == "powerperc" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        playerMana.text:SetText(perc)
+      elseif textConfig == "powermiss" then
+        local miss = math.ceil(baseMana - baseMaxMana)
+        playerMana.text:SetText(miss == 0 and "0" or Abbreviate(miss))
+      elseif textConfig == "powerdyn" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          playerMana.text:SetText(Abbreviate(baseMana))
+        else
+          playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      elseif textConfig == "powerminmax" then
+        playerMana.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
+      else
+        -- Default: show dynamic
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          playerMana.text:SetText(Abbreviate(baseMana))
+        else
+          playerMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      end
+
+      playerMana:Show()
+    end
+
+    -- Register events
+    playerMana:RegisterEvent("UNIT_MANA")
+    playerMana:RegisterEvent("UNIT_MAXMANA")
+    playerMana:RegisterEvent("UNIT_DISPLAYPOWER")
+    playerMana:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+    playerMana:RegisterEvent("PLAYER_LOGOUT")
+    playerMana:SetScript("OnEvent", function()
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        return
+      end
+      if arg1 == nil or arg1 == "player" then
+        UpdatePlayerSecondaryMana()
+      end
+    end)
+
+    -- Initial update
+    UpdatePlayerSecondaryMana()
+  end
+
+  -- Target Secondary Mana Bar (shows when target is a druid in shapeshift form)
+  if GetUnitField and pfUI.uf and pfUI.uf.target and pfUI_config.unitframes.druidmanabar == "1" then
+    local rawborder, default_border = GetBorderSize("unitframes")
+    local config = pfUI.uf.target.config
+
+    -- Create secondary mana bar below the power bar
+    local targetMana = CreateFrame("StatusBar", "pfTargetSecondaryMana", pfUI.uf.target)
+    targetMana:SetFrameStrata(pfUI.uf.target:GetFrameStrata())
+    targetMana:SetFrameLevel(pfUI.uf.target:GetFrameLevel() + 5)
+    targetMana:SetStatusBarTexture(pfUI.media[config.pbartexture])
+    
+    -- Mana color
+    local manacolor = config.defcolor == "0" and config.manacolor or C.unitframes.manacolor
+    local r, g, b, a = pfUI.api.strsplit(",", manacolor)
+    targetMana:SetStatusBarColor(r, g, b, a)
+    
+    -- Use SAME size as normal power bar
+    local width = config.pwidth ~= "-1" and config.pwidth or config.width
+    local height = config.pheight
+    targetMana:SetWidth(width)
+    targetMana:SetHeight(height)
+    targetMana:SetPoint("TOPLEFT", pfUI.uf.target.power, "BOTTOMLEFT", 0, -2*default_border - (config.pspace or 0))
+    targetMana:SetPoint("TOPRIGHT", pfUI.uf.target.power, "BOTTOMRIGHT", 0, -2*default_border - (config.pspace or 0))
+    targetMana:Hide()
+
+    CreateBackdrop(targetMana)
+    CreateBackdropShadow(targetMana)
+
+    -- Text overlay
+    local fontname = pfUI.font_unit
+    local fontsize = tonumber(pfUI_config.global.font_unit_size)
+    local fontstyle = pfUI_config.global.font_unit_style
+
+    if config.customfont == "1" then
+      fontname = pfUI.media[config.customfont_name]
+      fontsize = tonumber(config.customfont_size)
+      fontstyle = config.customfont_style
+    end
+
+    targetMana.text = targetMana:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    targetMana.text:SetFontObject(GameFontWhite)
+    targetMana.text:SetFont(fontname, fontsize, fontstyle)
+    targetMana.text:SetPoint("CENTER", targetMana, "CENTER", 0, 0)
+    
+    -- Set text color
+    local tr, tg, tb = 1, 1, 1
+    if config["powercolor"] == "1" then
+      tr = ManaBarColor[0].r
+      tg = ManaBarColor[0].g
+      tb = ManaBarColor[0].b
+    end
+    if C.unitframes.pastel == "1" then
+      tr, tg, tb = (tr + .75) * .5, (tg + .75) * .5, (tb + .75) * .5
+    end
+    targetMana.text:SetTextColor(tr, tg, tb, 1)
+
+    -- Update function
+    local function UpdateTargetSecondaryMana()
+      if not UnitExists("target") then
+        targetMana:Hide()
+        return
+      end
+
+      local powerType = UnitPowerType("target")
+      
+      -- Only show if target is NOT using mana
+      if powerType == 0 then
+        targetMana:Hide()
+        return
+      end
+
+      -- Get base mana using Nampower's GetUnitField
+      local baseMana, baseMaxMana
+      local _, guid = UnitExists("target")
+      
+      if guid then
+        baseMana = GetUnitField(guid, "power1")
+        baseMaxMana = GetUnitField(guid, "maxPower1")
+      end
+
+      -- Round down power values
+      if baseMana then baseMana = math.floor(baseMana) end
+      if baseMaxMana then baseMaxMana = math.floor(baseMaxMana) end
+
+      if type(baseMana) ~= "number" or type(baseMaxMana) ~= "number" or baseMaxMana == 0 then
+        targetMana:Hide()
+        return
+      end
+
+      -- Update bar
+      targetMana:SetMinMaxValues(0, baseMaxMana)
+      targetMana:SetValue(baseMana)
+
+      -- Update text
+      local textConfig = config.txtpowercenter or config.txtpowerright or config.txtpowerleft
+      
+      if not textConfig or textConfig == "" or textConfig == "none" then
+        targetMana.text:SetText("")
+      elseif textConfig == "power" then
+        targetMana.text:SetText(Abbreviate(baseMana))
+      elseif textConfig == "powermax" then
+        targetMana.text:SetText(Abbreviate(baseMaxMana))
+      elseif textConfig == "powerperc" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        targetMana.text:SetText(perc)
+      elseif textConfig == "powermiss" then
+        local miss = math.ceil(baseMana - baseMaxMana)
+        targetMana.text:SetText(miss == 0 and "0" or Abbreviate(miss))
+      elseif textConfig == "powerdyn" then
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          targetMana.text:SetText(Abbreviate(baseMana))
+        else
+          targetMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      elseif textConfig == "powerminmax" then
+        targetMana.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
+      else
+        -- Default: show dynamic
+        local perc = math.ceil(baseMana / baseMaxMana * 100)
+        if perc == 100 then
+          targetMana.text:SetText(Abbreviate(baseMana))
+        else
+          targetMana.text:SetText(string.format("%s - %s%%", Abbreviate(baseMana), perc))
+        end
+      end
+
+      targetMana:Show()
+    end
+
+    -- Register events
+    targetMana:RegisterEvent("UNIT_MANA")
+    targetMana:RegisterEvent("UNIT_MAXMANA")
+    targetMana:RegisterEvent("UNIT_DISPLAYPOWER")
+    targetMana:RegisterEvent("PLAYER_TARGET_CHANGED")
+    targetMana:RegisterEvent("PLAYER_LOGOUT")
+    targetMana:SetScript("OnEvent", function()
+      if event == "PLAYER_LOGOUT" then
+        this:UnregisterAllEvents()
+        this:SetScript("OnEvent", nil)
+        return
+      end
+      if event == "PLAYER_TARGET_CHANGED" or arg1 == nil or arg1 == "target" then
+        UpdateTargetSecondaryMana()
+      end
+    end)
+
+    -- Initial update
+    UpdateTargetSecondaryMana()
+  end
 end)
