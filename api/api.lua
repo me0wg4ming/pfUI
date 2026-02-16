@@ -1466,3 +1466,33 @@ function pfUI.api.GetNoNameObject(frame, objtype, layer, arg1, arg2)
     end
   end
 end
+
+-- [ TryMemoizedFuncLoadstringForSpellCasts ]
+-- Memoizes lua function strings for spell casts to improve performance.
+-- Supports both string functions and direct function values.
+-- 'funcOrStr'  [function|string]  Either a function or a lua string to execute
+-- return:      [function|nil]     The function to execute, or nil on error
+local memoizedFuncs = {}
+function pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(funcOrStr)
+  -- If it's already a function, return it directly
+  if type(funcOrStr) == "function" then
+    return funcOrStr
+  end
+  
+  -- If it's a string, try to memoize it
+  if type(funcOrStr) == "string" then
+    -- Check if we've already compiled this string
+    if memoizedFuncs[funcOrStr] then
+      return memoizedFuncs[funcOrStr]
+    end
+    
+    -- Try to compile the string
+    local func = loadstring(funcOrStr)
+    if func then
+      memoizedFuncs[funcOrStr] = func
+      return func
+    end
+  end
+  
+  return nil
+end
