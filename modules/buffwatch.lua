@@ -135,7 +135,11 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ffcc" .. skill .. "|r" .. T["is now blacklisted."])
       end
     elseif this.parent.unit == "player" then
-      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,this.type))
+      if CancelPlayerAuraSpellId and this.spellid then
+        CancelPlayerAuraSpellId(this.spellid)
+      else
+        CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,this.type))
+      end
     end
   end
 
@@ -296,6 +300,9 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
           frame.buffs[i][6] = duration
           local _, playerGuid = UnitExists("player")
           frame.buffs[i][7] = playerGuid  -- Player GUID
+          -- Store SpellID for CancelPlayerAuraSpellId
+          local bid = GetPlayerBuff(PLAYER_BUFF_START_ID+i, frame.type)
+          frame.buffs[i][9] = GetPlayerBuffID and bid and GetPlayerBuffID(bid) or nil
         end
       end
     else
@@ -412,6 +419,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
         -- update bar data
         frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)
         frame.bars[bar].id = data[2]
+        frame.bars[bar].spellid = data[9] or nil  -- SpellID for CancelPlayerAuraSpellId
         frame.bars[bar].unit = frame.unit
         frame.bars[bar].type = frame.type
         

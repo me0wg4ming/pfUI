@@ -18,6 +18,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       buff.id = buff.gid
     end
     buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
+    buff.spellid = GetPlayerBuffID and buff.bid and GetPlayerBuffID(buff.bid) or nil
 
     if not buff.backdrop then
       CreateBackdrop(buff)
@@ -180,7 +181,11 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       elseif CancelItemTempEnchantment and this.mode and this.mode == "OFFHAND" then
         CancelItemTempEnchantment(2)
       else
-        CancelPlayerBuff(this.bid)
+        if CancelPlayerAuraSpellId and this.spellid then
+          CancelPlayerAuraSpellId(this.spellid)
+        else
+          CancelPlayerBuff(this.bid)
+        end
       end
     end)
 

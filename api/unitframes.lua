@@ -142,14 +142,13 @@ local function BuffOnUpdate()
     return
   end
 
-  -- Get buff name for unique key (two buffs could share same texture)
+  -- Get buff name via GetSpellRec (Nampower) for unique key
   local name = ""
-  if libtipscan then
-    scanner = scanner or libtipscan:GetScanner("unitframes")
-    if scanner then
-      scanner:SetPlayerBuff(bid)
-      name = scanner:Line(1) or ""
-    end
+  local spellId = GetPlayerBuffID and GetPlayerBuffID(bid)
+  if spellId then
+    this.spellid = spellId
+    local rec = GetSpellRec and GetSpellRec(spellId)
+    name = rec and rec.name or ""
   end
   local key = texture .. name
 
@@ -269,7 +268,11 @@ end
 
 local function BuffOnClick()
   if this:GetParent().label == "player" then
-    CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
+    if CancelPlayerAuraSpellId and this.spellid then
+      CancelPlayerAuraSpellId(this.spellid)
+    else
+      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
+    end
   end
 end
 
@@ -286,14 +289,13 @@ local function DebuffOnUpdate()
     return
   end
 
-  -- Get debuff name for unique key (two debuffs could share same texture)
+  -- Get debuff name via GetSpellRec (Nampower) for unique key
   local name = ""
-  if libtipscan then
-    scanner = scanner or libtipscan:GetScanner("unitframes")
-    if scanner then
-      scanner:SetPlayerBuff(bid)
-      name = scanner:Line(1) or ""
-    end
+  local spellId = GetPlayerBuffID and GetPlayerBuffID(bid)
+  if spellId then
+    this.spellid = spellId
+    local rec = GetSpellRec and GetSpellRec(spellId)
+    name = rec and rec.name or ""
   end
   local key = texture .. name
 
@@ -377,7 +379,11 @@ end
 
 local function DebuffOnClick()
   if this:GetParent().label == "player" then
-    CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
+    if CancelPlayerAuraSpellId and this.spellid then
+      CancelPlayerAuraSpellId(this.spellid)
+    else
+      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
+    end
   end
 end
 
@@ -2198,9 +2204,13 @@ function pfUI.uf:RefreshUnit(unit, component)
     if table.getn(unit.indicators) > 0 then
       for i=1,32 do
         local texture, count = UnitBuff(unitstr, i)
-        local timeleft, _
+        local timeleft, buffname, _
         if pfUI.client > 11200 then
-          _, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
+          buffname, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
+        else
+          scanner = scanner or libtipscan:GetScanner("unitframes")
+          scanner:SetUnitBuff(unitstr, i)
+          buffname = scanner:Line(1) or ""
         end
 
         if texture then
@@ -2218,8 +2228,13 @@ function pfUI.uf:RefreshUnit(unit, component)
                 pos = pos + 1
                 break
               elseif string.lower(texture) == "interface\\icons\\spell_nature_resistnature" then
-                local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Regr")
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
+                -- Additional name check: Regrowth icon is shared with other spells!
+                if buffname and string.find(string.lower(buffname), string.lower(REGROWTH or "regrowth")) then
+                  local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Regr")
+                  pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
+                else
+                  pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
+                end
                 pos = pos + 1
                 break
               else

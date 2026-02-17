@@ -55,8 +55,6 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
     ERR_NO_ITEMS_WHILE_SHAPESHIFTED, ERR_TAXIPLAYERSHAPESHIFTED,ERR_MOUNT_SHAPESHIFTED,
     ERR_EMBLEMERROR_NOTABARDGEOSET }
 
-  pfUI.autoshift.scanner = libtipscan:GetScanner("dismount")
-
   pfUI.autoshift:SetScript("OnEvent", function()
     -- switch stance if required
     for stances in string.gfind(arg1, pfUI.autoshift.scanString) do
@@ -71,38 +69,59 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
       return
     end
 
-    -- delay shapeshift cancel
+    -- delay shapeshift cancel (for shadowform)
     local CancelLater = nil
 
     -- scan through buffs and cancel shapeshift/mount
     for id, errorstring in pairs(pfUI.autoshift.errors) do
       if arg1 == errorstring then
-        -- dont's cancel form when clicking on npcs while in combat
+        -- don't cancel form when clicking on npcs while in combat
         if arg1 == ERR_CANT_INTERACT_SHAPESHIFTED and UnitAffectingCombat("player") then
           return
         end
 
         for i=0,31,1 do
-          -- detect mounts based on tooltip text
-          pfUI.autoshift.scanner:SetPlayerBuff(i)
-          for _, str in pairs(pfUI.autoshift.mounts) do
-            if pfUI.autoshift.scanner:Find(str) then
-              CancelPlayerBuff(i)
-              return
-            end
-          end
+          local spellId = GetPlayerBuffID and GetPlayerBuffID(i)
+          if spellId then
+            local rec = GetSpellRec and GetSpellRec(spellId)
 
-          -- detect shapeshift based on texture
-          local buff = GetPlayerBuffTexture(i)
-          if buff then
-            for id, bufftype in pairs(pfUI.autoshift.shapeshifts) do
-              if string.find(string.lower(buff), bufftype, 1) then
-                if string.find(string.lower(buff), "spell_shadow_shadowform", 1) then
-                  -- only cancel shadow form if no other buff was hindering casting
-                  CancelLater = i
-                else
-                  CancelPlayerBuff(i)
+            -- detect mounts via tooltip (GetSpellRec, no tooltip scanner needed)
+            if rec and rec.tooltip then
+              for _, str in pairs(pfUI.autoshift.mounts) do
+                if string.find(rec.tooltip, str) then
+                  CancelPlayerAuraSpellId(spellId)
                   return
+                end
+              end
+            end
+
+            -- detect shapeshift via spellIconID
+            if rec and rec.spellIconID then
+              local icon = string.lower(GetSpellIconTexture(rec.spellIconID) or "")
+              for _, bufftype in pairs(pfUI.autoshift.shapeshifts) do
+                if string.find(icon, bufftype, 1) then
+                  if string.find(icon, "spell_shadow_shadowform", 1) then
+                    -- only cancel shadow form if no other buff was hindering casting
+                    CancelLater = spellId
+                  else
+                    CancelPlayerAuraSpellId(spellId)
+                    return
+                  end
+                end
+              end
+            end
+          else
+            -- Fallback: no GetPlayerBuffID available
+            local buff = GetPlayerBuffTexture(i)
+            if buff then
+              for _, bufftype in pairs(pfUI.autoshift.shapeshifts) do
+                if string.find(string.lower(buff), bufftype, 1) then
+                  if string.find(string.lower(buff), "spell_shadow_shadowform", 1) then
+                    CancelLater = i
+                  else
+                    CancelPlayerBuff(i)
+                    return
+                  end
                 end
               end
             end
@@ -111,7 +130,13 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
 
         -- if nothing else was found, cancel shadowform
         if CancelLater then
-          CancelPlayerBuff(CancelLater)
+          if type(CancelLater) == "number" and CancelLater > 255 then
+            -- spellId
+            CancelPlayerAuraSpellId(CancelLater)
+          else
+            -- slot fallback
+            CancelPlayerBuff(CancelLater)
+          end
         end
       end
     end
