@@ -1387,7 +1387,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       donate:SetHeight(20)
       donate:SetText(T["Donate"])
       donate:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI")
+        pfUI.chat.urlcopy.CopyText("https://buymeacoffee.com/w1ot8abps4")
       end)
       SkinButton(donate)
 
