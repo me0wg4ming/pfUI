@@ -99,7 +99,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
         patch = patch or 0
         local versionString = major .. "." .. minor .. "." .. patch
         
-        if major > 2 or (major == 2 and minor > 31) or (major == 2 and minor == 31 and patch >= 0) then
+        if major > 2 or (major == 2 and minor > 37) or (major == 2 and minor == 37 and patch >= 0) then
           DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
           
           -- Enable required Nampower CVars
@@ -149,12 +149,12 @@ nampowerCheckFrame:SetScript("OnEvent", function()
             end
           end
           
-        elseif major == 2 and minor == 31 and patch == 0 then
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.31.0 detected!|r")
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.31.0 or higher!|r")
+        elseif major == 2 and minor == 37 and patch == 0 then
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.37.0 detected!|r")
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.37.0 or higher!|r")
           StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
         else
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.31.0 or higher.|r")
+          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.37.0 or higher.|r")
           StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
         end
       else
