@@ -39,7 +39,7 @@ if GetNampowerVersion then
   local major, minor, patch = GetNampowerVersion()
   patch = patch or 0
   -- Minimum required version: 2.37.0 (CastSpellByName unitStr support, SetMouseoverUnit)
-  if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+  if major > 2 or (major == 2 and minor > 37) or (major == 2 and minor == 37 and patch >= 0) then
     hasNampower = true
   end
 end
