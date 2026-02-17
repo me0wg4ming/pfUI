@@ -7,7 +7,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   if GetNampowerVersion then
     local major, minor, patch = GetNampowerVersion()
     patch = patch or 0
-    -- Minimum required version: 2.27.2
+    -- Minimum required version: 2.37.0
     if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
       hasNampower = true
     end

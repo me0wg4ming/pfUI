@@ -68,7 +68,7 @@ local hasNampower = false
 if GetNampowerVersion then
   local major, minor, patch = GetNampowerVersion()
   patch = patch or 0
-  -- Minimum required version: 2.31.0 (SPELL_FAILED_OTHER fix)
+  -- Minimum required version: 2.37.0 (CastSpellByName unitStr support, SetMouseoverUnit)
   if major > 2 or (major == 2 and minor > 31) or (major == 2 and minor == 31 and patch >= 0) then
     hasNampower = true
   end
@@ -239,19 +239,19 @@ local HIT_TRACKING_WINDOW = 0.1  -- Track hits within 100ms (AURA_CAST validatio
 -- ============================================================================
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
-  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.31.0+\n\nPlease update Nampower!",
+  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.37.0+\n\nPlease update Nampower!",
   button1 = "OK",
   timeout = 0,
   whileDead = 1,
   hideOnEscape = 1,
   preferredIndex = 3,
   OnAccept = function()
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.31.0")
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.37.0")
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
-  text = "Nampower Not Found!\n\nNampower 2.31.0+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
+  text = "Nampower Not Found!\n\nNampower 2.37.0+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
   button1 = "OK",
   timeout = 0,
   whileDead = 1,

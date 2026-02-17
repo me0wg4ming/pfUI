@@ -19,7 +19,7 @@ setfenv(1, pfUI:GetEnvironment())
 --   4. Applicator caster correlation (Judgement SPELL_GO → DEBUFF_ADDED)
 --   5. SPELL_GO refresh detection (Judgement procs on melee hit)
 --
--- Requires: Nampower 2.27.2+ (SPELL_GO, DEBUFF_ADDED events)
+-- Requires: Nampower 2.37.0+ (SPELL_GO, DEBUFF_ADDED, CastSpellByName unitStr, SetMouseoverUnit)
 -- Integrates with: libdebuff.lua (called from event handlers)
 
 -- return instantly if not vanilla
