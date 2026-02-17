@@ -1,6 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
   <Include file="..\libs\libtipscan.lua"/>
   <Include file="..\libs\libspell.lua"/>
+  <Include file="..\libs\libspelldata.lua"/>
   <Include file="..\libs\libcast.lua"/>
   <Include file="..\libs\libdebuff.lua"/>
   <Include file="..\libs\librange.lua"/>

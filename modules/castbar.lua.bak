@@ -104,46 +104,23 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       local query = this.unitstr ~= "" and this.unitstr or this.unitname
       if not query then return end
 
-      -- Check if we have a GUID-based focus (Turtle WoW native GUID)
-      local focusGuid = nil
-      if this.unitstr and string.find(this.unitstr, "^0x") then
-        focusGuid = this.unitstr
-      end
-
-      -- Try libdebuff_casts first for GUID-based units (works with Turtle GUID + Nampower events)
-      local cast, nameSubtext, text, texture, startTime, endTime
-      if focusGuid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[focusGuid] then
-        local castData = pfUI.libdebuff_casts[focusGuid]
-        if castData.event == "START" and castData.endTime and castData.endTime > GetTime() then
-          cast = castData.spellName
-          texture = castData.icon
-          startTime = castData.startTime * 1000  -- libdebuff uses seconds, castbar expects milliseconds
-          endTime = castData.endTime * 1000
-          nameSubtext = ""  -- Rank info not available in libdebuff_casts
-        end
-      end
-
-      -- Fallback: transform unitstrings to unit guids when SuperWoW is active
+      -- transform unitstrings to unit guids when SuperWoW is active
       -- SuperWoW stores cast data by GUID for all units INCLUDING player
       -- BUT: For player casts, we need to use libcast data because it handles pushback correctly
       local useLibcastForPlayer = this.unitstr == "player"
       
-      if not cast and superwow_active and this.unitstr and not useLibcastForPlayer then
+      if superwow_active and this.unitstr and not useLibcastForPlayer then
         local _, guid = UnitExists(this.unitstr)
         query = guid or query
       end
       
       -- For player: use player name to query libcast.db directly
-      if not cast and useLibcastForPlayer then
+      if useLibcastForPlayer then
         query = UnitName("player")
       end
 
-      -- Fallback: Try UnitCastingInfo if we haven't found cast data yet
-      if not cast and UnitCastingInfo then
-        cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
-      end
-      
-      if not cast and UnitChannelInfo then
+      local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
+      if not cast then
         -- scan for channel spells if no cast was found
         channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(query)
         cast = channel
@@ -178,8 +155,8 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
             local useItemName = nil
             if pfUI.libdebuff_casts or pfUI.libdebuff_item_icons then
               local castGuid = nil
-              if this.unitstr == "player" and GetPlayerGuid then
-                castGuid = GetPlayerGuid()
+              if this.unitstr == "player" and GetPlayerGUID then
+                castGuid = GetPlayerGUID()
               elseif this.unitstr and UnitExists then
                 local _, guid = UnitExists(this.unitstr)
                 castGuid = guid

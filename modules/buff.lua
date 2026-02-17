@@ -7,6 +7,18 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
 
   local br, bg, bb, ba = GetStringColor(pfUI_config.appearance.border.color)
 
+  -- ============================================================================
+  -- Nampower detection
+  -- ============================================================================
+  local hasNampower = GetNampowerVersion and GetUnitField and GetPlayerAuraDuration and true or false
+  local libdebuff = pfUI.api.libdebuff
+
+  -- ============================================================================
+  -- CORE: RefreshBuffButton
+  -- Uses Nampower GetPlayerBuffSlotMap/GetPlayerDebuffSlotMap when available,
+  -- falls back to Blizzard GetPlayerBuff API otherwise.
+  -- ============================================================================
+
   local function RefreshBuffButton(buff)
     if buff.btype == "HELPFUL" then
       if C.buffs.separateweapons == "1" then
@@ -17,7 +29,6 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     else
       buff.id = buff.gid
     end
-    buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
 
     if not buff.backdrop then
       CreateBackdrop(buff)
@@ -54,66 +65,63 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
         buff.texture:SetTexture(GetInventoryItemTexture("player", 17))
         buff.backdrop:SetBackdropBorderColor(GetItemQualityColor(GetInventoryItemQuality("player", 17) or 1))
       end
-    elseif GetPlayerBuffTexture(buff.bid) and (( buff.btype == "HARMFUL" and C.buffs.debuffs == "1" ) or ( buff.btype == "HELPFUL" and C.buffs.buffs == "1" )) then
-      -- Set Buff Texture and Border
-      buff.mode = buff.btype
-      buff.texture:SetTexture(GetPlayerBuffTexture(buff.bid))
 
-      if buff.btype == "HARMFUL" then
-        local dtype = GetPlayerBuffDispelType(buff.bid)
-        if dtype == "Magic" then
-          buff.backdrop:SetBackdropBorderColor(0,1,1,1)
-        elseif dtype == "Poison" then
-          buff.backdrop:SetBackdropBorderColor(0,1,0,1)
-        elseif dtype == "Curse" then
-          buff.backdrop:SetBackdropBorderColor(1,0,1,1)
-        elseif dtype == "Disease" then
-          buff.backdrop:SetBackdropBorderColor(1,1,0,1)
+    -- ====== Nampower path: Use slot maps for stable ordering ======
+    elseif hasNampower and libdebuff then
+      local slotMap, entry
+      if buff.btype == "HELPFUL" and C.buffs.buffs == "1" then
+        slotMap = libdebuff.GetPlayerBuffSlotMap and libdebuff.GetPlayerBuffSlotMap()
+        if slotMap then entry = slotMap[buff.id] end
+      elseif buff.btype == "HARMFUL" and C.buffs.debuffs == "1" then
+        slotMap = libdebuff.GetPlayerDebuffSlotMap and libdebuff.GetPlayerDebuffSlotMap()
+        if slotMap then entry = slotMap[buff.id] end
+      end
+
+      if entry then
+        buff.mode = buff.btype
+        buff.texture:SetTexture(entry.texture)
+        buff.spellid = entry.spellId
+        buff.np_entry = entry  -- Store full entry for timer/tooltip access
+
+        if buff.btype == "HARMFUL" then
+          local dtype = entry.dtype
+          if dtype == "Magic" then
+            buff.backdrop:SetBackdropBorderColor(0,1,1,1)
+          elseif dtype == "Poison" then
+            buff.backdrop:SetBackdropBorderColor(0,1,0,1)
+          elseif dtype == "Curse" then
+            buff.backdrop:SetBackdropBorderColor(1,0,1,1)
+          elseif dtype == "Disease" then
+            buff.backdrop:SetBackdropBorderColor(1,1,0,1)
+          else
+            buff.backdrop:SetBackdropBorderColor(1,0,0,1)
+          end
         else
-          buff.backdrop:SetBackdropBorderColor(1,0,0,1)
+          buff.backdrop:SetBackdropBorderColor(br,bg,bb,ba)
         end
       else
-        buff.backdrop:SetBackdropBorderColor(br,bg,bb,ba)
+        buff:Hide()
+        return
       end
+
+    -- ====== Fallback: Blizzard GetPlayerBuff API ======
     else
-      -- Fallback: try UnitBuff/UnitDebuff API which may be more reliable in some cases
-      local fallbackTexture, fallbackStacks, fallbackDispelType, fallbackSpellId
-      local maxSlots = buff.btype == "HELPFUL" and 32 or 16
+      buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
+      buff.spellid = GetPlayerBuffID and buff.bid and GetPlayerBuffID(buff.bid) or nil
 
-      if buff.id >= 1 and buff.id <= maxSlots then
-        if buff.btype == "HELPFUL" and C.buffs.buffs == "1" then
-          for i = 1, maxSlots do
-            local tex, stacks, dtype, spellId = UnitBuff("player", i)
-            if tex and i == buff.id then
-              fallbackTexture, fallbackStacks, fallbackDispelType, fallbackSpellId = tex, stacks, dtype, spellId
-              break
-            end
-            if not tex then break end
-          end
-        elseif buff.btype == "HARMFUL" and C.buffs.debuffs == "1" then
-          for i = 1, maxSlots do
-            local tex, stacks, dtype, spellId = UnitDebuff("player", i)
-            if tex and i == buff.id then
-              fallbackTexture, fallbackStacks, fallbackDispelType, fallbackSpellId = tex, stacks, dtype, spellId
-              break
-            end
-            if not tex then break end
-          end
-        end
-      end
-
-      if fallbackTexture then
+      if GetPlayerBuffTexture(buff.bid) and (( buff.btype == "HARMFUL" and C.buffs.debuffs == "1" ) or ( buff.btype == "HELPFUL" and C.buffs.buffs == "1" )) then
         buff.mode = buff.btype
-        buff.fallbackSpellId = fallbackSpellId
-        buff.texture:SetTexture(fallbackTexture)
+        buff.texture:SetTexture(GetPlayerBuffTexture(buff.bid))
+
         if buff.btype == "HARMFUL" then
-          if fallbackDispelType == "Magic" then
+          local dtype = GetPlayerBuffDispelType(buff.bid)
+          if dtype == "Magic" then
             buff.backdrop:SetBackdropBorderColor(0,1,1,1)
-          elseif fallbackDispelType == "Poison" then
+          elseif dtype == "Poison" then
             buff.backdrop:SetBackdropBorderColor(0,1,0,1)
-          elseif fallbackDispelType == "Curse" then
+          elseif dtype == "Curse" then
             buff.backdrop:SetBackdropBorderColor(1,0,1,1)
-          elseif fallbackDispelType == "Disease" then
+          elseif dtype == "Disease" then
             buff.backdrop:SetBackdropBorderColor(1,1,0,1)
           else
             buff.backdrop:SetBackdropBorderColor(1,0,0,1)
@@ -166,48 +174,71 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     buff.btype = btype
     buff.gid = i
 
-    -- PERF: OnUpdate moved to consolidated parent frame handler (see pfUI.buff:SetScript("OnUpdate"))
-    -- Individual buff frames no longer have their own OnUpdate
-
     buff:SetScript("OnEnter", function()
       GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
       if this.mode == this.btype then
-        GameTooltip:SetPlayerBuff(this.bid)
-
-        if IsShiftKeyDown() then
-          local texture = GetPlayerBuffTexture(this.bid)
-
-          local playerlist = ""
-          local first = true
-
-          if UnitInRaid("player") then
-            for i=1,40 do
-              local unitstr = "raid" .. i
-              if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
-                playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
-                first = nil
-              end
+        -- Prefer Blizzard tooltip via bid (best quality)
+        if this.np_entry and this.np_entry.bid then
+          GameTooltip:SetPlayerBuff(this.np_entry.bid)
+        elseif this.bid then
+          GameTooltip:SetPlayerBuff(this.bid)
+        elseif this.spellid and GetSpellRec then
+          -- Fallback: build tooltip from GetSpellRec
+          local rec = GetSpellRec(this.spellid)
+          if rec then
+            GameTooltip:SetText(rec.name or "Unknown", 1, 1, 1)
+            if rec.rank and rec.rank ~= "" then
+              GameTooltip:AddLine(rec.rank, 0.5, 0.5, 0.5)
             end
-          else
-            if not UnitHasBuff("player", texture) then
-              playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor("player") .. UnitName("player") .. "|r"
-              first = nil
-            end
-
-            for i=1,4 do
-              local unitstr = "party" .. i
-              if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
-                playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
-                first = nil
-              end
+            local desc = rec.tooltip or rec.description or ""
+            if desc ~= "" then
+              GameTooltip:AddLine(desc, 1, 0.82, 0, 1)
             end
           end
+          GameTooltip:Show()
+        end
 
-          if strlen(playerlist) > 0 then
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(T["Unbuffed"] .. ":", .3, 1, .8)
-            GameTooltip:AddLine(playerlist,1,1,1,1)
-            GameTooltip:Show()
+        if IsShiftKeyDown() then
+          local texture = nil
+          if this.np_entry then
+            texture = this.np_entry.texture
+          elseif this.bid then
+            texture = GetPlayerBuffTexture(this.bid)
+          end
+
+          if texture then
+            local playerlist = ""
+            local first = true
+
+            if UnitInRaid("player") then
+              for i=1,40 do
+                local unitstr = "raid" .. i
+                if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
+                  playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
+                  first = nil
+                end
+              end
+            else
+              if not UnitHasBuff("player", texture) then
+                playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor("player") .. UnitName("player") .. "|r"
+                first = nil
+              end
+
+              for i=1,4 do
+                local unitstr = "party" .. i
+                if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
+                  playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
+                  first = nil
+                end
+              end
+            end
+
+            if strlen(playerlist) > 0 then
+              GameTooltip:AddLine(" ")
+              GameTooltip:AddLine(T["Unbuffed"] .. ":", .3, 1, .8)
+              GameTooltip:AddLine(playerlist,1,1,1,1)
+              GameTooltip:Show()
+            end
           end
         end
       elseif this.mode == "MAINHAND" then
@@ -227,7 +258,11 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       elseif CancelItemTempEnchantment and this.mode and this.mode == "OFFHAND" then
         CancelItemTempEnchantment(2)
       else
-        CancelPlayerBuff(this.bid)
+        if CancelPlayerAuraSpellId and this.spellid then
+          CancelPlayerAuraSpellId(this.spellid)
+        elseif this.bid then
+          CancelPlayerBuff(this.bid)
+        end
       end
     end)
 
@@ -240,6 +275,14 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     local mh, mhtime, mhcharge, oh, ohtime, ohcharge = GetWeaponEnchantInfo()
     local offset = (mh and 1 or 0) + (oh and 1 or 0)
 
+    if hasNampower and libdebuff and libdebuff.GetPlayerBuffSlotMap then
+      local buffMap = libdebuff.GetPlayerBuffSlotMap()
+      if buffMap then
+        return (buffMap.count or 0) + offset
+      end
+    end
+
+    -- Fallback: Blizzard API
     for i=1,32 do
       local bid, untilCancelled = GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HELPFUL")
       if bid < 0 then
@@ -254,6 +297,11 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   pfUI.buff:RegisterEvent("UNIT_INVENTORY_CHANGED")
   pfUI.buff:RegisterEvent("UNIT_MODEL_CHANGED")
   pfUI.buff:SetScript("OnEvent", function()
+    -- Invalidate Nampower player slot map cache on aura change
+    if hasNampower and libdebuff and libdebuff.InvalidatePlayerSlotMapCache then
+      libdebuff.InvalidatePlayerSlotMapCache()
+    end
+
     if C.buffs.weapons == "1" then
       local mh, mhtime, mhcharge, oh, ohtime, ohcharge = GetWeaponEnchantInfo()
       pfUI.buff.wepbuffs.count = (mh and 1 or 0) + (oh and 1 or 0)
@@ -277,7 +325,6 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   end)
 
   -- PERF: Consolidated OnUpdate handler for all buff timers
-  -- This replaces 50 individual OnUpdate handlers with a single one
   pfUI.buff:SetScript("OnUpdate", function()
     local now = GetTime()
     if not this.nextUpdate then this.nextUpdate = now + 0.1 end
@@ -292,19 +339,30 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     for i = 1, 32 do
       local buff = buttons[i]
       if buff:IsShown() then
-        local timeleft, stacks = 0, 0
-        if buff.mode == buff.btype then
-          timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
-          stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
-        elseif buff.mode == "MAINHAND" then
+        local timeleft, stackCount = 0, 0
+        if buff.mode == "MAINHAND" then
           timeleft = mhtime and mhtime / 1000 or 0
-          stacks = mhcharge or 0
+          stackCount = mhcharge or 0
         elseif buff.mode == "OFFHAND" then
           timeleft = ohtime and ohtime / 1000 or 0
-          stacks = ohcharge or 0
+          stackCount = ohcharge or 0
+        elseif buff.mode == buff.btype then
+          -- Nampower: re-read live timer from slot map
+          if hasNampower and libdebuff and libdebuff.GetPlayerBuffSlotMap then
+            local buffMap = libdebuff.GetPlayerBuffSlotMap()
+            local entry = buffMap and buffMap[buff.id]
+            if entry then
+              timeleft = entry.timeleft or 0
+              stackCount = entry.stacks or 0
+            end
+          elseif buff.bid then
+            -- Fallback: Blizzard API
+            timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
+            stackCount = GetPlayerBuffApplications(buff.bid, buff.btype)
+          end
         end
         buff.timer:SetText(timeleft > 0 and GetColoredTimeString(timeleft) or "")
-        buff.stacks:SetText(stacks > 1 and stacks or "")
+        buff.stacks:SetText(stackCount > 1 and stackCount or "")
       end
     end
 
@@ -313,10 +371,24 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     for i = 1, 16 do
       local buff = buttons[i]
       if buff:IsShown() then
-        local timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
-        local stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
+        local timeleft, stackCount = 0, 0
+        if buff.mode == buff.btype then
+          -- Nampower: re-read live timer from slot map
+          if hasNampower and libdebuff and libdebuff.GetPlayerDebuffSlotMap then
+            local debuffMap = libdebuff.GetPlayerDebuffSlotMap()
+            local entry = debuffMap and debuffMap[buff.id]
+            if entry then
+              timeleft = entry.timeleft or 0
+              stackCount = entry.stacks or 0
+            end
+          elseif buff.bid then
+            -- Fallback: Blizzard API
+            timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
+            stackCount = GetPlayerBuffApplications(buff.bid, buff.btype)
+          end
+        end
         buff.timer:SetText(timeleft > 0 and GetColoredTimeString(timeleft) or "")
-        buff.stacks:SetText(stacks > 1 and stacks or "")
+        buff.stacks:SetText(stackCount > 1 and stackCount or "")
       end
     end
 

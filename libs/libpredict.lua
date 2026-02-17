@@ -142,8 +142,8 @@ libpredict:SetScript("OnEvent", function()
     local casterGUID, targetGUID, castEvent, spellId = arg1, arg2, arg3, arg4
     
     -- Nur eigene Casts (player)
-    local _, playerGUID = UnitExists("player")
-    if casterGUID ~= playerGUID then return end
+    local _, playerGuid = UnitExists("player")
+    if casterGUID ~= playerGuid then return end
     
     -- Nur "CAST" events (erfolgreiche Instant-Casts)
     if castEvent ~= "CAST" then return end
@@ -199,9 +199,14 @@ libpredict:SetScript("OnEvent", function()
       duration = renewDuration or 15
     end
     
-    -- Extract rank from spellId (if SpellInfo available)
+    -- Extract rank from spellId
     local rank = nil
-    if SpellInfo then
+    if GetSpellRec then
+      local data = GetSpellRec(spellId)
+      if data and data.rank and data.rank ~= "" then
+        rank = tonumber((string.gsub(data.rank, "Rank ", ""))) or nil
+      end
+    elseif SpellInfo then
       local _, rankString = SpellInfo(spellId)
       if rankString and rankString ~= "" then
         rank = tonumber((string.gsub(rankString, "Rank ", ""))) or nil
@@ -645,7 +650,15 @@ local pendingHots = {}
 -- Hilfsfunktion: Prüfe ob Buff auf Unit vorhanden ist
 local function UnitHasBuff(unit, buffName)
   for i = 1, 32 do
-    local name = UnitBuff(unit, i)
+    local name
+    if unit == "player" then
+      name = UnitBuff(unit, i)
+    elseif libdebuff and libdebuff.UnitBuff then
+      name = libdebuff:UnitBuff(unit, i)
+    else
+      name = UnitBuff(unit, i)
+    end
+    
     if not name then break end
     if name == buffName then return true end
   end

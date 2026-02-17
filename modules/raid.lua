@@ -128,7 +128,7 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
             -- GUID changed = different player = need full update
             tracker.frameToGuid[frame] = newGuid
             frame.update_full = true
-            frame.update_aura = true  -- Force aura refresh!
+            frame.update_aura = true
           end
         end
       end

@@ -218,6 +218,8 @@ function pfUI:LoadConfig()
   pfUI:UpdateConfig("unitframes", nil,           "rangecheck",       "0")
   pfUI:UpdateConfig("unitframes", nil,           "buffdetect",       "0")
   pfUI:UpdateConfig("unitframes", nil,           "druidmanabar",     "1")
+  pfUI:UpdateConfig("buffs",      nil,           "hidelist",         "")  -- #-separated SpellIDs
+
   pfUI:UpdateConfig("unitframes", nil,           "druidmanaheight",  "10")
   pfUI:UpdateConfig("unitframes", nil,           "druidmanawidth",   "-1")
   pfUI:UpdateConfig("unitframes", nil,           "druidmanaoffx",    "0")
