@@ -2514,6 +2514,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
                 pfUI_config.buffs.hidelist = table.concat(newList, "#")
                 
                 pfUI.gui.settingChanged = true
+                DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00Changes take effect after /reload|r")
                 listFrame.updateHiddenList()
                 
                 -- Update BuffAnalyzer if it's open
@@ -2537,21 +2538,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         listFrame.scroll:UpdateScrollChildRect()
         listFrame.scroll:SetVerticalScroll(0)
         
-        -- Update global hidelist lookup table for libdebuff
-        pfUI_HiddenBuffsLookup = {}
-        if pfUI_config.buffs.hidelist and pfUI_config.buffs.hidelist ~= "" then
-          for id in string.gfind(pfUI_config.buffs.hidelist, "([^#]+)") do
-            local spellId = tonumber(id)
-            if spellId then
-              pfUI_HiddenBuffsLookup[spellId] = true
-            end
-          end
-        end
-        
-        -- Clear libdebuff cache and force rescan
-        if pfUI.api.libdebuff and pfUI.api.libdebuff.ClearBuffCache then
-          pfUI.api.libdebuff:ClearBuffCache()
-        end
+        -- Note: Hidelist changes take effect after /reload
       end
       
       -- Make it globally accessible for BuffAnalyzer
@@ -2614,6 +2601,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           end
           
           DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00Added to hidelist:|r " .. spellId)
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00Changes take effect after /reload|r")
           
           pfUI.gui.settingChanged = true
           listFrame.updateHiddenList()
@@ -3219,15 +3207,7 @@ pfUI:RegisterModule("buffanalyzer", "vanilla:tbc", function()
         end
         
         DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00Added to Hidden Buffs:|r " .. name .. " (SpellID: " .. this.spellId .. ")")
-        
-        -- Update global hidelist lookup table for libdebuff
-        if not pfUI_HiddenBuffsLookup then pfUI_HiddenBuffsLookup = {} end
-        pfUI_HiddenBuffsLookup[this.spellId] = true
-        
-        -- Clear libdebuff cache so hidden buffs take effect immediately
-        if pfUI.api.libdebuff and pfUI.api.libdebuff.ClearBuffCache then
-          pfUI.api.libdebuff:ClearBuffCache()
-        end
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00Changes take effect after /reload|r")
         
         -- Update Hidden Buffs GUI if it's open
         if pfUI.gui and pfUI.gui.updateHiddenBuffsList then

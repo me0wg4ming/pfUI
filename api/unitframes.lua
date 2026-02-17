@@ -199,11 +199,20 @@ local function TargetBuffOnUpdate()
   -- throttle to 0.1s
   if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
 
-  local name, rank, icon, count, duration, timeleft = _G.UnitBuff("target", this.id)
-  if duration and timeleft then
-    CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - duration, duration, 1)
+  if hasNampower_uf and libdebuff then
+    local name, rank, icon, count, duration, timeleft = libdebuff:UnitBuff("target", this.id)
+    if duration and timeleft then
+      CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - duration, duration, 1)
+    else
+      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    end
   else
-    CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    local name, rank, icon, count, duration, timeleft = _G.UnitBuff("target", this.id)
+    if duration and timeleft then
+      CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - duration, duration, 1)
+    else
+      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    end
   end
 end
 
@@ -2085,7 +2094,14 @@ function pfUI.uf:RefreshUnit(unit, component)
           texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
         end
       else
-        texture, stacks = pfUI.uf:DetectBuff(unitstr, i)
+        -- Nampower path: use libdebuff:UnitBuff which goes through GetBuffSlotMap (respects hidelist)
+        if hasNampower_uf and libdebuff then
+          local name, rank, tex, st = libdebuff:UnitBuff(unitstr, i)
+          texture = tex
+          stacks = st or 0
+        else
+          texture, stacks = pfUI.uf:DetectBuff(unitstr, i)
+        end
       end
 
       unit.buffs[i].texture:SetTexture(texture)

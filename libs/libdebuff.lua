@@ -525,6 +525,7 @@ local function GetBuffSlotMap(guid)
   
   local map = {}
   local displayOrder = {}
+  local displaySlot = 0
   
   -- Buff aura slots are 1-32
   for auraSlot = 1, 32 do
@@ -553,10 +554,12 @@ local function GetBuffSlotMap(guid)
         -- Skip "?" icons (unknown spells)
         -- Only add if we have a real texture (not the question mark fallback)
         if texture then
+          displaySlot = displaySlot + 1
+          
           -- Get stacks from auraApplications (0-indexed, so +1 for display)
           local stacks = (auraApps and auraApps[auraSlot] or 0) + 1
           
-          map[auraSlot] = {
+          map[displaySlot] = {
             auraSlot = auraSlot,
             spellId = spellId,
             spellName = spellName or "Unknown",
@@ -646,6 +649,10 @@ local function GetDebuffSlotMap(guidOrUnit)
   for auraSlot = 33, 48 do
     local spellId = auras[auraSlot]
     if spellId and spellId > 0 then
+      -- Check hidelist
+      local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
+      
+      if not isHidden then
       -- Get texture via GetSpellIcon (uses DBC when possible, works out of range!)
       local texture = libdebuff:GetSpellIcon(spellId)
       
@@ -688,6 +695,7 @@ local function GetDebuffSlotMap(guidOrUnit)
           texture = texture,
           dtype = dtype
         }
+      end
       end
     end
   end
@@ -875,6 +883,10 @@ local function GetPlayerDebuffSlotMap()
 
     -- Primary gate: GetUnitField must confirm the slot has a spell
     if fieldSpellId and fieldSpellId > 0 then
+      -- Check hidelist
+      local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[fieldSpellId]
+      
+      if not isHidden then
       local durSpellId, remainingMs, expirationMs = GetPlayerAuraDuration(auraSlot0)
       remainingMs = remainingMs or 0
       expirationMs = expirationMs or 0
@@ -915,6 +927,7 @@ local function GetPlayerDebuffSlotMap()
           duration   = nil,
           bid        = bidMap[fieldSpellId],
         }
+      end
       end
     end
   end
@@ -1691,9 +1704,30 @@ end
 function libdebuff:ClearBuffCache()
   slotMapCache = {}
   playerBuffMapCache = { map = nil, timestamp = 0 }
-  -- Force rebuild of lookup tables on next GetBuffSlotMap call
+  playerDebuffMapCache = { map = nil, timestamp = 0 }
+  -- Immediately rebuild lookup tables from config (don't leave empty!)
   pfUI_HiddenBuffsLookup = {}
   pfUI_HiddenBuffNames = {}
+  local hidelist = pfUI_config and pfUI_config.buffs and pfUI_config.buffs.hidelist
+  if hidelist and hidelist ~= "" then
+    for id in string.gfind(hidelist, "([^#]+)") do
+      local sid = tonumber(id)
+      if sid then
+        pfUI_HiddenBuffsLookup[sid] = true
+        local sname = nil
+        if GetSpellRecField then
+          sname = GetSpellRecField(sid, "name")
+          if sname == "" then sname = nil end
+        end
+        if not sname and SpellInfo then
+          sname = SpellInfo(sid)
+        end
+        if sname then
+          pfUI_HiddenBuffNames[sname] = true
+        end
+      end
+    end
+  end
 end
 
 -- Check if a buff name is in the hidden list (for tooltip fallback path)
