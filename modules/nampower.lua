@@ -519,8 +519,8 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       bar:SetFrameLevel(parent:GetFrameLevel() + 5)
       bar:SetStatusBarTexture(pfUI.media[dmTexture] or dmTexture)
 
-      -- Bar color from own config
-      local manacolor = DC.druidmanacolor or ".25,.25,1,1"
+      -- Bar color: use same manacolor logic as the normal power bar
+      local manacolor = parentConfig.defcolor == "0" and parentConfig.manacolor or C.unitframes.manacolor
       local r, g, b, a = pfUI.api.strsplit(",", manacolor)
       bar:SetStatusBarColor(tonumber(r) or .25, tonumber(g) or .25, tonumber(b) or 1, tonumber(a) or 1)
 

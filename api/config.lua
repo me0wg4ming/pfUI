@@ -224,7 +224,7 @@ function pfUI:LoadConfig()
   pfUI:UpdateConfig("unitframes", nil,           "druidmanaoffy",    "0")
   pfUI:UpdateConfig("unitframes", nil,           "druidmanaspace",   "-3")
   pfUI:UpdateConfig("unitframes", nil,           "druidmanatexture", "Interface\\AddOns\\pfUI\\img\\bar")
-  pfUI:UpdateConfig("unitframes", nil,           "druidmanacolor",   ".25,.25,1,1")
+
   pfUI:UpdateConfig("unitframes", nil,           "rangechecki",      "4")
   pfUI:UpdateConfig("unitframes", nil,           "combowidth",       "6")
   pfUI:UpdateConfig("unitframes", nil,           "comboheight",      "6")
