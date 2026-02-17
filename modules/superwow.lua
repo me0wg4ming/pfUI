@@ -307,7 +307,14 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
 
       -- get spell info from spell id
       local spell, icon, _
-      if SpellInfo and SpellInfo(spell_id) then
+      if GetSpellRec then
+        local rec = GetSpellRec(spell_id)
+        if rec then
+          spell = rec.name
+          local iconID = rec.spellIconID
+          icon = iconID and GetSpellIconTexture(iconID) or nil
+        end
+      elseif SpellInfo and SpellInfo(spell_id) then
         spell, _, icon = SpellInfo(spell_id)
       end
 
