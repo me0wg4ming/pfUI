@@ -50,61 +50,51 @@ pfUI:RegisterModule("mouseover", "vanilla", function ()
       end
     end
 
-    -- Nampower/SuperWoW: Use SetMouseoverUnit for cleaner mouseover handling
-    if SetMouseoverUnit and not UnitIsUnit("target", unit) then
-      -- Set the mouseover unit so macros like [@mouseover] work correctly
-      SetMouseoverUnit(unit)
-      
-      -- Cast spell (no target toggle needed!)
-      if func then
-        func()
-      else
-        CastSpellByName(msg)
-      end
-      
-      -- Clear mouseover unit
-      SetMouseoverUnit()
+    -- Nampower: CastSpellByName supports a second unit parameter directly.
+    -- unit is already resolved to "mouseover", "target" or "player" at this point.
+    if not func and GetNampowerVersion then
+      CastSpellByName(msg, unit)
+      return
+    end
+
+    -- If target and mouseover are friendly units, we can't use spell target as it
+    -- would cast on the target instead of the mouseover. However, if the mouseover
+    -- is friendly and the target is not, we can try to obtain the best unitstring
+    -- for the later SpellTargetUnit() call.
+    local unitstr = not UnitCanAssist("player", "target") and UnitCanAssist("player", unit) and GetUnitString(unit)
+
+    if UnitIsUnit("target", unit) or (not func and unitstr) then
+      -- no target change required, we can either use spell target
+      -- or the unit is already our current target.
+      restore_target = false
     else
-      -- Fallback: Legacy method with target toggle
-      -- If target and mouseover are friendly units, we can't use spell target as it
-      -- would cast on the target instead of the mouseover. However, if the mouseover
-      -- is friendly and the target is not, we can try to obtain the best unitstring
-      -- for the later SpellTargetUnit() call.
-      local unitstr = not UnitCanAssist("player", "target") and UnitCanAssist("player", unit) and GetUnitString(unit)
+      -- The spelltarget can't be used here, we need to switch
+      -- and restore the target during spell cast
+      TargetUnit(unit)
+    end
 
-      if UnitIsUnit("target", unit) or (not func and unitstr) then
-        -- no target change required, we can either use spell target
-        -- or the unit is already our current target.
-        restore_target = false
-      else
-        -- The spelltarget can't be used here, we need to switch
-        -- and restore the target during spell cast
-        TargetUnit(unit)
-      end
+    if func then
+      func()
+    else
+      -- write temporary unit name
+      pfUI.uf.mouseover.unit = unit
 
-      if func then
-        func()
-      else
-        -- write temporary unit name
-        pfUI.uf.mouseover.unit = unit
+      -- cast without self cast cvar setting
+      -- to allow spells to use spelltarget
+      NoSelfCast(msg)
 
-        -- cast without self cast cvar setting
-        -- to allow spells to use spelltarget
-        NoSelfCast(msg)
+      -- set spell target to unitstring (or selfcast)
+      if SpellIsTargeting() then SpellTargetUnit(unitstr or "player") end
 
-        -- set spell target to unitstring (or selfcast)
-        if SpellIsTargeting() then SpellTargetUnit(unitstr or "player") end
+      -- clean up spell target in error case
+      if SpellIsTargeting() then SpellStopTargeting() end
 
-        -- clean up spell target in error case
-        if SpellIsTargeting() then SpellStopTargeting() end
+      -- remove temporary mouseover unit
+      pfUI.uf.mouseover.unit = nil
+    end
 
-        -- remove temporary mouseover unit
-        pfUI.uf.mouseover.unit = nil
-      end
-
-      if restore_target then
-        TargetLastTarget()
-      end
+    if restore_target then
+      TargetLastTarget()
     end
   end
 end)
