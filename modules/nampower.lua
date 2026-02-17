@@ -67,9 +67,12 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local spellId = arg2
 
       if eventCode == NORMAL_QUEUED or eventCode == NON_GCD_QUEUED or eventCode == ON_SWING_QUEUED then
-        -- Get spell texture from SpellInfo (SuperWoW) or GetSpellTexture
+        -- Get spell texture from GetSpellRec (Nampower) or SpellInfo (SuperWoW fallback)
         local texture
-        if SpellInfo then
+        if GetSpellRec then
+          local rec = GetSpellRec(spellId)
+          texture = rec and rec.spellIconID and GetSpellIconTexture(rec.spellIconID) or nil
+        elseif SpellInfo then
           local _, _, tex = SpellInfo(spellId)
           texture = tex
         end
@@ -101,7 +104,15 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         local spellId = auras[i]
         if spellId and spellId > 0 then
           local name, rank, texture
-          if SpellInfo then
+          if GetSpellRec then
+            local rec = GetSpellRec(spellId)
+            if rec then
+              name = rec.name
+              rank = rec.rank
+              local iconID = rec.spellIconID
+              texture = iconID and GetSpellIconTexture(iconID) or nil
+            end
+          elseif SpellInfo then
             name, rank, texture = SpellInfo(spellId)
           end
           if not name then
