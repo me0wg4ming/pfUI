@@ -17,6 +17,7 @@
   <Include file="..\modules\focus.lua"/>
   <Include file="..\modules\target.lua"/>
   <Include file="..\modules\combopoints.lua"/>
+  <Include file="..\modules\swingtimer.lua"/>
   <Include file="..\modules\targettarget.lua"/>
   <Include file="..\modules\targettargettarget.lua"/>
   <Include file="..\modules\pet.lua"/>
