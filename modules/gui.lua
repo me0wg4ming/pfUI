@@ -1954,6 +1954,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Enable Mana Ticks"], C.unitframes.player, "manatick", "checkbox")
       CreateConfig(nil, T["Detect Enemy Buffs"], C.unitframes, "buffdetect", "checkbox", nil, nil, nil, nil, "vanilla" )
 
+      CreateConfig(nil, T["Swing Timer"], nil, nil, "header")
+      CreateConfig(nil, T["Swing Timer Width"], C.unitframes, "swingtimerwidth")
+      CreateConfig(nil, T["Swing Timer Height"], C.unitframes, "swingtimerheight")
+
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
       CreateConfig(nil, T["Unit Frame Text Size"], C.global, "font_unit_size")
