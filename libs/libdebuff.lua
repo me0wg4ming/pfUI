@@ -275,6 +275,12 @@ StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
 -- By SPELL_GO and AURA_CAST, CPs are already 0.
 local capturedCP = nil
 
+-- Pending cast info for libpredict (heal prediction target tracking)
+-- SPELL_CAST_EVENT fires with targetGuid BEFORE SPELLCAST_START,
+-- which allows libpredict to know the correct target for queued casts.
+-- Fields: { spellId, spellName, targetGuid, time }
+pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
+
 -- Cached melee-refreshable spells from libspelldata (populated on first use)
 local meleeRefreshSpells = nil
 
@@ -1507,10 +1513,29 @@ if hasNampower then
       -- Fires BEFORE spell is sent to server - CPs still available!
       -- By SPELL_GO/AURA_CAST time, CPs are already consumed (=0).
       local spellId = arg2
+      local targetGuid = arg4
+      
       if spellId and libspelldata then
         local spellName = GetSpellNameAndRank(spellId)
         if spellName and libspelldata:IsComboPointAbility(spellName) then
           capturedCP = GetComboPoints() or 0
+        end
+        
+        -- Store pending cast info for libpredict (heal prediction target tracking)
+        -- This allows libpredict to resolve the correct target for Nampower queued casts,
+        -- where CastSpellByName hook fires while current_cast is set and spell_queue
+        -- cannot be updated. SPELL_CAST_EVENT fires right before SPELLCAST_START.
+        if spellName and targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" then
+          pfUI.libpredict_pending_cast.spellId = spellId
+          pfUI.libpredict_pending_cast.spellName = spellName
+          pfUI.libpredict_pending_cast.targetGuid = targetGuid
+          pfUI.libpredict_pending_cast.time = GetTime()
+        else
+          -- No explicit target - clear pending so libpredict falls back to spell_queue
+          pfUI.libpredict_pending_cast.spellId = nil
+          pfUI.libpredict_pending_cast.spellName = nil
+          pfUI.libpredict_pending_cast.targetGuid = nil
+          pfUI.libpredict_pending_cast.time = nil
         end
       end
       
