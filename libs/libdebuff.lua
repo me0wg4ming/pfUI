@@ -193,6 +193,12 @@ local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
 -- SPELL_CAST_EVENT fires BEFORE UnitAura updates, so GetComboPoints() still works
 local capturedCP = nil
 
+-- Pending cast info for libpredict (heal prediction target tracking)
+-- SPELL_CAST_EVENT fires with targetGuid BEFORE SPELLCAST_START,
+-- which allows libpredict to know the correct target for queued casts.
+-- Fields: { spellId, spellName, targetGuid, time }
+pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
+
 -- ============================================================================
 -- STATIC POPUP DIALOGS
 -- ============================================================================
@@ -1296,6 +1302,8 @@ if hasNampower then
       -- This event fires when YOU cast a spell (before server processes it)
       local success = arg1
       local spellId = arg2
+      local castType = arg3
+      local targetGuid = arg4
       
       if success ~= 1 or not spellId then return end
       
@@ -1307,6 +1315,23 @@ if hasNampower then
       end
       if not spellName and SpellInfo then
         spellName = SpellInfo(spellId)
+      end
+      
+      -- Store pending cast info for libpredict (heal prediction target tracking)
+      -- This allows libpredict to resolve the correct target for Nampower queued casts,
+      -- where CastSpellByName hook fires while current_cast is set and spell_queue
+      -- cannot be updated. SPELL_CAST_EVENT fires right before SPELLCAST_START.
+      if spellName and targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" then
+        pfUI.libpredict_pending_cast.spellId = spellId
+        pfUI.libpredict_pending_cast.spellName = spellName
+        pfUI.libpredict_pending_cast.targetGuid = targetGuid
+        pfUI.libpredict_pending_cast.time = GetTime()
+      else
+        -- No explicit target - clear pending so libpredict falls back to spell_queue
+        pfUI.libpredict_pending_cast.spellId = nil
+        pfUI.libpredict_pending_cast.spellName = nil
+        pfUI.libpredict_pending_cast.targetGuid = nil
+        pfUI.libpredict_pending_cast.time = nil
       end
       
       -- Only capture CPs for combo-point abilities

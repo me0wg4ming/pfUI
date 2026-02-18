@@ -936,13 +936,39 @@ libpredict.sender:SetScript("OnEvent", function()
   elseif event == "SPELLCAST_START" then
     local spell, time = arg1, arg2
     
+    -- Resolve target from SPELL_CAST_EVENT (via libdebuff) for Nampower queued casts.
+    -- SPELL_CAST_EVENT fires right before SPELLCAST_START with the actual targetGuid,
+    -- solving the problem where spell_queue[3] is stale because CastSpellByName hook
+    -- could not update it while current_cast was set (Nampower spell queuing).
+    local pending = pfUI.libpredict_pending_cast
+    local pendingTarget = nil
+    if pending and pending.spellName == spell and pending.targetGuid
+       and pending.time and (GetTime() - pending.time) < 1 then
+      pendingTarget = UnitName(pending.targetGuid)
+      -- Validate: must be a friendly unit for heal prediction
+      if pendingTarget and pendingTarget ~= UNKNOWNOBJECT and pendingTarget ~= UKNOWNBEING then
+        if libpredict.debug then
+          DEFAULT_CHAT_FRAME:AddMessage(string.format(
+            "|cff00ffff[libpredict]|r SPELL_CAST_EVENT target: %s (guid: %s) for %s",
+            pendingTarget, pending.targetGuid, spell))
+        end
+      else
+        pendingTarget = nil
+      end
+      -- Clear pending after consumption
+      pending.spellId = nil
+      pending.spellName = nil
+      pending.targetGuid = nil
+      pending.time = nil
+    end
+    
     -- Speichere aktuellen Cast (wird nicht von Instant-Hooks überschrieben)
     this.current_cast = spell
-    this.current_cast_target = senttarget or spell_queue[3]
+    this.current_cast_target = pendingTarget or senttarget or spell_queue[3]
 
     if spell_queue[1] == spell and cache[spell_queue[2]] then
       local sender = player
-      local target = senttarget or spell_queue[3]
+      local target = pendingTarget or senttarget or spell_queue[3]
       local amount = cache[spell_queue[2]][1]
       local casttime = time
 
@@ -953,10 +979,10 @@ libpredict.sender:SetScript("OnEvent", function()
         local rankNum = rankStr and tonumber(rankStr) or nil
         
         if this.regrowth_timer then
-          this.regrowth_target_next = spell_queue[3]
+          this.regrowth_target_next = pendingTarget or spell_queue[3]
           this.regrowth_rank_next = rankNum
         else
-          this.regrowth_target = spell_queue[3]
+          this.regrowth_target = pendingTarget or spell_queue[3]
           this.regrowth_rank = rankNum
         end
       end
@@ -978,7 +1004,7 @@ libpredict.sender:SetScript("OnEvent", function()
       libpredict.sender.healing = true
 
     elseif spell_queue[1] == spell and L["resurrections"][spell] then
-      local target = senttarget or spell_queue[3]
+      local target = pendingTarget or senttarget or spell_queue[3]
       libpredict:Ress(player, target)
       libpredict.sender:SendHealCommMsg("Resurrection/" .. target .. "/start/")
       libpredict.sender:SendResCommMsg("RES " .. target)
@@ -995,7 +1021,7 @@ libpredict.sender:SetScript("OnEvent", function()
       libpredict.sender:SendHealCommMsg("HealStop")
       libpredict.sender.healing = nil
     elseif libpredict.sender.resurrecting then
-      local target = senttarget or spell_queue[3]
+      local target = this.current_cast_target or senttarget or spell_queue[3]
       libpredict:RessStop(player)
       libpredict.sender:SendHealCommMsg("Resurrection/stop/")
       libpredict.sender:SendResCommMsg("RESNO " .. target)
@@ -1024,7 +1050,7 @@ libpredict.sender:SetScript("OnEvent", function()
       libpredict.sender:SendHealCommMsg("HealStop")
       libpredict.sender.healing = nil
     elseif libpredict.sender.resurrecting then
-      local target = senttarget or spell_queue[3]
+      local target = this.current_cast_target or senttarget or spell_queue[3]
       libpredict:RessStop(player)
       libpredict.sender:SendHealCommMsg("Resurrection/stop/")
       libpredict.sender:SendResCommMsg("RESNO " .. target)
