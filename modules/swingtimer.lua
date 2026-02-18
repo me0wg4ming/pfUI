@@ -27,7 +27,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local sw_height = tonumber(C.unitframes.swingtimerheight) or 12
 
   -- Mainhand bar
-  pfUI.swingtimer.mainhand = CreateFrame("StatusBar", "pfSwingTimer", UIParent)
+  pfUI.swingtimer.mainhand = CreateFrame("StatusBar", "pfSwingTimerMainhand", UIParent)
   pfUI.swingtimer.mainhand:SetPoint("CENTER", UIParent, "CENTER", 0, -100)
   pfUI.swingtimer.mainhand:SetWidth(sw_width)
   pfUI.swingtimer.mainhand:SetHeight(sw_height)
@@ -102,6 +102,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
     -- always refresh speeds to catch haste buffs/debuffs
     UpdateWeaponSpeeds()
+
+    -- dual-wield guard: if MH swing just started (<100ms ago) and this isn't
+    -- flagged as offhand, it's likely an OH event with missing flag
+    if not isOffhand and swingState.offhand.speed > 0 then
+      local mhAge = now - (swingState.mainhand.nextSwing - swingState.mainhand.speed)
+      if swingState.mainhand.swinging and mhAge > 0 and mhAge < 0.1 then
+        isOffhand = true
+      end
+    end
 
     if isOffhand and swingState.offhand.speed > 0 then
       swingState.offhand.nextSwing = now + swingState.offhand.speed
