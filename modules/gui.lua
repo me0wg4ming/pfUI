@@ -1032,6 +1032,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "default:" .. T["Default"],
         "tukui:TukUI"
       },
+      ["raidmarker_grow"] = {
+        "down:Down",
+        "up:Up",
+      },
       ["uf_color"] = {
         "0:" .. T["Class"],
         "1:" .. T["Custom"],
@@ -1961,6 +1965,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, "Raid Markers", nil, nil, "header")
       CreateConfig(nil, "Raid Marker Width", C.unitframes, "raidmarkerwidth")
       CreateConfig(nil, "Raid Marker Height", C.unitframes, "raidmarkerheight")
+      CreateConfig(nil, "Raid Marker Grow", C.unitframes, "raidmarkergrow", "dropdown", pfUI.gui.dropdowns.raidmarker_grow)
 
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)

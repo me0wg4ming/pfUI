@@ -24,18 +24,37 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
   local validateElapsed = 0
   local ROW_HEIGHT = tonumber(C.unitframes.raidmarkerheight) or 14
   local BAR_WIDTH = tonumber(C.unitframes.raidmarkerwidth) or 80
+  local GROW = C.unitframes.raidmarkergrow or "down"
 
   -- Container frame
   pfUI.raidmarkers = CreateFrame("Frame", "pfRaidMarkers", UIParent)
   pfUI.raidmarkers:SetFrameStrata("MEDIUM")
-  pfUI.raidmarkers:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
+  if GROW == "up" then
+    pfUI.raidmarkers:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -20, 200)
+  else
+    pfUI.raidmarkers:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
+  end
   pfUI.raidmarkers:SetWidth(BAR_WIDTH + 20)
-  pfUI.raidmarkers:SetHeight(10)
+  pfUI.raidmarkers:SetHeight(8 * (ROW_HEIGHT + 1) + border * 2 - 1)
   pfUI.raidmarkers:Hide()
 
   CreateBackdrop(pfUI.raidmarkers)
   CreateBackdropShadow(pfUI.raidmarkers)
   UpdateMovable(pfUI.raidmarkers)
+
+  -- After dragging, force anchor back to BOTTOMRIGHT
+  pfUI.raidmarkers:SetScript("OnMouseUp", function()
+    if pfUI.unlock and pfUI.unlock:IsShown() then
+      this:StopMovingOrSizing()
+      local _, _, _, x, y = this:GetPoint()
+      this:ClearAllPoints()
+      this:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", math.floor(x + 0.5), math.floor(y + 0.5))
+      C.position["pfRaidMarkers"] = C.position["pfRaidMarkers"] or {}
+      C.position["pfRaidMarkers"]["anchor"] = "BOTTOMRIGHT"
+      C.position["pfRaidMarkers"]["xpos"] = math.floor(x + 0.5)
+      C.position["pfRaidMarkers"]["ypos"] = math.floor(y + 0.5)
+    end
+  end)
 
   -- Create 8 marker rows
   pfUI.raidmarkers.rows = {}
@@ -172,10 +191,18 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
           row.hptext:SetText(math.floor(pct * 100) .. "%")
 
           row:ClearAllPoints()
-          if prevRow then
-            row:SetPoint("TOP", prevRow, "BOTTOM", 0, -1)
+          if GROW == "up" then
+            if prevRow then
+              row:SetPoint("BOTTOM", prevRow, "TOP", 0, 1)
+            else
+              row:SetPoint("BOTTOM", pfUI.raidmarkers, "BOTTOM", 0, border)
+            end
           else
-            row:SetPoint("TOP", pfUI.raidmarkers, "TOP", 0, -border)
+            if prevRow then
+              row:SetPoint("TOP", prevRow, "BOTTOM", 0, -1)
+            else
+              row:SetPoint("TOP", pfUI.raidmarkers, "TOP", 0, -border)
+            end
           end
           row:Show()
           prevRow = row
@@ -197,7 +224,7 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
     if anyActive then
       pfUI.raidmarkers:SetHeight(visibleCount * (ROW_HEIGHT + 1) + border * 2 - 1)
       pfUI.raidmarkers:Show()
-    else
+    elseif not (pfUI.unlock and pfUI.unlock:IsShown()) then
       pfUI.raidmarkers:Hide()
     end
   end
@@ -210,6 +237,16 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
   events:RegisterEvent("UNIT_DIED")
   events:RegisterEvent("RAID_ROSTER_UPDATE")
   events:RegisterEvent("PARTY_MEMBERS_CHANGED")
+
+  -- Rescan when unlock mode closes
+  if pfUI.unlock then
+    local orig = pfUI.unlock:GetScript("OnHide")
+    pfUI.unlock:SetScript("OnHide", function()
+      if orig then orig() end
+      ScanMarkedUnits(false)
+      UpdateDisplay()
+    end)
+  end
 
   events:SetScript("OnEvent", function()
     if event == "UNIT_DIED" then
