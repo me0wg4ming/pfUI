@@ -168,6 +168,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:RegisterEvent("UNIT_INVENTORY_CHANGED")
   events:RegisterEvent("PLAYER_REGEN_DISABLED")
   events:RegisterEvent("PLAYER_REGEN_ENABLED")
+  events:RegisterEvent("PLAYER_TARGET_CHANGED")
+
+  local function ResetSwingTimers()
+    swingState.mainhand.swinging = false
+    swingState.offhand.swinging = false
+    pfUI.swingtimer.mainhand:Hide()
+    pfUI.swingtimer.offhand:Hide()
+    pfUI.swingtimer:Hide()
+  end
 
   events:SetScript("OnEvent", function()
     if event == "AUTO_ATTACK_SELF" then
@@ -180,9 +189,11 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     elseif event == "PLAYER_REGEN_DISABLED" then
       UpdateWeaponSpeeds()
     elseif event == "PLAYER_REGEN_ENABLED" then
-      swingState.mainhand.swinging = false
-      swingState.offhand.swinging = false
-      pfUI.swingtimer:Hide()
+      ResetSwingTimers()
+    elseif event == "PLAYER_TARGET_CHANGED" then
+      if not UnitExists("target") or UnitIsDead("target") then
+        ResetSwingTimers()
+      end
     end
   end)
 
