@@ -60,9 +60,14 @@ UnitChannelInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
   
-  -- Get GUID if Nampower is available AND unit is a valid unit token
+  -- Get GUID if Nampower is available
   local guid = nil
-  if pfValidUnits[unit] and UnitExists then
+  
+  -- Check if unit itself is a GUID (starts with "0x")
+  if type(unit) == "string" and string.sub(unit, 1, 2) == "0x" then
+    guid = unit  -- unit IS the GUID
+  elseif pfValidUnits[unit] and UnitExists then
+    -- unit is a token like "target" - get GUID from it
     local _, unitGuid = UnitExists(unit)
     guid = unitGuid
   end
@@ -154,9 +159,14 @@ UnitCastingInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
   
-  -- Get GUID if Nampower is available AND unit is a valid unit token
+  -- Get GUID if Nampower is available
   local guid = nil
-  if pfValidUnits[unit] and UnitExists then
+  
+  -- Check if unit itself is a GUID (starts with "0x")
+  if type(unit) == "string" and string.sub(unit, 1, 2) == "0x" then
+    guid = unit  -- unit IS the GUID
+  elseif pfValidUnits[unit] and UnitExists then
+    -- unit is a token like "target" - get GUID from it
     local _, unitGuid = UnitExists(unit)
     guid = unitGuid
   end
