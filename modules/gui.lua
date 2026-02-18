@@ -1958,6 +1958,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Swing Timer Width"], C.unitframes, "swingtimerwidth")
       CreateConfig(nil, T["Swing Timer Height"], C.unitframes, "swingtimerheight")
 
+      CreateConfig(nil, "Raid Markers", nil, nil, "header")
+      CreateConfig(nil, "Raid Marker Width", C.unitframes, "raidmarkerwidth")
+      CreateConfig(nil, "Raid Marker Height", C.unitframes, "raidmarkerheight")
+
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
       CreateConfig(nil, T["Unit Frame Text Size"], C.global, "font_unit_size")
