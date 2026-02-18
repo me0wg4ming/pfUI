@@ -1547,10 +1547,24 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
         -- Fallback to API calls if no event data (for non-SuperWoW or target)
         local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
         
+        -- Try to get cast info for target plates
         if isTargetPlate and UnitExists("target") then
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
           if not cast then 
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
+          end
+        -- NAMPOWER: For non-target plates, use GUID or mobName
+        elseif unitstr then
+          -- unitstr is GUID from Nampower
+          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(unitstr)
+          if not cast then
+            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(unitstr)
+          end
+        elseif name then
+          -- Fallback to mob name (for CHAT_MSG castbars)
+          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(name)
+          if not cast then
+            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(name)
           end
         end
         
