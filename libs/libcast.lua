@@ -60,6 +60,17 @@ UnitChannelInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
   
+  -- Get GUID - either from UnitExists (if unit is a token) or use unit directly (if it's already a GUID)
+  local guid = nil
+  if type(unit) == "string" and string.sub(unit, 1, 2) == "0x" then
+    -- unit is already a GUID (starts with "0x")
+    guid = unit
+  elseif pfValidUnits[unit] and UnitExists then
+    -- unit is a valid token like "target", get its GUID
+    local _, unitGuid = UnitExists(unit)
+    guid = unitGuid
+  end
+  
   -- For player: ALWAYS use libcast.db because it handles channel updates correctly
   local isPlayer = unit == "player" or unitName == player
   
@@ -93,9 +104,31 @@ UnitChannelInfo = function(unit)
     return SuperWoW_UnitChannelInfo(unit)
   end
   
+  -- Try GUID-based lookup first (from libdebuff's SPELL_START tracking)
+  local db = nil
+  if guid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[guid] then
+    -- Use libdebuff's cast tracking (from SPELL_START_OTHER events)
+    local castData = pfUI.libdebuff_casts[guid]
+    if castData.event == "START" and castData.endTime and castData.endTime > GetTime() then
+      -- Convert libdebuff format to libcast format
+      db = {
+        cast = castData.spellName,
+        rank = nil,
+        start = castData.startTime,
+        casttime = castData.duration * 1000, -- Convert back to ms
+        icon = castData.icon,
+        channel = nil -- TODO: libdebuff should distinguish channel vs cast
+      }
+    end
+  end
+  
+  -- Fallback to name-based lookup (CHAT_MSG castbars)
+  if not db and libcast.db[unitName] then
+    db = libcast.db[unitName]
+  end
+  
   -- Fallback to libcast.db for non-player units
   local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
-  local db = libcast.db[unitName]
 
   if db and db.cast and db.start + db.casttime / 1000 > GetTime() then
     if not db.channel then return end
@@ -124,6 +157,17 @@ local SuperWoW_UnitCastingInfo = _G.UnitCastingInfo
 UnitCastingInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
+  
+  -- Get GUID - either from UnitExists (if unit is a token) or use unit directly (if it's already a GUID)
+  local guid = nil
+  if type(unit) == "string" and string.sub(unit, 1, 2) == "0x" then
+    -- unit is already a GUID (starts with "0x")
+    guid = unit
+  elseif pfValidUnits[unit] and UnitExists then
+    -- unit is a valid token like "target", get its GUID
+    local _, unitGuid = UnitExists(unit)
+    guid = unitGuid
+  end
   
   -- For player: ALWAYS use libcast.db because it handles pushback correctly
   -- SuperWoW's UnitCastingInfo doesn't track SPELLCAST_DELAYED events
@@ -159,9 +203,31 @@ UnitCastingInfo = function(unit)
     return SuperWoW_UnitCastingInfo(unit)
   end
   
+  -- Try GUID-based lookup first (from libdebuff's SPELL_START tracking)
+  local db = nil
+  if guid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[guid] then
+    -- Use libdebuff's cast tracking (from SPELL_START_OTHER events)
+    local castData = pfUI.libdebuff_casts[guid]
+    if castData.event == "START" and castData.endTime and castData.endTime > GetTime() then
+      -- Convert libdebuff format to libcast format
+      db = {
+        cast = castData.spellName,
+        rank = nil,
+        start = castData.startTime,
+        casttime = castData.duration * 1000, -- Convert back to ms
+        icon = castData.icon,
+        channel = nil -- TODO: libdebuff should distinguish channel vs cast
+      }
+    end
+  end
+  
+  -- Fallback to name-based lookup (CHAT_MSG castbars)
+  if not db and libcast.db[unitName] then
+    db = libcast.db[unitName]
+  end
+  
   -- Fallback to libcast.db for non-player units
   local cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
-  local db = libcast.db[unitName]
 
   if db and db.cast and db.start + db.casttime / 1000 > GetTime() then
     if db.channel then return end
