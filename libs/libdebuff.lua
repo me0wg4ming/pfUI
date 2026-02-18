@@ -38,8 +38,8 @@ local hasNampower = false
 if GetNampowerVersion then
   local major, minor, patch = GetNampowerVersion()
   patch = patch or 0
-  -- Minimum required version: 2.37.0 (CastSpellByName unitStr support, SetMouseoverUnit)
-  if major > 2 or (major == 2 and minor > 37) or (major == 2 and minor == 37 and patch >= 0) then
+  -- Minimum required version: 2.38.0 (CastSpellByName unitStr support, SetMouseoverUnit)
+  if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
     hasNampower = true
   end
 end
@@ -69,7 +69,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
         patch = patch or 0
         local versionString = major .. "." .. minor .. "." .. patch
         
-        if major > 2 or (major == 2 and minor > 37) or (major == 2 and minor == 37 and patch >= 0) then
+        if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
           DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
           
           -- Enable required Nampower CVars
@@ -119,12 +119,12 @@ nampowerCheckFrame:SetScript("OnEvent", function()
             end
           end
           
-        elseif major == 2 and minor == 37 and patch == 0 then
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.37.0 detected!|r")
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.37.0 or higher!|r")
+        elseif major == 2 and minor == 38 and patch == 0 then
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.38.0 detected!|r")
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.38.0 or higher!|r")
           StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
         else
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.37.0 or higher.|r")
+          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.38.0 or higher.|r")
           StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
         end
       else
@@ -198,19 +198,19 @@ local capturedCP = nil
 -- ============================================================================
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
-  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.37.0+\n\nPlease update Nampower!",
+  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.38.0+\n\nPlease update Nampower!",
   button1 = "OK",
   timeout = 0,
   whileDead = 1,
   hideOnEscape = 1,
   preferredIndex = 3,
   OnAccept = function()
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.37.0")
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.38.0")
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
-  text = "Nampower Not Found!\n\nNampower 2.37.0+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
+  text = "Nampower Not Found!\n\nNampower 2.38.0+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
   button1 = "OK",
   timeout = 0,
   whileDead = 1,
