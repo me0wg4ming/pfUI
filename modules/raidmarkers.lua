@@ -4,7 +4,7 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
 
   local rawborder, border = GetBorderSize()
 
-  local markerOrder = { 8, 7, 1, 2, 3, 4, 5, 6 } -- skull, cross, star, circle, diamond, triangle, moon, square
+  local markerOrder = { 8, 7, 6, 5, 4, 3, 2, 1 } -- skull, cross, square, moon, triangle, diamond, circle, star
   local markerColors = {
     [1] = { 1.0, 0.9, 0.0 },    -- star: yellow
     [2] = { 1.0, 0.5, 0.0 },    -- circle: orange
@@ -28,7 +28,7 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
   -- Container frame
   pfUI.raidmarkers = CreateFrame("Frame", "pfRaidMarkers", UIParent)
   pfUI.raidmarkers:SetFrameStrata("MEDIUM")
-  pfUI.raidmarkers:SetPoint("RIGHT", UIParent, "RIGHT", -20, 0)
+  pfUI.raidmarkers:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
   pfUI.raidmarkers:SetWidth(BAR_WIDTH + 20)
   pfUI.raidmarkers:SetHeight(10)
   pfUI.raidmarkers:Hide()
@@ -88,11 +88,13 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
     pfUI.raidmarkers.rows[i] = row
   end
 
-  local scanTokens = { "target", "mouseover", "pettarget" }
+  local scanTokens = { "target", "mouseover", "pettarget", "player" }
   for i = 1, 40 do
+    table.insert(scanTokens, "raid" .. i)
     table.insert(scanTokens, "raid" .. i .. "target")
   end
   for i = 1, 4 do
+    table.insert(scanTokens, "party" .. i)
     table.insert(scanTokens, "party" .. i .. "target")
   end
 
@@ -206,6 +208,8 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
   events:RegisterEvent("PLAYER_TARGET_CHANGED")
   events:RegisterEvent("PLAYER_LOGIN")
   events:RegisterEvent("UNIT_DIED")
+  events:RegisterEvent("RAID_ROSTER_UPDATE")
+  events:RegisterEvent("PARTY_MEMBERS_CHANGED")
 
   events:SetScript("OnEvent", function()
     if event == "UNIT_DIED" then
@@ -219,6 +223,7 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
       ScanMarkedUnits(true)
       UpdateDisplay()
     else
+      -- PLAYER_LOGIN, PLAYER_TARGET_CHANGED, RAID_ROSTER_UPDATE, PARTY_MEMBERS_CHANGED
       ScanMarkedUnits(false)
       UpdateDisplay()
     end
