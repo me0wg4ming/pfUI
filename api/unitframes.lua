@@ -3032,42 +3032,6 @@ function pfUI.uf:GetStatusValue(unit, pos)
     end
   elseif config == "powerminmax" then
     return unit:GetColor("power") .. pfUI.api.Abbreviate(mp) .. "/" .. pfUI.api.Abbreviate(mpmax)
-  elseif config == "attackspeed" then
-    local mainSpeed = UnitAttackSpeed(unitstr)
-    return unit:GetColor("unit") .. format("Spd: %.2f", mainSpeed)
-  elseif config == "attackdmg" then
-    local lowDmg, hiDmg = UnitDamage(unitstr)
-    return unit:GetColor("unit") .. format("Dmg: %.0f - %.0f", lowDmg, hiDmg)
-  elseif config == "unit-left" then
-    local name  = unit:GetColor("unit")  .. pfUI.uf:GetNameString(unitstr)
-    local level = unit:GetColor("level") .. pfUI.uf:GetLevelString(unitstr)
-    return level .. "|cffffffff | " .. name
-  elseif config == "unit-right" then
-    local name  = unit:GetColor("unit")  .. pfUI.uf:GetNameString(unitstr)
-    local level = unit:GetColor("level") .. pfUI.uf:GetLevelString(unitstr)
-    return name .. "|cffffffff | " .. level
-  elseif config == "unit-white-left" then
-    local name  = "|cffffffff" .. pfUI.uf:GetNameString(unitstr)
-    local level = "|cffffffff" .. pfUI.uf:GetLevelString(unitstr)
-    return level .. " |cffffffff | " .. name
-  elseif config == "unit-white-right" then
-    local name  = "|cffffffff" .. pfUI.uf:GetNameString(unitstr)
-    local level = "|cffffffff" .. pfUI.uf:GetLevelString(unitstr)
-    return name .. " |cffffffff | " .. level
-  elseif config == "hp-right" then
-    return unit:GetColor("health") .. ceil(rhp / rhpmax * 100) .. "%" .. " | " .. pfUI.api.Abbreviate(rhp)
-  elseif config == "hp-left" then
-    return unit:GetColor("health") .. pfUI.api.Abbreviate(rhp) .. " | " .. ceil(rhp / rhpmax * 100) .. "%"
-  elseif config == "mana-auto-deli" then
-    if mp ~= mpmax and UnitPowerType(unitstr) == 0 then
-      return "|cffffffff" .. pfUI.api.Abbreviate(mp) .. " - " .. ceil(mp / mpmax * 100) .. "%"
-    else
-      return "|cffffffff" .. pfUI.api.Abbreviate(mp)
-    end
-  elseif config == "mana-current-deli" then
-    return "|cffffffff" .. pfUI.api.Abbreviate(mp)
-  elseif config == "petname" then
-    return "|cffffffff" .. (UnitName(unitstr) or "")
   else
     return ""
   end
