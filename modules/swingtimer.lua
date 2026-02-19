@@ -276,7 +276,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:SetScript("OnEvent", function()
     if event == "AUTO_ATTACK_SELF" then
       -- arg4 = hitInfo (Nampower EVENTS.md)
-      local hitInfo   = arg4 or 0
+      local hitInfo = arg4 or 0
+      -- HITINFO_NOACTION (65536): server did not advance the swing clock, ignore
+      if bit.band(hitInfo, 65536) ~= 0 then return end
       local isOffhand = bit.band(hitInfo, HITINFO_LEFTSWING) ~= 0
       StartSwing(isOffhand)
 
