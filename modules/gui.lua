@@ -1060,6 +1060,17 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "powerperc:" .. T["Mana - Percentage"],
         "powermiss:" .. T["Mana - Missing"],
         "powerminmax:" .. T["Mana - Min/Max"],
+        "attackspeed:" .. T["Attack Speed"],
+        "attackdmg:" .. T["Min/Max Damage"],
+        "unit-left:" .. T["Unit String Left"],
+        "unit-right:" .. T["Unit String Right"],
+        "unit-white-left:" .. T["Unit String Left White"],
+        "unit-white-right:" .. T["Unit String Right White"],
+        "hp-right:" .. T["HP Current | Percent"],
+        "hp-left:" .. T["HP Percent | Current"],
+        "mana-auto-deli:" .. T["Mana Auto"],
+        "mana-current-deli:" .. T["Mana Current"],
+        "petname:" .. T["Pet Name"],
       },
       ["hpformat"] = {
         "percent:" .. T["Percent"],
@@ -1957,6 +1968,12 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Swing Timer"], nil, nil, "header")
       CreateConfig(nil, T["Swing Timer Width"], C.unitframes, "swingtimerwidth")
       CreateConfig(nil, T["Swing Timer Height"], C.unitframes, "swingtimerheight")
+      CreateConfig(nil, T["Swing Timer Texture"], C.unitframes, "swingtimertexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture)
+      CreateConfig(nil, T["Show Timer Text"], C.unitframes, "swingtimertext", "checkbox")
+      CreateConfig(nil, T["Timer Text Font Size"], C.unitframes, "swingtimerfontsize")
+      CreateConfig(nil, T["Show MH/OH Labels"], C.unitframes, "swingtimerlabel", "checkbox")
+      CreateConfig(nil, T["Show Offhand Bar"], C.unitframes, "swingtimeroh", "checkbox")
+      CreateConfig(nil, T["Show HS/Cleave Queue Color"], C.unitframes, "swingtimerhsqueue", "checkbox")
 
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
