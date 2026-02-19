@@ -9,13 +9,13 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     end
   end
 
-  -- HitInfo flags (from Nampower EVENTS.md)
-  local HITINFO_LEFTSWING = 4  -- 0x4: Off-hand attack
+  -- HitInfo flags
+  local HITINFO_LEFTSWING = 4
 
   -- Swing state
   local swingState = {
     mainhand = { speed = 0, nextSwing = 0, swinging = false },
-    offhand  = { speed = 0, nextSwing = 0, swinging = false }
+    offhand = { speed = 0, nextSwing = 0, swinging = false }
   }
 
   -- Create container frame
@@ -23,7 +23,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   pfUI.swingtimer:SetFrameStrata("MEDIUM")
   pfUI.swingtimer:Hide()
 
-  local sw_width  = tonumber(C.unitframes.swingtimerwidth)  or 200
+  local sw_width = tonumber(C.unitframes.swingtimerwidth) or 200
   local sw_height = tonumber(C.unitframes.swingtimerheight) or 12
 
   -- Mainhand bar
@@ -80,42 +80,18 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   UpdateMovable(pfUI.swingtimer.mainhand)
 
-  -- inventoryType numbers from ItemStats DBC:
-  --   17 = INVTYPE_WEAPON (one-hand, can go in either hand)
-  --   21 = INVTYPE_WEAPONOFFHAND
-  local OH_SWINGABLE = { [17] = true, [21] = true }
-
-  local function HasOffhandWeapon()
-    if GetEquippedItem then
-      local item = GetEquippedItem("player", 17)
-      if not item or not item.itemId or item.itemId == 0 then return false end
-      local invType = GetItemStatsField and GetItemStatsField(item.itemId, "inventoryType")
-      if invType then
-        return OH_SWINGABLE[invType] == true
-      end
-    end
-    -- Fallback: vanilla API
-    local link = GetInventoryItemLink("player", 17)
-    if not link then return false end
-    local _, _, _, _, _, _, _, _, invTypeStr = GetItemInfo(link)
-    return invTypeStr == "INVTYPE_WEAPON" or invTypeStr == "INVTYPE_WEAPONOFFHAND"
-  end
-
   local function UpdateWeaponSpeeds()
     if not GetUnitField then return end
 
     local mhSpeed = GetUnitField("player", "baseAttackTime")
+    local ohSpeed = GetUnitField("player", "offhandAttackTime")
+
     if mhSpeed and mhSpeed > 0 then
       swingState.mainhand.speed = mhSpeed / 1000
     end
 
-    if HasOffhandWeapon() then
-      local ohSpeed = GetUnitField("player", "offhandAttackTime")
-      if ohSpeed and ohSpeed > 0 then
-        swingState.offhand.speed = ohSpeed / 1000
-      else
-        swingState.offhand.speed = 0
-      end
+    if ohSpeed and ohSpeed > 0 then
+      swingState.offhand.speed = ohSpeed / 1000
     else
       swingState.offhand.speed = 0
     end
@@ -124,15 +100,25 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local function StartSwing(isOffhand)
     local now = GetTime()
 
+    -- always refresh speeds to catch haste buffs/debuffs
     UpdateWeaponSpeeds()
+
+    -- dual-wield guard: if MH swing just started (<100ms ago) and this isn't
+    -- flagged as offhand, it's likely an OH event with missing flag
+    if not isOffhand and swingState.offhand.speed > 0 then
+      local mhAge = now - (swingState.mainhand.nextSwing - swingState.mainhand.speed)
+      if swingState.mainhand.swinging and mhAge > 0 and mhAge < 0.1 then
+        isOffhand = true
+      end
+    end
 
     if isOffhand and swingState.offhand.speed > 0 then
       swingState.offhand.nextSwing = now + swingState.offhand.speed
-      swingState.offhand.swinging  = true
+      swingState.offhand.swinging = true
       pfUI.swingtimer.offhand:Show()
     else
       swingState.mainhand.nextSwing = now + swingState.mainhand.speed
-      swingState.mainhand.swinging  = true
+      swingState.mainhand.swinging = true
       pfUI.swingtimer.mainhand:Show()
     end
 
@@ -145,6 +131,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
     if swingState.mainhand.swinging then
       local remaining = swingState.mainhand.nextSwing - now
+
       if remaining <= 0 then
         swingState.mainhand.swinging = false
         pfUI.swingtimer.mainhand:Hide()
@@ -158,6 +145,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
     if swingState.offhand.swinging then
       local remaining = swingState.offhand.nextSwing - now
+
       if remaining <= 0 then
         swingState.offhand.swinging = false
         pfUI.swingtimer.offhand:Hide()
@@ -184,7 +172,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   local function ResetSwingTimers()
     swingState.mainhand.swinging = false
-    swingState.offhand.swinging  = false
+    swingState.offhand.swinging = false
     pfUI.swingtimer.mainhand:Hide()
     pfUI.swingtimer.offhand:Hide()
     pfUI.swingtimer:Hide()
@@ -193,27 +181,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:SetScript("OnEvent", function()
     if event == "AUTO_ATTACK_SELF" then
       local hitInfo = arg4 or 0
-      if bit.band(hitInfo, 65536) ~= 0 then return end
       local isOffhand = bit.band(hitInfo, HITINFO_LEFTSWING) ~= 0
       StartSwing(isOffhand)
-
-    elseif event == "PLAYER_ENTERING_WORLD" then
-      UpdateWeaponSpeeds()
-
-    elseif event == "UNIT_INVENTORY_CHANGED" then
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "UNIT_INVENTORY_CHANGED" then
       if arg1 and arg1 ~= "player" then return end
       UpdateWeaponSpeeds()
-      if swingState.offhand.speed == 0 then
-        swingState.offhand.swinging = false
-        pfUI.swingtimer.offhand:Hide()
-      end
-
     elseif event == "PLAYER_REGEN_DISABLED" then
       UpdateWeaponSpeeds()
-
     elseif event == "PLAYER_REGEN_ENABLED" then
       ResetSwingTimers()
-
     elseif event == "PLAYER_TARGET_CHANGED" then
       if not UnitExists("target") or UnitIsDead("target") then
         ResetSwingTimers()
