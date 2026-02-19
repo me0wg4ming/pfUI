@@ -266,7 +266,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     end
 
     if not anyActive then
-      this:Hide()
+      if not pfUI.swingtimer.mainhand:IsShown() and not pfUI.swingtimer.offhand:IsShown() then
+        this:Hide()
+      end
     end
   end)
 
@@ -277,7 +279,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:RegisterEvent("UNIT_INVENTORY_CHANGED")
   events:RegisterEvent("PLAYER_REGEN_DISABLED")
   events:RegisterEvent("PLAYER_REGEN_ENABLED")
-  events:RegisterEvent("PLAYER_TARGET_CHANGED")
   events:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
   events:RegisterEvent("UNIT_DIED")
   events:RegisterEvent("SPELL_QUEUE_EVENT")
@@ -335,7 +336,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     elseif event == "PLAYER_ENTERING_WORLD" then
       local _, class = UnitClass("player")
       isWarrior  = (class == "WARRIOR")
-      playerGUID = UnitGUID and UnitGUID("player") or nil
+      playerGUID = UnitExists("player")
       UpdateWeaponSpeeds()
       RebuildQueueSlotCache()
 
@@ -358,16 +359,11 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       hsQueued     = false
       cleaveQueued = false
 
-    elseif event == "PLAYER_TARGET_CHANGED" then
-      if not UnitExists("target") or UnitIsDead("target") then
-        ResetSwingTimers()
-      end
-
     elseif event == "UNIT_DIED" then
+      -- Only reset if the player themselves died
       local guid = arg1
       if not guid then return end
-      local targetGUID = UnitExists("target") and UnitGUID and UnitGUID("target") or nil
-      if guid == targetGUID or guid == playerGUID then
+      if guid == playerGUID then
         ResetSwingTimers()
       end
     end
