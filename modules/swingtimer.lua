@@ -166,23 +166,35 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   UpdateMovable(pfUI.swingtimer.mainhand)
 
-  -- VERSION B TEST: HasOffhandWeapon() removed.
-  -- The original used GetItemInfo() to detect OH weapon type, but GetItemInfo()
-  -- returns nil on first login before the item cache is populated, causing
-  -- offhand.speed to stay 0. Now we just read offhandAttackTime directly,
-  -- same as the old working version.
+  -- inventoryType 13 = INVTYPE_WEAPON (one-hand), 22 = INVTYPE_WEAPONOFFHAND
+  -- Shields, held-in-offhand, ranged etc. do NOT produce OH swings.
+  -- Uses GetItemStatsField() (DBC lookup) instead of GetItemInfo() (item cache)
+  -- so it works correctly on first login before the item cache is populated.
+  local OH_SWINGABLE = { [13] = true, [22] = true }
+
+  local function HasOffhandWeapon()
+    if not GetEquippedItem or not GetItemStatsField then return false end
+    local item = GetEquippedItem("player", 17)
+    if not item or not item.itemId or item.itemId == 0 then return false end
+    local invType = GetItemStatsField(item.itemId, "inventoryType")
+    return OH_SWINGABLE[invType] == true
+  end
+
   local function UpdateWeaponSpeeds()
     if not GetUnitField then return end
 
     local mhSpeed = GetUnitField("player", "baseAttackTime")
-    local ohSpeed = GetUnitField("player", "offhandAttackTime")
-
     if mhSpeed and mhSpeed > 0 then
       swingState.mainhand.speed = mhSpeed / 1000
     end
 
-    if ohSpeed and ohSpeed > 0 then
-      swingState.offhand.speed = ohSpeed / 1000
+    if HasOffhandWeapon() then
+      local ohSpeed = GetUnitField("player", "offhandAttackTime")
+      if ohSpeed and ohSpeed > 0 then
+        swingState.offhand.speed = ohSpeed / 1000
+      else
+        swingState.offhand.speed = 0
+      end
     else
       swingState.offhand.speed = 0
     end
@@ -191,11 +203,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local function StartSwing(isOffhand)
     local now = GetTime()
 
-    -- always refresh speeds to catch haste buffs/debuffs
     UpdateWeaponSpeeds()
 
-    -- dual-wield guard: if MH swing just started (<100ms ago) and this isn't
-    -- flagged as offhand, it's likely an OH event with missing flag
     if not isOffhand and swingState.offhand.speed > 0 then
       local mhAge = now - (swingState.mainhand.nextSwing - swingState.mainhand.speed)
       if swingState.mainhand.swinging and mhAge > 0 and mhAge < 0.1 then
@@ -235,7 +244,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
       if remaining <= 0 then
         swingState.mainhand.swinging = false
-        pfUI.swingtimer.mainhand:Hide()
+        if not UnitExists("target") then
+          pfUI.swingtimer.mainhand:Hide()
+        end
       else
         local progress = 1 - (remaining / swingState.mainhand.speed)
         pfUI.swingtimer.mainhand:SetValue(progress)
@@ -252,7 +263,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
       if remaining <= 0 then
         swingState.offhand.swinging = false
-        pfUI.swingtimer.offhand:Hide()
+        if not UnitExists("target") then
+          pfUI.swingtimer.offhand:Hide()
+        end
       else
         local progress = 1 - (remaining / swingState.offhand.speed)
         pfUI.swingtimer.offhand:SetValue(progress)
@@ -277,7 +290,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:RegisterEvent("UNIT_INVENTORY_CHANGED")
   events:RegisterEvent("PLAYER_REGEN_DISABLED")
   events:RegisterEvent("PLAYER_REGEN_ENABLED")
-  events:RegisterEvent("PLAYER_TARGET_CHANGED")
   events:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
   events:RegisterEvent("UNIT_DIED")
   events:RegisterEvent("SPELL_QUEUE_EVENT")
@@ -290,12 +302,12 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     pfUI.swingtimer:Hide()
   end
 
-  local playerGUID = nil
+  -- Cache player GUID via UnitExists() which returns GUID on Turtle WoW
+  local playerGUID = UnitExists("player")
 
   events:SetScript("OnEvent", function()
     if event == "AUTO_ATTACK_SELF" then
       local hitInfo = arg4 or 0
-      -- HITINFO_NOACTION: server did not advance the swing clock, ignore
       if bit.band(hitInfo, HITINFO_NOACTION) ~= 0 then return end
       local isOffhand = bit.band(hitInfo, HITINFO_LEFTSWING) ~= 0
       StartSwing(isOffhand)
@@ -335,7 +347,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     elseif event == "PLAYER_ENTERING_WORLD" then
       local _, class = UnitClass("player")
       isWarrior  = (class == "WARRIOR")
-      playerGUID = UnitGUID and UnitGUID("player") or nil
+      playerGUID = UnitExists("player")
       UpdateWeaponSpeeds()
       RebuildQueueSlotCache()
 
@@ -358,16 +370,11 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       hsQueued     = false
       cleaveQueued = false
 
-    elseif event == "PLAYER_TARGET_CHANGED" then
-      if not UnitExists("target") or UnitIsDead("target") then
-        ResetSwingTimers()
-      end
-
     elseif event == "UNIT_DIED" then
+      -- Only reset if the player themselves died
       local guid = arg1
       if not guid then return end
-      local targetGUID = UnitExists("target") and UnitGUID and UnitGUID("target") or nil
-      if guid == targetGUID or guid == playerGUID then
+      if guid == playerGUID then
         ResetSwingTimers()
       end
     end
