@@ -89,9 +89,11 @@ function SlashCmdList.PFCASTFOCUS(msg)
   -- Check if we have GUID-based focus
   local focusGUID = pfUI.uf.focus.label
   local hasGUID = focusGUID and focusGUID ~= ""
+
+  local properCastSpell = CastSpellByNameNoQueue or CastSpellByName
   
   -- Nampower with NEW unitStr targeting support (no target toggle needed!)
-  if hasGUID and CastSpellByName then
+  if hasGUID then
     if func then
       -- For lua functions, we still need target toggle (function might use UnitName("target") etc)
       local _, currentGUID = nil, nil
@@ -135,24 +137,25 @@ function SlashCmdList.PFCASTFOCUS(msg)
       end
     else
       -- Direct spell cast with GUID - NO TARGET TOGGLE! 🎉
-      CastSpellByName(msg, focusGUID)
+      properCastSpell(msg, focusGUID)
     end
     
     return
   end
   
   -- Fallback: Classic target-swapping method (name-based or GUID-based)
-  local skiptarget = false
   local player = UnitIsUnit("target", "player")
+  local focusId = pfUI.uf.focus.id
   local unitname = ""
+  local skiptarget = false
 
-  if pfUI.uf.focus.label and UnitIsUnit("target", pfUI.uf.focus.label .. pfUI.uf.focus.id) then
+  if focusGUID and UnitIsUnit("target", focusGUID .. focusId) then
     skiptarget = true
   else
     pfScanActive = true
-    if pfUI.uf.focus.label and pfUI.uf.focus.id then
-      unitname = UnitName(pfUI.uf.focus.label .. pfUI.uf.focus.id)
-      TargetUnit(pfUI.uf.focus.label .. pfUI.uf.focus.id)
+    if focusGUID and focusId then
+      unitname = UnitName(focusGUID .. focusId)
+      TargetUnit(focusGUID .. focusId)
     else
       unitname = pfUI.uf.focus.unitname
       TargetByName(pfUI.uf.focus.unitname, true)
@@ -169,11 +172,7 @@ function SlashCmdList.PFCASTFOCUS(msg)
   if func then
     func()
   else
-    if CastSpellByNameNoQueue then
-      CastSpellByNameNoQueue(msg)
-    else
-      CastSpellByName(msg)
-    end
+    properCastSpell(msg)
   end
 
   if skiptarget == false then
