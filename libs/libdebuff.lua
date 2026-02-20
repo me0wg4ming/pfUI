@@ -1289,12 +1289,26 @@ if hasNampower then
           carnageCheckFrame:Show()
         end
       end
+
+      -- Forward to registered callbacks (e.g. libpredict)
+      if pfUI.libdebuff_spell_go_callbacks then
+        for _, cb in pairs(pfUI.libdebuff_spell_go_callbacks) do
+          cb(spellId, spellName, castRank, casterGuid, targetGuid, event == "SPELL_GO_SELF")
+        end
+      end
       
     elseif event == "SPELL_FAILED_OTHER" then
       local casterGuid = arg1
       
       if casterGuid and pfUI.libdebuff_casts[casterGuid] then
         pfUI.libdebuff_casts[casterGuid] = nil
+      end
+
+      -- Forward to registered callbacks (e.g. libpredict)
+      if pfUI.libdebuff_spell_failed_other_callbacks then
+        for _, cb in pairs(pfUI.libdebuff_spell_failed_other_callbacks) do
+          cb(casterGuid)
+        end
       end
       
     elseif event == "SPELL_CAST_EVENT" then
