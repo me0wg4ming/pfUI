@@ -2574,7 +2574,7 @@ function pfUI.uf:RefreshUnit(unit, component)
     end
 
     if C.unitframes.pastel == "1" and not custom_active then
-      r, g, b = (r + .5) * .5, (g + .5) * .5, (b + .5) * .5
+      r, g, b = r * .9, g * .9, b * .9
     end
 
     if customfade == "1" then
