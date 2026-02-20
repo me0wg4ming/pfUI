@@ -51,6 +51,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local mhR, mhG, mhB, mhA = ParseColor(C.unitframes.swingtimermhcolor, 0.8, 0.3, 0.3, 1)
   local ohR, ohG, ohB, ohA = ParseColor(C.unitframes.swingtimerohcolor, 0.3, 0.8, 0.3, 1)
   local raR, raG, raB, raA = ParseColor(C.unitframes.swingtimerrangedcolor, 0.3, 0.6, 1.0, 1)
+  local rwR, rwG, rwB, rwA = ParseColor(C.unitframes.swingtimerrangedwarncolor, 0.9, 0.0, 0.0, 1)
+  local isHunter = UnitClass("player") == "Hunter"
 
   -- Store default MH color for HS/Cleave restore
   local mhDefaultR, mhDefaultG, mhDefaultB = mhR, mhG, mhB
@@ -330,6 +332,13 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       else
         local progress = 1 - (remaining / swingState.ranged.speed)
         pfUI.swingtimer.ranged:SetValue(progress)
+        if isHunter then
+          if remaining < 0.5 then
+            pfUI.swingtimer.ranged:SetStatusBarColor(rwR, rwG, rwB, rwA)
+          else
+            pfUI.swingtimer.ranged:SetStatusBarColor(raR, raG, raB, raA)
+          end
+        end
         if sw_showtext then
           pfUI.swingtimer.ranged.text:SetText(string.format("%.1f", remaining))
         end

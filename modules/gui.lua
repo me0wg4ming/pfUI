@@ -1970,6 +1970,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Mainhand Bar Color"], C.unitframes, "swingtimermhcolor", "color")
       CreateConfig(nil, T["Offhand Bar Color"], C.unitframes, "swingtimerohcolor", "color")
       CreateConfig(nil, T["Ranged Bar Color"], C.unitframes, "swingtimerrangedcolor", "color")
+      CreateConfig(nil, T["Ranged Warn Color (Hunter)"], C.unitframes, "swingtimerrangedwarncolor", "color")
       CreateConfig(nil, T["Show HS/Cleave Queue Color (Warrior)"], C.unitframes, "swingtimerhsqueue", "checkbox")
 
       CreateConfig(nil, "Raid Markers", nil, nil, "header")
