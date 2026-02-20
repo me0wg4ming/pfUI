@@ -34,7 +34,7 @@ pfUI:RegisterModule("mouseover", "vanilla", function ()
   _G.SLASH_PFCAST1, _G.SLASH_PFCAST2 = "/pfcast", "/pfmouse"
   function SlashCmdList.PFCAST(msg)
     local restore_target = true
-    local func = loadstring(msg or "")
+    local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
     local unit = "mouseover"
 
     if not UnitExists(unit) then
@@ -48,6 +48,13 @@ pfUI:RegisterModule("mouseover", "vanilla", function ()
       else
         return
       end
+    end
+
+    -- Nampower: CastSpellByName supports a second unit parameter directly.
+    -- unit is already resolved to "mouseover", "target" or "player" at this point.
+    if not func and GetNampowerVersion then
+      CastSpellByName(msg, unit)
+      return
     end
 
     -- If target and mouseover are friendly units, we can't use spell target as it

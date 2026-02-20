@@ -38,8 +38,8 @@ local hasNampower = false
 if GetNampowerVersion then
   local major, minor, patch = GetNampowerVersion()
   patch = patch or 0
-  -- Minimum required version: 2.27.2 (SPELL_FAILED_OTHER fix)
-  if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+  -- Minimum required version: 2.38.0 (CastSpellByName unitStr support, SetMouseoverUnit)
+  if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
     hasNampower = true
   end
 end
@@ -69,7 +69,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
         patch = patch or 0
         local versionString = major .. "." .. minor .. "." .. patch
         
-        if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+        if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
           DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
           
           -- Enable required Nampower CVars
@@ -119,12 +119,12 @@ nampowerCheckFrame:SetScript("OnEvent", function()
             end
           end
           
-        elseif major == 2 and minor == 27 and patch == 1 then
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.27.1 detected!|r")
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.27.2 or higher!|r")
+        elseif major == 2 and minor == 38 and patch == 0 then
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.38.0 detected!|r")
+          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.38.0 or higher!|r")
           StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
         else
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.27.2 or higher.|r")
+          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.38.0 or higher.|r")
           StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
         end
       else
@@ -189,24 +189,34 @@ pfUI.libdebuff_recent_casts = pfUI.libdebuff_recent_casts or {}
 local recentCasts = pfUI.libdebuff_recent_casts
 local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
 
+-- Captured combo points from SPELL_CAST_EVENT (before client consumes them)
+-- SPELL_CAST_EVENT fires BEFORE UnitAura updates, so GetComboPoints() still works
+local capturedCP = nil
+
+-- Pending cast info for libpredict (heal prediction target tracking)
+-- SPELL_CAST_EVENT fires with targetGuid BEFORE SPELLCAST_START,
+-- which allows libpredict to know the correct target for queued casts.
+-- Fields: { spellId, spellName, targetGuid, time }
+pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
+
 -- ============================================================================
 -- STATIC POPUP DIALOGS
 -- ============================================================================
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
-  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.27.2+\n\nPlease update Nampower!",
+  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.38.0+\n\nPlease update Nampower!",
   button1 = "OK",
   timeout = 0,
   whileDead = 1,
   hideOnEscape = 1,
   preferredIndex = 3,
   OnAccept = function()
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.27.2")
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.38.0")
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
-  text = "Nampower Not Found!\n\nNampower 2.27.2+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
+  text = "Nampower Not Found!\n\nNampower 2.38.0+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
   button1 = "OK",
   timeout = 0,
   whileDead = 1,
@@ -251,17 +261,38 @@ local debuffOverwritePairs = {
 }
 
 -- Combopoint-based abilities: Only show timers for OUR casts
+-- Format: [spellName] = { base = N, perCP = N }
+-- Duration formula: duration = base + combopoints * perCP
 local combopointAbilities = {
-  ["Rip"] = true,
-  ["Rupture"] = true,
-  ["Kidney Shot"] = true,
-  ["Slice and Dice"] = true,
-  ["Expose Armor"] = true,
+  -- Druid
+  ["Rip"]          = { base = 8,  perCP = 2 },
+
+  -- Rogue
+  ["Rupture"]      = { base = 6,  perCP = 2 },
+  ["Kidney Shot"]  = { base = 1,  perCP = 1 },
+  ["Slice and Dice"] = { base = 9, perCP = 3 },
+  ["Expose Armor"] = { base = 30, perCP = 0 },  -- fixed 30s
 }
 
 -- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
+
+-- Check if spell is a combo-point ability
+local function IsComboPointAbility(spellName)
+  if not spellName then return false end
+  return combopointAbilities[spellName] ~= nil
+end
+
+-- Get combo-point spell data (base duration and per-CP bonus)
+local function GetComboPointData(spellName)
+  if not spellName then return nil, nil end
+  local cpData = combopointAbilities[spellName]
+  if cpData then
+    return cpData.base, cpData.perCP
+  end
+  return nil, nil
+end
 
 -- Player GUID Cache
 local playerGUID = nil
@@ -1119,6 +1150,7 @@ if hasNampower then
   frame:RegisterEvent("SPELL_GO_SELF")
   frame:RegisterEvent("SPELL_GO_OTHER")
   frame:RegisterEvent("SPELL_FAILED_OTHER")
+  frame:RegisterEvent("SPELL_CAST_EVENT")
   frame:RegisterEvent("AURA_CAST_ON_SELF")
   frame:RegisterEvent("AURA_CAST_ON_OTHER")
   frame:RegisterEvent("DEBUFF_ADDED_OTHER")
@@ -1153,7 +1185,16 @@ if hasNampower then
       
       if not casterGuid or not spellId then return end
       
-      local spellName = SpellInfo and SpellInfo(spellId) or nil
+      -- Get spell name - try Nampower first, then SuperWoW
+      local spellName = nil
+      if GetSpellRec then
+        local rec = GetSpellRec(spellId)
+        spellName = rec and rec.name or nil
+      end
+      if not spellName and SpellInfo then
+        spellName = SpellInfo(spellId)
+      end
+      
       local icon = libdebuff:GetSpellIcon(spellId)
       
       -- Use item icon for item-triggered casts
@@ -1248,12 +1289,68 @@ if hasNampower then
           carnageCheckFrame:Show()
         end
       end
+
+      -- Forward to registered callbacks (e.g. libpredict)
+      if pfUI.libdebuff_spell_go_callbacks then
+        for _, cb in pairs(pfUI.libdebuff_spell_go_callbacks) do
+          cb(spellId, spellName, castRank, casterGuid, targetGuid, event == "SPELL_GO_SELF")
+        end
+      end
       
     elseif event == "SPELL_FAILED_OTHER" then
       local casterGuid = arg1
       
       if casterGuid and pfUI.libdebuff_casts[casterGuid] then
         pfUI.libdebuff_casts[casterGuid] = nil
+      end
+
+      -- Forward to registered callbacks (e.g. libpredict)
+      if pfUI.libdebuff_spell_failed_other_callbacks then
+        for _, cb in pairs(pfUI.libdebuff_spell_failed_other_callbacks) do
+          cb(casterGuid)
+        end
+      end
+      
+    elseif event == "SPELL_CAST_EVENT" then
+      -- Capture combo points BEFORE they're consumed
+      -- This event fires when YOU cast a spell (before server processes it)
+      local success = arg1
+      local spellId = arg2
+      local castType = arg3
+      local targetGuid = arg4
+      
+      if success ~= 1 or not spellId then return end
+      
+      -- Get spell name
+      local spellName = nil
+      if GetSpellRec then
+        local rec = GetSpellRec(spellId)
+        spellName = rec and rec.name or nil
+      end
+      if not spellName and SpellInfo then
+        spellName = SpellInfo(spellId)
+      end
+      
+      -- Store pending cast info for libpredict (heal prediction target tracking)
+      -- This allows libpredict to resolve the correct target for Nampower queued casts,
+      -- where CastSpellByName hook fires while current_cast is set and spell_queue
+      -- cannot be updated. SPELL_CAST_EVENT fires right before SPELLCAST_START.
+      if spellName and targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" then
+        pfUI.libpredict_pending_cast.spellId = spellId
+        pfUI.libpredict_pending_cast.spellName = spellName
+        pfUI.libpredict_pending_cast.targetGuid = targetGuid
+        pfUI.libpredict_pending_cast.time = GetTime()
+      else
+        -- No explicit target - clear pending so libpredict falls back to spell_queue
+        pfUI.libpredict_pending_cast.spellId = nil
+        pfUI.libpredict_pending_cast.spellName = nil
+        pfUI.libpredict_pending_cast.targetGuid = nil
+        pfUI.libpredict_pending_cast.time = nil
+      end
+      
+      -- Only capture CPs for combo-point abilities
+      if spellName and IsComboPointAbility(spellName) then
+        capturedCP = GetComboPoints() or 0
       end
       
     elseif event == "AURA_CAST_ON_SELF" or event == "AURA_CAST_ON_OTHER" then
@@ -1303,18 +1400,31 @@ if hasNampower then
         debugStats.aura_cast = debugStats.aura_cast + 1
       end
       
-      -- CP-based spells: Use GetDuration for our casts
-      if isOurs and combopointAbilities[spellName] then
-        duration = libdebuff:GetDuration(spellName, rankNum)
-      end
-      
-      -- CP-based spells: Force duration=0 for others (unknown!)
-      if not isOurs and combopointAbilities[spellName] then
-        if spellName == "Expose Armor" then
-          duration = 30  -- Fixed duration for Expose Armor
+      -- Combo-point abilities: Calculate duration based on CPs used
+      if IsComboPointAbility(spellName) then
+        if isOurs then
+          -- OWN casts: use captured CPs from SPELL_CAST_EVENT (if available)
+          local cp = capturedCP or 0
+          local base, perCP = GetComboPointData(spellName)
+          if base and perCP then
+            duration = base + cp * perCP
+          else
+            -- Fallback to legacy database
+            duration = libdebuff:GetDuration(spellName, rankNum)
+          end
+          capturedCP = nil  -- consumed
         else
-          duration = 0
+          -- OTHER players: CP unknown, no timer (except Expose Armor = fixed 30s)
+          local base, perCP = GetComboPointData(spellName)
+          if perCP and perCP == 0 and base then
+            duration = base  -- fixed duration (Expose Armor)
+          else
+            duration = 0  -- CP unknown for other players
+          end
         end
+      elseif duration == 0 then
+        -- Non-CP managed spells: use database if AURA_CAST returned 0
+        duration = libdebuff:GetDuration(spellName, rankNum) or 0
       end
       
       -- Store in allAuraCasts

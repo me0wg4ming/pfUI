@@ -1702,6 +1702,18 @@ end
 
 function pfUI.uf.OnEnter()
   if not this.label then return end
+
+  -- Nampower/SuperWoW: Set native mouseover unit for macro/addon compatibility
+  if SetMouseoverUnit then
+    local unitstr = this.label .. this.id
+    -- For GUID-based frames (focus), use the GUID directly
+    if this.label and string.find(this.label, "^0x") then
+      SetMouseoverUnit(this.label)
+    elseif UnitExists(unitstr) then
+      SetMouseoverUnit(unitstr)
+    end
+  end
+
   if this.config.showtooltip == "0" then return end
   GameTooltip_SetDefaultAnchor(GameTooltip, this)
   GameTooltip:SetUnit(this.label .. this.id)
@@ -1709,6 +1721,11 @@ function pfUI.uf.OnEnter()
 end
 
 function pfUI.uf.OnLeave()
+  -- Nampower/SuperWoW: Clear native mouseover unit
+  if SetMouseoverUnit then
+    SetMouseoverUnit()
+  end
+
   GameTooltip:FadeOut()
 end
 

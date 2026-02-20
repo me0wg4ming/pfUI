@@ -17,17 +17,48 @@ end)
 
 -- register focus emulation commands for vanilla
 if pfUI.client > 11200 then return end
+
 SLASH_PFFOCUS1, SLASH_PFFOCUS2 = '/focus', '/pffocus'
 function SlashCmdList.PFFOCUS(msg)
   if not pfUI.uf or not pfUI.uf.focus then return end
 
-  if msg ~= "" then
-    pfUI.uf.focus.unitname = strlower(msg)
-  elseif UnitName("target") then
-    pfUI.uf.focus.unitname = strlower(UnitName("target"))
-  else
+  -- Try GUID-based focus (Turtle WoW native)
+  local unitstr = msg ~= "" and msg or "target"
+  local _, guid = nil, nil
+  
+  if UnitExists then
+    if msg ~= "" then
+      -- When msg is provided, we need to target by name first to get GUID
+      -- Save this for later - for now just use name-based
+      pfUI.uf.focus.unitname = strlower(msg)
+      pfUI.uf.focus.label = nil
+      pfUI.uf.focus.id = nil
+    else
+      -- Get GUID from current target
+      _, guid = UnitExists("target")
+    end
+  end
+  
+  if guid then
+    -- GUID-based focus (works with unitframes API)
     pfUI.uf.focus.unitname = nil
-    pfUI.uf.focus.label = nil
+    pfUI.uf.focus.label = guid
+    pfUI.uf.focus.id = ""
+    
+    -- Update focustarget frame
+    if pfUI.uf.focustarget then
+      pfUI.uf.focustarget.unitname = nil
+      pfUI.uf.focustarget.label = guid .. "target"
+      pfUI.uf.focustarget.id = ""
+    end
+  elseif msg == "" and not guid then
+    -- No target and no msg - clear focus
+    if UnitName("target") then
+      pfUI.uf.focus.unitname = strlower(UnitName("target"))
+    else
+      pfUI.uf.focus.unitname = nil
+      pfUI.uf.focus.label = nil
+    end
   end
 end
 
@@ -53,6 +84,64 @@ function SlashCmdList.PFCASTFOCUS(msg)
     return
   end
 
+  local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
+  
+  -- Check if we have GUID-based focus
+  local focusGUID = pfUI.uf.focus.label
+  local hasGUID = focusGUID and focusGUID ~= ""
+  
+  -- Nampower with NEW unitStr targeting support (no target toggle needed!)
+  if hasGUID and CastSpellByName then
+    if func then
+      -- For lua functions, we still need target toggle (function might use UnitName("target") etc)
+      local _, currentGUID = nil, nil
+      if UnitExists then
+        _, currentGUID = UnitExists("target")
+      end
+      local player = UnitIsUnit("target", "player")
+      
+      -- Target focus by GUID
+      TargetUnit(focusGUID)
+      
+      -- Verify we actually targeted the focus
+      local _, targetGUID = nil, nil
+      if UnitExists then
+        _, targetGUID = UnitExists("target")
+      end
+      
+      if targetGUID ~= focusGUID then
+        -- Restore original target and fail
+        if currentGUID then
+          TargetUnit(currentGUID)
+        elseif player then
+          TargetUnit("player")
+        else
+          TargetLastTarget()
+        end
+        UIErrorsFrame:AddMessage(SPELL_FAILED_BAD_TARGETS, 1, 0, 0)
+        return
+      end
+      
+      -- Execute function
+      func()
+      
+      -- Restore original target
+      if currentGUID then
+        TargetUnit(currentGUID)
+      elseif player then
+        TargetUnit("player")
+      else
+        TargetLastTarget()
+      end
+    else
+      -- Direct spell cast with GUID - NO TARGET TOGGLE! 🎉
+      CastSpellByName(msg, focusGUID)
+    end
+    
+    return
+  end
+  
+  -- Fallback: Classic target-swapping method (name-based or GUID-based)
   local skiptarget = false
   local player = UnitIsUnit("target", "player")
   local unitname = ""
@@ -77,11 +166,14 @@ function SlashCmdList.PFCASTFOCUS(msg)
     end
   end
 
-  local func = loadstring(msg or "")
   if func then
     func()
   else
-    CastSpellByName(msg)
+    if CastSpellByNameNoQueue then
+      CastSpellByNameNoQueue(msg)
+    else
+      CastSpellByName(msg)
+    end
   end
 
   if skiptarget == false then
@@ -98,9 +190,39 @@ SLASH_PFSWAPFOCUS1, SLASH_PFSWAPFOCUS2 = '/swapfocus', '/pfswapfocus'
 function SlashCmdList.PFSWAPFOCUS(msg)
   if not pfUI.uf or not pfUI.uf.focus then return end
 
-  local oldunit = UnitExists("target") and strlower(UnitName("target"))
-  if oldunit and pfUI.uf.focus.unitname then
-    TargetByName(pfUI.uf.focus.unitname)
-    pfUI.uf.focus.unitname = oldunit
+  -- Try GUID-based swap
+  local _, guid = nil, nil
+  if UnitExists then
+    _, guid = UnitExists("target")
+  end
+  
+  if guid then
+    -- Save old focus GUID
+    local oldlabel = pfUI.uf.focus.label or ""
+    local oldid = pfUI.uf.focus.id or ""
+    
+    -- Set new focus to current target
+    pfUI.uf.focus.unitname = nil
+    pfUI.uf.focus.label = guid
+    pfUI.uf.focus.id = ""
+    
+    -- Update focustarget
+    if pfUI.uf.focustarget then
+      pfUI.uf.focustarget.unitname = nil
+      pfUI.uf.focustarget.label = guid .. "target"
+      pfUI.uf.focustarget.id = ""
+    end
+    
+    -- Target old focus
+    if oldlabel and oldlabel ~= "" then
+      TargetUnit(oldlabel .. oldid)
+    end
+  else
+    -- Fallback: name-based swap
+    local oldunit = UnitExists("target") and strlower(UnitName("target"))
+    if oldunit and pfUI.uf.focus.unitname then
+      TargetByName(pfUI.uf.focus.unitname)
+      pfUI.uf.focus.unitname = oldunit
+    end
   end
 end
