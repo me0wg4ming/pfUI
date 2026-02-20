@@ -33,9 +33,10 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local sw_texture   = C.unitframes.swingtimertexture or "Interface\\AddOns\\pfUI\\img\\bar"
   local sw_showtext  = C.unitframes.swingtimertext ~= "0"
   local sw_showlabel = C.unitframes.swingtimerlabel ~= "0"
-  local sw_showoh    = C.unitframes.swingtimeroffhand ~= "0"
+  local sw_showoh     = C.unitframes.swingtimeroffhand ~= "0"
   local sw_showranged = C.unitframes.swingtimerranged ~= "0"
-  local sw_fontsize  = tonumber(C.unitframes.swingtimerfontsize) or 12
+  local sw_fontsize   = tonumber(C.unitframes.swingtimerfontsize) or 12
+  local isHunter = UnitClass("player") == "Hunter"
   local sw_hsqueue   = C.unitframes.swingtimerhsqueue ~= "0"
 
   -- Parse color strings "r,g,b,a" into components
@@ -51,6 +52,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local mhR, mhG, mhB, mhA = ParseColor(C.unitframes.swingtimermhcolor, 0.8, 0.3, 0.3, 1)
   local ohR, ohG, ohB, ohA = ParseColor(C.unitframes.swingtimerohcolor, 0.3, 0.8, 0.3, 1)
   local raR, raG, raB, raA = ParseColor(C.unitframes.swingtimerrangedcolor, 0.3, 0.6, 1.0, 1)
+  local rwR, rwG, rwB, rwA = ParseColor(C.unitframes.swingtimerrangedwarncolor, 0.9, 0.0, 0.0, 1)
 
   -- Store default MH color for HS/Cleave restore
   local mhDefaultR, mhDefaultG, mhDefaultB = mhR, mhG, mhB
@@ -109,7 +111,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   CreateBackdrop(pfUI.swingtimer.offhand)
   CreateBackdropShadow(pfUI.swingtimer.offhand)
 
-  -- Ranged bar (bow/gun/crossbow - triggered by SPELL_GO_SELF for Auto Shot)
+  -- Ranged bar (bow/gun/crossbow - triggered by SPELL_GO_SELF for Auto Shot / Throw)
   pfUI.swingtimer.ranged = CreateFrame("StatusBar", "pfSwingTimerRanged", UIParent)
   pfUI.swingtimer.ranged:SetPoint("TOP", pfUI.swingtimer.offhand, "BOTTOM", 0, -4)
   pfUI.swingtimer.ranged:SetWidth(sw_width)
@@ -135,6 +137,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   CreateBackdrop(pfUI.swingtimer.ranged)
   CreateBackdropShadow(pfUI.swingtimer.ranged)
+
+  -- HS/Cleave queue state
   local hsQueued           = false
   local cleaveQueued       = false
   local isWarrior          = false
@@ -210,7 +214,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
     local mhSpeed = GetUnitField("player", "baseAttackTime")
     local ohSpeed = GetUnitField("player", "offhandAttackTime")
-    local raSpeed = GetUnitField("player", "rangedAttackTime")
 
     if mhSpeed and mhSpeed > 0 then
       swingState.mainhand.speed = mhSpeed / 1000
@@ -222,6 +225,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       swingState.offhand.speed = 0
     end
 
+    local raSpeed = GetUnitField("player", "rangedAttackTime")
     if raSpeed and raSpeed > 0 then
       swingState.ranged.speed = raSpeed / 1000
     else
@@ -261,11 +265,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     if not sw_showranged then return end
     UpdateWeaponSpeeds()
     if swingState.ranged.speed <= 0 then return end
-
-    -- Ranged replaces MH: cancel mainhand swing
     swingState.mainhand.swinging = false
     pfUI.swingtimer.mainhand:Hide()
-
     swingState.ranged.nextSwing = GetTime() + swingState.ranged.speed
     swingState.ranged.swinging  = true
     pfUI.swingtimer.ranged:Show()
@@ -330,6 +331,13 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       else
         local progress = 1 - (remaining / swingState.ranged.speed)
         pfUI.swingtimer.ranged:SetValue(progress)
+        if isHunter then
+          if remaining < 0.5 then
+            pfUI.swingtimer.ranged:SetStatusBarColor(rwR, rwG, rwB, rwA)
+          else
+            pfUI.swingtimer.ranged:SetStatusBarColor(raR, raG, raB, raA)
+          end
+        end
         if sw_showtext then
           pfUI.swingtimer.ranged.text:SetText(string.format("%.1f", remaining))
         end
@@ -420,7 +428,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       RebuildQueueSlotCache()
 
     elseif event == "SPELL_GO_SELF" then
-      -- Ranged shot (Auto Shot=75, Throw=2764) → ranged swing timer, replaces MH
       local spellId = arg2 or 0
       if RANGED_SPELLIDS[spellId] then
         StartRangedSwing()
