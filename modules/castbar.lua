@@ -22,7 +22,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
     cb:SetHeight(C.global.font_size * 1.5)
     cb:SetFrameStrata("MEDIUM")
-    cb:SetFrameLevel(8)
+    cb:SetFrameLevel(18)
 
     cb.unitstr = unitstr
     cb.unitname = unitname
