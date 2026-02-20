@@ -12,7 +12,14 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   -- Swing state
   local swingState = {
     mainhand = { speed = 0, nextSwing = 0, swinging = false },
-    offhand = { speed = 0, nextSwing = 0, swinging = false }
+    offhand  = { speed = 0, nextSwing = 0, swinging = false },
+    ranged   = { speed = 0, nextSwing = 0, swinging = false },
+  }
+
+  -- Ranged spell IDs that trigger the ranged swing timer (replaces MH)
+  local RANGED_SPELLIDS = {
+    [75]   = true,  -- Auto Shot (Hunter)
+    [2764] = true,  -- Throw (Warrior/Rogue)
   }
 
   -- Create container frame
@@ -27,6 +34,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local sw_showtext  = C.unitframes.swingtimertext ~= "0"
   local sw_showlabel = C.unitframes.swingtimerlabel ~= "0"
   local sw_showoh    = C.unitframes.swingtimeroffhand ~= "0"
+  local sw_showranged = C.unitframes.swingtimerranged ~= "0"
   local sw_fontsize  = tonumber(C.unitframes.swingtimerfontsize) or 12
   local sw_hsqueue   = C.unitframes.swingtimerhsqueue ~= "0"
 
@@ -42,6 +50,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   local mhR, mhG, mhB, mhA = ParseColor(C.unitframes.swingtimermhcolor, 0.8, 0.3, 0.3, 1)
   local ohR, ohG, ohB, ohA = ParseColor(C.unitframes.swingtimerohcolor, 0.3, 0.8, 0.3, 1)
+  local raR, raG, raB, raA = ParseColor(C.unitframes.swingtimerrangedcolor, 0.3, 0.6, 1.0, 1)
 
   -- Store default MH color for HS/Cleave restore
   local mhDefaultR, mhDefaultG, mhDefaultB = mhR, mhG, mhB
@@ -100,7 +109,32 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   CreateBackdrop(pfUI.swingtimer.offhand)
   CreateBackdropShadow(pfUI.swingtimer.offhand)
 
-  -- HS/Cleave queue state
+  -- Ranged bar (bow/gun/crossbow - triggered by SPELL_GO_SELF for Auto Shot)
+  pfUI.swingtimer.ranged = CreateFrame("StatusBar", "pfSwingTimerRanged", UIParent)
+  pfUI.swingtimer.ranged:SetPoint("TOP", pfUI.swingtimer.offhand, "BOTTOM", 0, -4)
+  pfUI.swingtimer.ranged:SetWidth(sw_width)
+  pfUI.swingtimer.ranged:SetHeight(sw_height)
+  pfUI.swingtimer.ranged:SetMinMaxValues(0, 1)
+  pfUI.swingtimer.ranged:SetValue(0)
+  pfUI.swingtimer.ranged:SetStatusBarTexture(sw_texture)
+  pfUI.swingtimer.ranged:SetStatusBarColor(raR, raG, raB, raA)
+  pfUI.swingtimer.ranged:Hide()
+
+  pfUI.swingtimer.ranged.text = pfUI.swingtimer.ranged:CreateFontString("Status", "DIALOG", "GameFontNormal")
+  pfUI.swingtimer.ranged.text:SetPoint("CENTER", pfUI.swingtimer.ranged, "CENTER", 0, 0)
+  pfUI.swingtimer.ranged.text:SetFont(pfUI.font_default, sw_fontsize, "OUTLINE")
+  pfUI.swingtimer.ranged.text:SetTextColor(1, 1, 1, 1)
+  pfUI.swingtimer.ranged.text:SetText("")
+  if not sw_showtext then pfUI.swingtimer.ranged.text:Hide() end
+
+  pfUI.swingtimer.ranged.label = pfUI.swingtimer.ranged:CreateFontString("Status", "DIALOG", "GameFontNormal")
+  pfUI.swingtimer.ranged.label:SetPoint("RIGHT", pfUI.swingtimer.ranged, "LEFT", -4, 0)
+  pfUI.swingtimer.ranged.label:SetFont(pfUI.font_default, sw_fontsize, "OUTLINE")
+  pfUI.swingtimer.ranged.label:SetTextColor(0.8, 0.8, 0.8, 1)
+  pfUI.swingtimer.ranged.label:SetText(sw_showlabel and "Ra" or "")
+
+  CreateBackdrop(pfUI.swingtimer.ranged)
+  CreateBackdropShadow(pfUI.swingtimer.ranged)
   local hsQueued           = false
   local cleaveQueued       = false
   local isWarrior          = false
@@ -176,6 +210,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
     local mhSpeed = GetUnitField("player", "baseAttackTime")
     local ohSpeed = GetUnitField("player", "offhandAttackTime")
+    local raSpeed = GetUnitField("player", "rangedAttackTime")
 
     if mhSpeed and mhSpeed > 0 then
       swingState.mainhand.speed = mhSpeed / 1000
@@ -185,6 +220,12 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       swingState.offhand.speed = ohSpeed / 1000
     else
       swingState.offhand.speed = 0
+    end
+
+    if raSpeed and raSpeed > 0 then
+      swingState.ranged.speed = raSpeed / 1000
+    else
+      swingState.ranged.speed = 0
     end
   end
 
@@ -213,6 +254,21 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       pfUI.swingtimer.mainhand:Show()
     end
 
+    pfUI.swingtimer:Show()
+  end
+
+  local function StartRangedSwing()
+    if not sw_showranged then return end
+    UpdateWeaponSpeeds()
+    if swingState.ranged.speed <= 0 then return end
+
+    -- Ranged replaces MH: cancel mainhand swing
+    swingState.mainhand.swinging = false
+    pfUI.swingtimer.mainhand:Hide()
+
+    swingState.ranged.nextSwing = GetTime() + swingState.ranged.speed
+    swingState.ranged.swinging  = true
+    pfUI.swingtimer.ranged:Show()
     pfUI.swingtimer:Show()
   end
 
@@ -265,8 +321,28 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       pfUI.swingtimer.offhand:Hide()
     end
 
+    if sw_showranged and swingState.ranged.swinging then
+      local remaining = swingState.ranged.nextSwing - now
+
+      if remaining <= 0 then
+        swingState.ranged.swinging = false
+        pfUI.swingtimer.ranged:Hide()
+      else
+        local progress = 1 - (remaining / swingState.ranged.speed)
+        pfUI.swingtimer.ranged:SetValue(progress)
+        if sw_showtext then
+          pfUI.swingtimer.ranged.text:SetText(string.format("%.1f", remaining))
+        end
+        anyActive = true
+      end
+    elseif not sw_showranged then
+      pfUI.swingtimer.ranged:Hide()
+    end
+
     if not anyActive then
-      if not pfUI.swingtimer.mainhand:IsShown() and not pfUI.swingtimer.offhand:IsShown() then
+      if not pfUI.swingtimer.mainhand:IsShown()
+        and not pfUI.swingtimer.offhand:IsShown()
+        and not pfUI.swingtimer.ranged:IsShown() then
         this:Hide()
       end
     end
@@ -282,12 +358,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
   events:RegisterEvent("UNIT_DIED")
   events:RegisterEvent("SPELL_QUEUE_EVENT")
+  events:RegisterEvent("SPELL_GO_SELF")
 
   local function ResetSwingTimers()
     swingState.mainhand.swinging = false
-    swingState.offhand.swinging = false
+    swingState.offhand.swinging  = false
+    swingState.ranged.swinging   = false
     pfUI.swingtimer.mainhand:Hide()
     pfUI.swingtimer.offhand:Hide()
+    pfUI.swingtimer.ranged:Hide()
     pfUI.swingtimer:Hide()
   end
 
@@ -340,12 +419,23 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       UpdateWeaponSpeeds()
       RebuildQueueSlotCache()
 
+    elseif event == "SPELL_GO_SELF" then
+      -- Ranged shot (Auto Shot=75, Throw=2764) → ranged swing timer, replaces MH
+      local spellId = arg2 or 0
+      if RANGED_SPELLIDS[spellId] then
+        StartRangedSwing()
+      end
+
     elseif event == "UNIT_INVENTORY_CHANGED" then
       if arg1 and arg1 ~= "player" then return end
       UpdateWeaponSpeeds()
       if swingState.offhand.speed == 0 then
         swingState.offhand.swinging = false
         pfUI.swingtimer.offhand:Hide()
+      end
+      if swingState.ranged.speed == 0 then
+        swingState.ranged.swinging = false
+        pfUI.swingtimer.ranged:Hide()
       end
 
     elseif event == "ACTIONBAR_SLOT_CHANGED" then
