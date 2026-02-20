@@ -252,7 +252,7 @@ end)
 function libpredict:ParseComm(sender, msg)
   local msgtype, target, heal, time, rank
 
-  if msg == "HealStop" or msg == "GrpHealstop" then
+  if msg == "HealStop" or msg == "Healstop" or msg == "GrpHealstop" then
     msgtype = "Stop"
     -- DEBUG: Log when HealStop received
     if libpredict.debug then
@@ -1018,7 +1018,7 @@ libpredict.sender:SetScript("OnEvent", function()
       if libpredict.debug then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[libpredict TX]|r Sending HealStop (via " .. event .. ") to group")
       end
-      libpredict.sender:SendHealCommMsg("HealStop")
+      libpredict.sender:SendHealCommMsg("Healstop")
       libpredict.sender.healing = nil
     elseif libpredict.sender.resurrecting then
       local target = this.current_cast_target or senttarget or spell_queue[3]
@@ -1047,7 +1047,7 @@ libpredict.sender:SetScript("OnEvent", function()
       if libpredict.debug then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[libpredict TX]|r Sending HealStop to group (SPELL_FAILED_SELF)")
       end
-      libpredict.sender:SendHealCommMsg("HealStop")
+      libpredict.sender:SendHealCommMsg("Healstop")
       libpredict.sender.healing = nil
     elseif libpredict.sender.resurrecting then
       local target = this.current_cast_target or senttarget or spell_queue[3]
