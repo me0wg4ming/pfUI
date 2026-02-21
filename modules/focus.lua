@@ -175,11 +175,7 @@ function SlashCmdList.PFCASTFOCUS(msg)
   if func then
     func()
   else
-    if CastSpellByNameNoQueue then
-      CastSpellByNameNoQueue(msg)
-    else
-      CastSpellByName(msg)
-    end
+    CastSpellByName(msg)
   end
 
   if skiptarget == false then
