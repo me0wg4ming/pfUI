@@ -314,14 +314,28 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     pfUI.swingtimer.mainhand:Hide()
     swingState.ranged.nextSwing = GetTime() + swingState.ranged.speed
     swingState.ranged.swinging  = true
-    -- Reset for new cycle: start full
-    pfUI.swingtimer.ranged.left:SetWidth(sw_width / 2)
-    pfUI.swingtimer.ranged.left:SetTexCoord(0, 0.5, 0, 1)
+
+    if isHunter then
+      -- Hunter: left/right halves anchored to CENTER, shrink outside->in
+      pfUI.swingtimer.ranged.left:ClearAllPoints()
+      pfUI.swingtimer.ranged.left:SetPoint("RIGHT", pfUI.swingtimer.ranged, "CENTER", 0, 0)
+      pfUI.swingtimer.ranged.left:SetWidth(sw_width / 2)
+      pfUI.swingtimer.ranged.left:SetTexCoord(0, 0.5, 0, 1)
+      pfUI.swingtimer.ranged.right:SetWidth(sw_width / 2)
+      pfUI.swingtimer.ranged.right:SetTexCoord(0.5, 1, 0, 1)
+    else
+      -- Non-Hunter: left anchored to TOPLEFT, grows left->right like MH/OH
+      pfUI.swingtimer.ranged.left:ClearAllPoints()
+      pfUI.swingtimer.ranged.left:SetPoint("TOPLEFT", pfUI.swingtimer.ranged, "TOPLEFT", 0, 0)
+      pfUI.swingtimer.ranged.left:SetWidth(0.1)
+      pfUI.swingtimer.ranged.left:Hide()
+      pfUI.swingtimer.ranged.left:SetTexCoord(0, 0, 0, 1)
+      pfUI.swingtimer.ranged.right:SetWidth(0.1)
+      pfUI.swingtimer.ranged.right:Hide()
+    end
+
     pfUI.swingtimer.ranged.left:SetVertexColor(raR, raG, raB, raA)
-    pfUI.swingtimer.ranged.right:SetWidth(sw_width / 2)
-    pfUI.swingtimer.ranged.right:SetTexCoord(0.5, 1, 0, 1)
     pfUI.swingtimer.ranged.right:SetVertexColor(raR, raG, raB, raA)
-    
     pfUI.swingtimer.ranged.warn:SetWidth(1)
     pfUI.swingtimer.ranged.warn:Hide()
     pfUI.swingtimer.ranged:Show()
@@ -402,24 +416,35 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
             local p = elapsed / phase1dur  -- 0 = full, 1 = gone
             local w = halfW * (1 - p)
             if w < 1 then w = 1 end
+            pfUI.swingtimer.ranged.left:Show()
             pfUI.swingtimer.ranged.left:SetWidth(w)
             pfUI.swingtimer.ranged.left:SetTexCoord(0, (1 - p) * 0.5, 0, 1)
             pfUI.swingtimer.ranged.left:SetVertexColor(raR, raG, raB, raA)
+            pfUI.swingtimer.ranged.right:Show()
             pfUI.swingtimer.ranged.right:SetWidth(w)
             pfUI.swingtimer.ranged.right:SetTexCoord(1 - (1 - p) * 0.5, 1, 0, 1)
             pfUI.swingtimer.ranged.right:SetVertexColor(raR, raG, raB, raA)
-            pfUI.swingtimer.ranged.warn:SetWidth(1)
             pfUI.swingtimer.ranged.warn:Hide()
           else
             -- Phase 2: warning color grows from center->outside
             local p = 1 - (remaining / DEADZONE)  -- 0 = nothing, 1 = full
             local w = sw_width * p
             if w < 1 then w = 1 end
-            pfUI.swingtimer.ranged.left:SetWidth(0.1)
-            pfUI.swingtimer.ranged.right:SetWidth(0.1)
+            pfUI.swingtimer.ranged.left:Hide()
+            pfUI.swingtimer.ranged.right:Hide()
             pfUI.swingtimer.ranged.warn:SetWidth(w)
             pfUI.swingtimer.ranged.warn:Show()
           end
+        else
+          -- Non-Hunter (Warrior Throw, Rogue): simple left->right fill like MH/OH
+          local progress = 1 - (remaining / swingState.ranged.speed)
+          local w = sw_width * progress
+          if w < 1 then w = 1 end
+          pfUI.swingtimer.ranged.left:Show()
+          pfUI.swingtimer.ranged.left:SetWidth(w)
+          pfUI.swingtimer.ranged.left:SetTexCoord(0, progress, 0, 1)
+          pfUI.swingtimer.ranged.right:Hide()
+          pfUI.swingtimer.ranged.warn:Hide()
         end
         if sw_showtext then
           if isHunter and remaining <= 0.5 then
