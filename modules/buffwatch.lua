@@ -361,14 +361,6 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
                     frame.buffs[buffIndex][7] = casterGuid  -- Caster GUID (unique per caster!)
                     frame.buffs[buffIndex][8] = auraSlot    -- STABLE aura slot (33-48)
                     
-                    -- DEBUG: Show ALL Rips (not throttled)
-                    if name == "Rip" then
-                      DEFAULT_CHAT_FRAME:AddMessage(string.format(
-                        "|cff00ff00[RefreshBuff #%d]|r Rip: displaySlot=%d auraSlot=%d caster=%s timeleft=%.1f",
-                        buffIndex, displaySlot, auraSlot, casterGuid and string.sub(tostring(casterGuid), -8) or "nil", timeleft or -1
-                      ))
-                    end
-                    
                     buffIndex = buffIndex + 1
                   end
                 end
@@ -402,20 +394,6 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
           uuid = data[4] .. data[3] .. tostring(stableId)
         end
         
-        -- DEBUG (throttled)
-        if data[3] == "Rip" then
-          local now = GetTime()
-          if not frame.lastUuidDebugTime or (now - frame.lastUuidDebugTime) > 1.0 then
-            frame.lastUuidDebugTime = now
-            DEFAULT_CHAT_FRAME:AddMessage(string.format(
-              "|cffff00ff[UUID]|r Rip: auraSlot=%s caster=%s uuid_end=%s timeleft=%.1f",
-              tostring(data[8] or "nil"), 
-              data[7] and string.sub(tostring(data[7]), -8) or "nil",
-              string.sub(uuid, -16), data[1]
-            ))
-          end
-        end
-
         -- update bar data
         frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)
         frame.bars[bar].id = data[2]
