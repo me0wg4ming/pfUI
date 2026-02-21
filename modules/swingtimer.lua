@@ -36,7 +36,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local sw_showoh     = C.unitframes.swingtimeroffhand ~= "0"
   local sw_showranged = C.unitframes.swingtimerranged ~= "0"
   local sw_fontsize   = tonumber(C.unitframes.swingtimerfontsize) or 12
-  local isHunter = UnitClass("player") == "Hunter"
   local sw_hsqueue   = C.unitframes.swingtimerhsqueue ~= "0"
 
   -- Parse color strings "r,g,b,a" into components
@@ -53,6 +52,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local ohR, ohG, ohB, ohA = ParseColor(C.unitframes.swingtimerohcolor, 0.3, 0.8, 0.3, 1)
   local raR, raG, raB, raA = ParseColor(C.unitframes.swingtimerrangedcolor, 0.3, 0.6, 1.0, 1)
   local rwR, rwG, rwB, rwA = ParseColor(C.unitframes.swingtimerrangedwarncolor, 0.9, 0.0, 0.0, 1)
+  local isHunter = UnitClass("player") == "Hunter"
 
   -- Store default MH color for HS/Cleave restore
   local mhDefaultR, mhDefaultG, mhDefaultB = mhR, mhG, mhB
@@ -209,6 +209,17 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   -- returns nil on first login before the item cache is populated, causing
   -- offhand.speed to stay 0. Now we just read offhandAttackTime directly,
   -- same as the old working version.
+  -- Check offhand slot for an actual weapon. GetItemInfo may return nil on first
+  -- login (item cache not yet populated), so we return nil in that case to signal
+  -- "unknown" rather than false, allowing the caller to keep the previous value.
+  local function GetOffhandWeaponStatus()
+    local link = GetInventoryItemLink("player", 17)
+    if not link then return false end          -- slot empty -> no OH weapon
+    local _, _, _, _, _, itype = GetItemInfo(link)
+    if not itype then return nil end           -- cache miss -> unknown
+    return itype == "Weapon"
+  end
+
   local function UpdateWeaponSpeeds()
     if not GetUnitField then return end
 
@@ -219,7 +230,10 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       swingState.mainhand.speed = mhSpeed / 1000
     end
 
-    if ohSpeed and ohSpeed > 0 then
+    local hasOH = GetOffhandWeaponStatus()
+    if hasOH == nil then
+      -- item cache not ready yet, keep existing offhand.speed unchanged
+    elseif hasOH and ohSpeed and ohSpeed > 0 then
       swingState.offhand.speed = ohSpeed / 1000
     else
       swingState.offhand.speed = 0
@@ -265,6 +279,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     if not sw_showranged then return end
     UpdateWeaponSpeeds()
     if swingState.ranged.speed <= 0 then return end
+    -- Ranged replaces MH: cancel mainhand swing
     swingState.mainhand.swinging = false
     pfUI.swingtimer.mainhand:Hide()
     swingState.ranged.nextSwing = GetTime() + swingState.ranged.speed
@@ -423,7 +438,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     elseif event == "PLAYER_ENTERING_WORLD" then
       local _, class = UnitClass("player")
       isWarrior  = (class == "WARRIOR")
-      playerGUID = UnitExists("player")
+      local _, guid = UnitExists("player")
+      playerGUID = guid
       UpdateWeaponSpeeds()
       RebuildQueueSlotCache()
 
