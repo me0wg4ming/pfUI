@@ -115,7 +115,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   -- Hunter uses a special "close from outside->in, open inside->out" animation
   -- instead of a normal left->right StatusBar fill.
   pfUI.swingtimer.ranged = CreateFrame("Frame", "pfSwingTimerRanged", UIParent)
-  pfUI.swingtimer.ranged:SetPoint("TOP", pfUI.swingtimer.offhand, "BOTTOM", 0, -4)
+  pfUI.swingtimer.ranged:SetPoint("CENTER", UIParent, "CENTER", 0, -120)
   pfUI.swingtimer.ranged:SetWidth(sw_width)
   pfUI.swingtimer.ranged:SetHeight(sw_height)
   pfUI.swingtimer.ranged:Hide()
@@ -228,6 +228,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   end
 
   UpdateMovable(pfUI.swingtimer.mainhand)
+  UpdateMovable(pfUI.swingtimer.ranged)
 
   -- VERSION B TEST: HasOffhandWeapon() removed.
   -- The original used GetItemInfo() to detect OH weapon type, but GetItemInfo()
@@ -237,12 +238,19 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   -- Check offhand slot for an actual weapon. GetItemInfo may return nil on first
   -- login (item cache not yet populated), so we return nil in that case to signal
   -- "unknown" rather than false, allowing the caller to keep the previous value.
-  local function GetOffhandWeaponStatus()
-    local link = GetInventoryItemLink("player", 17)
-    if not link then return false end          -- slot empty -> no OH weapon
-    local _, _, _, _, _, itype = GetItemInfo(link)
-    if not itype then return nil end           -- cache miss -> unknown
-    return itype == "Weapon"
+  -- inventoryType 13 = INVTYPE_WEAPONOFFHAND, 21 = INVTYPE_WEAPON (one-hand, dual wieldable)
+  -- Shields = 14, held-in-hand = 23, everything else = no swing
+  local OH_WEAPON_TYPES = { [13]=true, [21]=true }
+
+  local function HasOffhandWeapon()
+    local l = GetInventoryItemLink("player", 17)
+    if not l then return false end
+    local _, _, id = string.find(l, "item:(%d+)")
+    id = tonumber(id)
+    if not id then return false end
+    local s = GetItemStats and GetItemStats(id)
+    if not s then return false end
+    return OH_WEAPON_TYPES[s.inventoryType] == true
   end
 
   local function UpdateWeaponSpeeds()
@@ -255,10 +263,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       swingState.mainhand.speed = mhSpeed / 1000
     end
 
-    local hasOH = GetOffhandWeaponStatus()
-    if hasOH == nil then
-      -- item cache not ready yet, keep existing offhand.speed unchanged
-    elseif hasOH and ohSpeed and ohSpeed > 0 then
+    if HasOffhandWeapon() and ohSpeed and ohSpeed > 0 then
       swingState.offhand.speed = ohSpeed / 1000
     else
       swingState.offhand.speed = 0
