@@ -328,7 +328,11 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     pfUI.swingtimer:Show()
   end
 
+  local swingThrottle = 0
   pfUI.swingtimer:SetScript("OnUpdate", function()
+    swingThrottle = swingThrottle + arg1
+    if swingThrottle < 0.016 then return end
+    swingThrottle = 0
     local now = GetTime()
     local anyActive = false
 
