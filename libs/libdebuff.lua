@@ -1768,6 +1768,13 @@ if hasNampower then
         endTime = castTime and (GetTime() + castTime / 1000) or nil,
         event = "START"
       }
+
+      -- Forward SPELL_START_OTHER to registered callbacks (e.g. libpredict rez tracking)
+      if event == "SPELL_START_OTHER" and pfUI.libdebuff_spell_start_other_callbacks then
+        for _, cb in pairs(pfUI.libdebuff_spell_start_other_callbacks) do
+          cb(spellId, spellName, casterGuid, arg4)
+        end
+      end
       
     elseif event == "SPELL_GO_SELF" or event == "SPELL_GO_OTHER" then
       local itemId = arg1

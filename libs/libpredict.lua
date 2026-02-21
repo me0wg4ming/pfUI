@@ -34,9 +34,30 @@ local libdebuff_available = (pfUI.api.libdebuff and pfUI.api.libdebuff.GetBestAu
 local hasNampower = GetNampowerVersion ~= nil
 
 local senttarget
+
 local heals, ress, events, hots = {}, {}, {}, {}
+local ress_timers = {}   -- [expiry_timestamp] = {target, sender}
 local ressGuidToName = {}  -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
 local healGuidToName = {}  -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
+
+local function GuidToName(guid)
+  if not guid then return nil end
+  local _, g = UnitExists("player")
+  if g == guid then return UnitName("player") end
+  for i = 1, GetNumRaidMembers() do
+    local unit = "raid" .. i
+    local _, g = UnitExists(unit)
+    if g == guid then return UnitName(unit) end
+  end
+  for i = 1, GetNumPartyMembers() do
+    local unit = "party" .. i
+    local _, g = UnitExists(unit)
+    if g == guid then return UnitName(unit) end
+  end
+  local _, g = UnitExists("target")
+  if g == guid then return UnitName("target") end
+  return nil
+end
 
 local PRAYER_OF_HEALING
 do -- Prayer of Healing
@@ -132,55 +153,90 @@ libpredict:SetScript("OnEvent", function()
     local name = UnitName(arg1)
     if name and ress[name] and not UnitIsDeadOrGhost(arg1) then
       ress[name] = nil
+      if pfUI.uf and pfUI.uf.frames then
+        for _, f in pairs(pfUI.uf.frames) do
+          if f.unit and UnitName(f.unit) == name then
+            f.update_full = true
+          end
+        end
+      end
     end
   end
 end)
 
 -- Register with libdebuff for event forwarding (avoids double event registration)
 if hasNampower then
-  -- SPELL_GO: HoT detection (SELF) + Rez tracking (OTHER)
+  -- SPELL_GO: HoT detection (SELF) + Rez done (OTHER)
   pfUI.libdebuff_spell_go_callbacks = pfUI.libdebuff_spell_go_callbacks or {}
   pfUI.libdebuff_spell_go_callbacks["libpredict"] = function(spellId, spellName, rank, casterGuid, targetGuid, isSelf)
     -- Own instant HoTs (Rejuvenation, Renew)
     if isSelf then
       local hotType = SPELL_IDS[spellId]
-      if not hotType then return end
-      local targetUnit = UnitExists(targetGuid)
-      local targetName = targetUnit and UnitName(targetUnit)
-      if not targetName then return end
-      local duration
-      if hotType == "Reju" then
-        duration = rejuvDuration or 12
-      elseif hotType == "Renew" then
-        duration = renewDuration or 15
-      end
-      -- Use GetSpellRec for rank if available (experimental)
-      if not rank and GetSpellRec then
-        local data = GetSpellRec(spellId)
-        if data and data.rank and data.rank ~= "" then
-          rank = tonumber((string.gsub(data.rank, "Rank ", ""))) or nil
+      if hotType then
+        local targetName = GuidToName(targetGuid)
+        if not targetName then return end
+        local duration
+        if hotType == "Reju" then
+          duration = rejuvDuration or 12
+        elseif hotType == "Renew" then
+          duration = renewDuration or 15
+        end
+        if not rank and GetSpellRec then
+          local data = GetSpellRec(spellId)
+          if data and data.rank and data.rank ~= "" then
+            rank = tonumber((string.gsub(data.rank, "Rank ", ""))) or nil
+          end
+        end
+        local playerName = UnitName("player")
+        libpredict:Hot(playerName, targetName, hotType, duration, nil, "SPELL_GO_SELF", rank)
+        local rankStr = rank and tostring(rank) or "0"
+        if libpredict.sender and libpredict.sender.SendHealCommMsg then
+          libpredict.sender:SendHealCommMsg(hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/")
+        elseif GetNumRaidMembers() > 0 then
+          SendAddonMessage("HealComm", hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/", "RAID")
+        elseif GetNumPartyMembers() > 0 then
+          SendAddonMessage("HealComm", hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/", "PARTY")
         end
       end
-      local playerName = UnitName("player")
-      libpredict:Hot(playerName, targetName, hotType, duration, nil, "SPELL_GO_SELF", rank)
-      local rankStr = rank and tostring(rank) or "0"
-      if libpredict.sender and libpredict.sender.SendHealCommMsg then
-        libpredict.sender:SendHealCommMsg(hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/")
-      elseif GetNumRaidMembers() > 0 then
-        SendAddonMessage("HealComm", hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/", "RAID")
-      elseif GetNumPartyMembers() > 0 then
-        SendAddonMessage("HealComm", hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/", "PARTY")
+
+      -- Own rez completed (SPELL_GO_SELF = server confirmed)
+      if L["resurrections"][spellName] and casterGuid then
+        -- SPELL_GO_SELF may also have targetGuid=0x0 for rez spells
+        local targetName = nil
+        if targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" then
+          targetName = GuidToName(targetGuid)
+        end
+        -- Fallback: use target stored from SPELLCAST_START / spell_queue
+        if not targetName then
+          targetName = libpredict.sender.resurrecting_target
+        end
+        if targetName then
+          local playerName = UnitName("player")
+          libpredict:Ress(playerName, targetName, casterGuid)
+          libpredict.sender:SendHealCommMsg("Resurrection/" .. targetName .. "/done/")
+          libpredict.sender:SendResCommMsg("RES " .. targetName)
+        end
       end
     else
-      -- Other players' rez casts
+      -- Other players' rez completed (SPELL_GO_OTHER)
       if L["resurrections"][spellName] and casterGuid and targetGuid then
-        local casterUnit = UnitExists(casterGuid)
-        local targetUnit = UnitExists(targetGuid)
-        local casterName = casterUnit and UnitName(casterUnit)
-        local targetName = targetUnit and UnitName(targetUnit)
+        local casterName = GuidToName(casterGuid)
+        local targetName = GuidToName(targetGuid)
         if casterName and targetName then
           libpredict:Ress(casterName, targetName, casterGuid)
         end
+      end
+    end
+  end
+
+  -- SPELL_START_OTHER: Rez cast begun by other players
+  pfUI.libdebuff_spell_start_other_callbacks = pfUI.libdebuff_spell_start_other_callbacks or {}
+  pfUI.libdebuff_spell_start_other_callbacks["libpredict"] = function(spellId, spellName, casterGuid, targetGuid)
+    if L["resurrections"][spellName] and casterGuid and targetGuid then
+      local casterName = GuidToName(casterGuid)
+      local targetName = GuidToName(targetGuid)
+      if casterName and targetName then
+        libpredict:RessStart(casterName, targetName, casterGuid)
       end
     end
   end
@@ -190,7 +246,9 @@ if hasNampower then
   pfUI.libdebuff_spell_failed_other_callbacks["libpredict"] = function(casterGuid)
     if not casterGuid then return end
     local ressName = ressGuidToName[casterGuid]
-    if ressName then libpredict:RessStop(ressName) end
+    if ressName then
+      libpredict:RessStop(ressName)
+    end
     local healName = healGuidToName[casterGuid]
     if healName then libpredict:HealStop(healName) end
   end
@@ -206,6 +264,24 @@ libpredict:SetScript("OnUpdate", function()
   for timestamp, targets in pairs(events) do
     if now >= timestamp then
       events[timestamp] = nil
+    end
+  end
+
+  -- process expired ress timers (scheduled exactly at expiry time)
+  for timestamp, info in pairs(ress_timers) do
+    if now >= timestamp then
+      ress_timers[timestamp] = nil
+      local target, sender = info[1], info[2]
+      if ress[target] and type(ress[target][sender]) == "number" and now >= ress[target][sender] then
+        ress[target][sender] = nil
+        if pfUI.uf and pfUI.uf.frames then
+          for _, f in pairs(pfUI.uf.frames) do
+            if f.unit and UnitName(f.unit) == target then
+              f.update_full = true
+            end
+          end
+        end
+      end
     end
   end
 end)
@@ -231,7 +307,11 @@ function libpredict:ParseComm(sender, msg)
       end
 
       if msgobj[1] and msgobj[1] == "Resurrection" and msgobj[2] then
-        msgtype, target = "Ress", msgobj[2]
+        if msgobj[3] == "done" then
+          msgtype, target = "RessDone", msgobj[2]
+        else
+          msgtype, target = "Ress", msgobj[2]
+        end
       end
 
       if msgobj[1] == "Heal" and msgobj[2] then
@@ -321,6 +401,27 @@ function libpredict:ParseChatMessage(sender, msg, comm)
     end
   elseif msgtype == "Ress" then
     -- Try to find sender's GUID for SPELL_FAILED_OTHER tracking
+    local senderGuid
+    for i = 1, GetNumRaidMembers() do
+      local unit = "raid" .. i
+      if UnitName(unit) == sender then
+        local _, guid = UnitExists(unit)
+        senderGuid = guid
+        break
+      end
+    end
+    if not senderGuid then
+      for i = 1, GetNumPartyMembers() do
+        local unit = "party" .. i
+        if UnitName(unit) == sender then
+          local _, guid = UnitExists(unit)
+          senderGuid = guid
+          break
+        end
+      end
+    end
+    libpredict:RessStart(sender, target, senderGuid)
+  elseif msgtype == "RessDone" then
     local senderGuid
     for i = 1, GetNumRaidMembers() do
       local unit = "raid" .. i
@@ -491,22 +592,70 @@ end
 
 function libpredict:Ress(sender, target, senderGuid)
   ress[target] = ress[target] or {}
-  ress[target][sender] = true
+  -- If any sender already has an active timer for this target, don't overwrite
+  local now = GetTime()
+  for s, val in pairs(ress[target]) do
+    if type(val) == "number" and now < val then
+      return
+    end
+  end
+  local expiry = now + 60
+  ress[target][sender] = expiry
+  ress_timers[expiry] = {target, sender}
   if senderGuid then ressGuidToName[senderGuid] = sender end
 end
 
+function libpredict:RessStart(sender, target, senderGuid)
+  ress[target] = ress[target] or {}
+  -- Don't overwrite an active 60s timer with "casting"
+  local current = ress[target][sender]
+  if type(current) == "number" and GetTime() < current then
+    return
+  end
+  ress[target][sender] = "casting"
+  if senderGuid then
+    ressGuidToName[senderGuid] = sender
+  end
+end
+
 function libpredict:RessStop(sender)
-  for ttarget, t in pairs(ress) do
-    for tsender in pairs(ress[ttarget]) do
-      if sender == tsender then
-        ress[ttarget][tsender] = nil
+  for ttarget in pairs(ress) do
+    local state = ress[ttarget][sender]
+    if state == "casting" then
+      ress[ttarget][sender] = nil
+      if pfUI.uf and pfUI.uf.frames then
+        for _, f in pairs(pfUI.uf.frames) do
+          if f.unit and UnitName(f.unit) == ttarget then
+            f.update_full = true
+          end
+        end
       end
+    elseif type(state) == "number" then
     end
   end
-  -- cleanup reverse lookup
   for guid, name in pairs(ressGuidToName) do
     if name == sender then ressGuidToName[guid] = nil end
   end
+end
+
+function libpredict:UnitHasIncomingResurrection(unit)
+  if not unit then return nil end
+  local name = UnitName(unit)
+  if not name then return nil end
+  if not ress[name] then return nil end
+  local now = GetTime()
+  for sender, val in pairs(ress[name]) do
+    if val == "casting" then
+      return "casting"
+    elseif type(val) == "number" then
+      if now < val then
+        return "done"
+      else
+        ress[name][sender] = nil
+      end
+    end
+  end
+  return nil
 end
 
 function libpredict:UnitGetIncomingHeals(unit)
@@ -529,23 +678,6 @@ function libpredict:UnitGetIncomingHeals(unit)
     end
   end
   return sumheal
-end
-
-function libpredict:UnitHasIncomingResurrection(unit)
-  if not unit then return nil end
-  local name = UnitName(unit)
-  if not name then return nil end
-
-  if not ress[name] then
-    return nil
-  else
-    for sender, val in pairs(ress[name]) do
-      if val == true then
-        return val
-      end
-    end
-  end
-  return nil
 end
 
 local spell_queue = { "DUMMY", "DUMMYRank 9", "TARGET" }
@@ -1004,10 +1136,11 @@ libpredict.sender:SetScript("OnEvent", function()
 
     elseif spell_queue[1] == spell and L["resurrections"][spell] then
       local target = pendingTarget or senttarget or spell_queue[3]
-      libpredict:Ress(player, target)
+      libpredict:RessStart(player, target)
       libpredict.sender:SendHealCommMsg("Resurrection/" .. target .. "/start/")
       libpredict.sender:SendResCommMsg("RES " .. target)
       libpredict.sender.resurrecting = true
+      libpredict.sender.resurrecting_target = target
     end
   elseif event == "SPELLCAST_FAILED" or event == "SPELLCAST_INTERRUPTED" then
     if libpredict.sender.healing then
@@ -1025,6 +1158,7 @@ libpredict.sender:SetScript("OnEvent", function()
       libpredict.sender:SendHealCommMsg("Resurrection/stop/")
       libpredict.sender:SendResCommMsg("RESNO " .. target)
       libpredict.sender.resurrecting = nil
+      libpredict.sender.resurrecting_target = nil
     end
     -- Nutze current_cast für Regrowth cleanup
     if this.current_cast == REGROWTH then
@@ -1072,20 +1206,26 @@ libpredict.sender:SetScript("OnEvent", function()
     end
   elseif event == "SPELLCAST_STOP" then
     libpredict:HealStop(player)
-    
+
+    if libpredict.sender.resurrecting then
+      -- NOTE: Do NOT call Ress() here - wait for SPELL_GO_SELF callback (server confirmation)
+      -- SPELLCAST_STOP fires client-side before server confirms the cast landed.
+      -- The 60s timer is started in the SPELL_GO_SELF callback via libdebuff_spell_go_callbacks.
+      libpredict.sender.resurrecting = nil
+      libpredict.sender.resurrecting_target = nil
+    end
+
     -- Nur Regrowth wird hier verarbeitet (hat Cast-Zeit)
-    -- Nutze this.current_cast (wird bei SPELLCAST_START gesetzt, nicht von Instant-Hooks überschrieben)
     if this.current_cast == REGROWTH then
       local now = pfUI.uf.now or GetTime()
       if this.regrowth_timer then
-        -- Bereits ein Regrowth aktiv, speichere für den nächsten
         this.regrowth_start_next = now
       else
         this.regrowth_start = now
       end
       this.regrowth_timer = now + 0.1
     end
-    
+
     -- Cleanup
     this.current_cast = nil
     this.current_cast_target = nil
