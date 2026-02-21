@@ -14,7 +14,6 @@ pfUI:RegisterModule("mouseover", "vanilla", function ()
         return unitstr
       end
     end
-
     return nil
   end
 
@@ -31,65 +30,94 @@ pfUI:RegisterModule("mouseover", "vanilla", function ()
     end
   end
 
+  -- Check if a string looks like a GUID (0x prefixed hex)
+  local function IsGUID(str)
+    return str and type(str) == "string" and strsub(str, 1, 2) == "0x"
+  end
+
+  -- Resolve the best cast target for a given unit string or pfUI frame.
+  -- Returns: guid (string) or nil
+  local function ResolveGUID(unit)
+    if not UnitExists then return nil end
+    local _, guid = UnitExists(unit)
+    if guid and guid ~= "0x0000000000000000" then
+      return guid
+    end
+    return nil
+  end
+
   _G.SLASH_PFCAST1, _G.SLASH_PFCAST2 = "/pfcast", "/pfmouse"
   function SlashCmdList.PFCAST(msg)
     local restore_target = true
     local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
     local unit = "mouseover"
+    local castGUID = nil
 
-    if not UnitExists(unit) then
+    if UnitExists(unit) then
+      -- Valid mouseover unit - try to get GUID
+      if GetNampowerVersion then
+        castGUID = ResolveGUID(unit)
+      end
+    else
+      -- No mouseover unit - check hovered pfUI frame
       local frame = GetMouseFocus()
-      if frame.label and frame.id then
-        unit = frame.label .. frame.id
+
+      if frame and frame.label ~= nil then
+        if IsGUID(frame.label) and frame.id == "" then
+          -- Frame has a cached GUID (e.g. focus frame set via /focus name)
+          castGUID = frame.label
+          unit = nil
+        elseif frame.label and frame.id then
+          -- Frame has a label+id unitstring (e.g. "party1", "raid5")
+          unit = frame.label .. frame.id
+          if GetNampowerVersion then
+            castGUID = ResolveGUID(unit)
+          end
+        end
       elseif UnitExists("target") then
         unit = "target"
+        if GetNampowerVersion then
+          castGUID = ResolveGUID(unit)
+        end
       elseif GetCVar("autoSelfCast") == "1" then
         unit = "player"
+        if GetNampowerVersion then
+          castGUID = ResolveGUID(unit)
+        end
       else
         return
       end
     end
 
-    -- Nampower: CastSpellByName supports a second unit parameter directly.
-    -- unit is already resolved to "mouseover", "target" or "player" at this point.
-    if not func and GetNampowerVersion then
-      CastSpellByName(msg, unit)
+    -- Nampower path: cast directly via GUID, no target toggle needed
+    if not func and GetNampowerVersion and castGUID then
+      CastSpellByName(msg, castGUID)
       return
     end
 
-    -- If target and mouseover are friendly units, we can't use spell target as it
-    -- would cast on the target instead of the mouseover. However, if the mouseover
-    -- is friendly and the target is not, we can try to obtain the best unitstring
-    -- for the later SpellTargetUnit() call.
+    -- No GUID available (no Nampower) but we have a unit string
+    if not unit then
+      -- Had a GUID frame but no Nampower - nothing we can do
+      UIErrorsFrame:AddMessage(SPELL_FAILED_BAD_TARGETS, 1, 0, 0)
+      return
+    end
+
+    -- Classic path (no Nampower): target swap if needed
     local unitstr = not UnitCanAssist("player", "target") and UnitCanAssist("player", unit) and GetUnitString(unit)
 
     if UnitIsUnit("target", unit) or (not func and unitstr) then
-      -- no target change required, we can either use spell target
-      -- or the unit is already our current target.
       restore_target = false
     else
-      -- The spelltarget can't be used here, we need to switch
-      -- and restore the target during spell cast
       TargetUnit(unit)
     end
 
     if func then
       func()
     else
-      -- write temporary unit name
       pfUI.uf.mouseover.unit = unit
-
-      -- cast without self cast cvar setting
-      -- to allow spells to use spelltarget
       NoSelfCast(msg)
-
-      -- set spell target to unitstring (or selfcast)
       if SpellIsTargeting() then SpellTargetUnit(unitstr or "player") end
-
-      -- clean up spell target in error case
       if SpellIsTargeting() then SpellStopTargeting() end
-
-      -- remove temporary mouseover unit
       pfUI.uf.mouseover.unit = nil
     end
 

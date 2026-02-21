@@ -74,95 +74,75 @@ if GetNampowerVersion then
   end
 end
 
--- Delayed Nampower version check (5 seconds after PLAYER_ENTERING_WORLD)
+-- Nampower startup check: show version info and ensure CVars are set.
+-- Runs on first OnUpdate after PLAYER_ENTERING_WORLD to give Nampower time to initialize.
 local nampowerCheckFrame = CreateFrame("Frame")
-local nampowerCheckTimer = 0
-local nampowerCheckDone = false
 nampowerCheckFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 nampowerCheckFrame:RegisterEvent("PLAYER_LOGOUT")
 nampowerCheckFrame:SetScript("OnEvent", function()
-  -- Handle shutdown to prevent crash 132
   if event == "PLAYER_LOGOUT" then
     this:UnregisterAllEvents()
     this:SetScript("OnEvent", nil)
     this:SetScript("OnUpdate", nil)
     return
   end
-  
-  nampowerCheckFrame:SetScript("OnUpdate", function()
-    nampowerCheckTimer = nampowerCheckTimer + arg1
-    if nampowerCheckTimer >= 5 and not nampowerCheckDone then
-      nampowerCheckDone = true
-      
-      if GetNampowerVersion then
-        local major, minor, patch = GetNampowerVersion()
-        patch = patch or 0
-        local versionString = major .. "." .. minor .. "." .. patch
-        
-        if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
-          DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
-          
-          -- Enable required Nampower CVars
-          if SetCVar and GetCVar then
-            local cvarsToEnable = {
-              "NP_EnableSpellStartEvents",
-              "NP_EnableSpellGoEvents", 
-              "NP_EnableAuraCastEvents",
-              "NP_EnableAutoAttackEvents",
-            }
-            
-            local totalCvars = table.getn(cvarsToEnable)
-            local enabledCount = 0
-            local alreadyEnabledCount = 0
-            local failedCount = 0
-            
-            for _, cvar in ipairs(cvarsToEnable) do
-              local success, currentValue = pcall(GetCVar, cvar)
-              if success and currentValue then
-                if currentValue == "1" then
-                  alreadyEnabledCount = alreadyEnabledCount + 1
-                else
-                  local setSuccess = pcall(SetCVar, cvar, "1")
-                  if setSuccess then
-                    enabledCount = enabledCount + 1
-                  else
-                    failedCount = failedCount + 1
-                  end
-                end
+  -- Defer to next frame so Nampower is fully initialized
+  this:SetScript("OnUpdate", function()
+    this:SetScript("OnUpdate", nil)
+    this:UnregisterAllEvents()
+    this:SetScript("OnEvent", nil)
+
+    if GetNampowerVersion then
+      local major, minor, patch = GetNampowerVersion()
+      patch = patch or 0
+      local versionString = major .. "." .. minor .. "." .. patch
+
+      if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
+
+        if SetCVar and GetCVar then
+          local cvarsToEnable = {
+            "NP_EnableSpellStartEvents",
+            "NP_EnableSpellGoEvents",
+            "NP_EnableAuraCastEvents",
+            "NP_EnableAutoAttackEvents",
+          }
+          local enabledCount = 0
+          local alreadyEnabledCount = 0
+          local failedCount = 0
+
+          for _, cvar in ipairs(cvarsToEnable) do
+            local success, currentValue = pcall(GetCVar, cvar)
+            if success and currentValue then
+              if currentValue == "1" then
+                alreadyEnabledCount = alreadyEnabledCount + 1
               else
-                failedCount = failedCount + 1
+                local setSuccess = pcall(SetCVar, cvar, "1")
+                if setSuccess then enabledCount = enabledCount + 1
+                else failedCount = failedCount + 1 end
               end
-            end
-            
-            if enabledCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Enabled " .. enabledCount .. " Nampower CVars")
-            end
-            
-            if alreadyEnabledCount == totalCvars then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r All required Nampower CVars already enabled")
-            elseif alreadyEnabledCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r " .. alreadyEnabledCount .. " CVars were already enabled")
-            end
-            
-            if failedCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff]|r Warning: Could not check/set " .. failedCount .. " CVars")
+            else
+              failedCount = failedCount + 1
             end
           end
-          
-        elseif major == 2 and minor == 38 and patch == 0 then
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.38.0 detected!|r")
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.38.0 or higher!|r")
-          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
-        else
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.38.0 or higher.|r")
-          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
+
+          if enabledCount > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Enabled " .. enabledCount .. " Nampower CVars")
+          elseif alreadyEnabledCount == table.getn(cvarsToEnable) then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r All required Nampower CVars already enabled")
+          end
+          if failedCount > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff]|r Warning: Could not check/set " .. failedCount .. " CVars")
+          end
         end
+
       else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Nampower not found! Debuff tracking disabled.|r")
-        StaticPopup_Show("LIBDEBUFF_NAMPOWER_MISSING")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.38.0 or higher.|r")
+        StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
       end
-      
-      nampowerCheckFrame:SetScript("OnUpdate", nil)
+    else
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Nampower not found! Debuff tracking disabled.|r")
+      StaticPopup_Show("LIBDEBUFF_NAMPOWER_MISSING")
     end
   end)
 end)
@@ -2890,11 +2870,3 @@ function libdebuff:InitializeOwnDebuffsCache(guid)
     end
   end
 end
-
--- Delayed load message (after pfUI is fully loaded)
-local loadFrame = CreateFrame("Frame")
-loadFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-loadFrame:SetScript("OnEvent", function()
-  this:UnregisterEvent("PLAYER_ENTERING_WORLD")
-  DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r GetUnitField Edition loaded! UnitBuff() and UnitDebuff() available.")
-end)

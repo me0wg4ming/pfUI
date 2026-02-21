@@ -1363,8 +1363,38 @@ function pfUI.uf.OnUpdate()
     if not this.unitname or this.unitname == "focus" then return end
 
     -- focus unit detection
-    if this.unitname ~= strlower(unitname) then
-      -- invalid focus frame
+    -- Support both GUID-based focus (unitname = "0x...") and name-based focus (unitname = "playername")
+    local isGuidFocus = this.unitname and string.sub(this.unitname, 1, 2) == "0x"
+
+    if isGuidFocus then
+      -- GUID-based focus: check if current label still resolves to the same GUID
+      if this.label then
+        local _, currentGuid = UnitExists(this.label)
+        if currentGuid and currentGuid == this.unitname then
+          return  -- Label still valid, nothing to do
+        end
+      end
+      -- Label lost or GUID mismatch: scan all valid units for matching GUID
+      local foundUnit = nil
+      for unit, bool in pairs(pfValidUnits) do
+        local exists, guid = UnitExists(unit)
+        if guid and guid == this.unitname then
+          foundUnit = unit
+          break
+        end
+      end
+      if foundUnit then
+        this.label = foundUnit
+        if this.portrait then this.portrait.model.lastUnit = nil end
+        this.instantRefresh = true
+        pfUI.uf:RefreshUnit(this, "all")
+      else
+        this.label = nil
+        this.instantRefresh = true
+        this.hp.bar:SetStatusBarColor(.2,.2,.2)
+      end
+    elseif this.unitname ~= strlower(unitname) then
+      -- Name-based focus (legacy): scan for matching unit name
       for unit, bool in pairs(pfValidUnits) do
         local scan = UnitName(unit) or ""
         if this.unitname == strlower(scan) then

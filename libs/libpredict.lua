@@ -848,7 +848,19 @@ hooksecurefunc("CastSpellByName", function(effect, target)
 
   local default = UnitName("target") and UnitCanAssist("player", "target") and UnitName("target") or UnitName("player")
 
-  target = target and type(target) == "string" and UnitName(target) or target
+  -- Resolve target to a player name for spell_queue.
+  -- UnitName() accepts: unit tokens ("target", "party1"), GUIDs ("0x..."), but NOT player names.
+  -- If target is already a plain name string (e.g. from a macro), leave it as-is.
+  if target and type(target) == "string" then
+    if string.sub(target, 1, 2) == "0x" then
+      -- GUID: UnitName accepts GUIDs directly in Nampower
+      target = UnitName(target) or target
+    elseif not string.find(target, "^[a-z]") or string.find(target, "%d") then
+      -- looks like a unit token (all lowercase with optional digit e.g. "party1", "raid3")
+      target = UnitName(target) or target
+    end
+    -- else: already a player name (capitalized), leave as-is
+  end
   target = target and target == true and UnitName("player") or target
   target = target and target == 1 and UnitName("player") or target
 
