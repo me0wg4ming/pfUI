@@ -76,11 +76,11 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
     row.nametext:SetText(name)
     if row.nametext:GetStringWidth() <= available then return name end
     for len = strlen(name) - 1, 1, -1 do
-      local short = strsub(name, 1, len) .. ".."
+      local short = strsub(name, 1, len) .. "."
       row.nametext:SetText(short)
       if row.nametext:GetStringWidth() <= available then return short end
     end
-    return strsub(name, 1, 1) .. ".."
+    return strsub(name, 1, 1) .. "."
   end
 
   local TOTAL_ROW_WIDTH = BAR_WIDTH + 20 + (rm_showportrait and (PORTRAIT_SIZE + 2) or 0)
