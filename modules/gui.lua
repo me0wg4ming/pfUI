@@ -2131,7 +2131,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           CreateConfig(U["raid"], T["Raid Padding"], C.unitframes[c], "raidpadding")
           CreateConfig(U["raid"], T["Raid Layout"], C.unitframes[c], "raidlayout", "dropdown", pfUI.gui.dropdowns.uf_raidlayout)
           CreateConfig(U["raid"], T["Raid Fill Direction"], C.unitframes[c], "raidfill", "dropdown", pfUI.gui.dropdowns.orientation)
-          CreateConfig(U["raid"], T["Raid Fill reversed"], C.unitframes[c], "raidfillreverse", "checkbox")
+          CreateConfig(U["raid"], T["Raid Fill Top to Bottom"], C.unitframes[c], "raidfillreverse", "checkbox")
         end
 
         CreateConfig(U[c], T["Healthbar"], nil, nil, "header")
