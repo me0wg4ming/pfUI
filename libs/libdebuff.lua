@@ -44,95 +44,68 @@ if GetNampowerVersion then
   end
 end
 
--- Delayed Nampower version check (5 seconds after PLAYER_ENTERING_WORLD)
+-- Nampower startup check: show version info and ensure CVars are set.
+-- Runs on first OnUpdate after PLAYER_ENTERING_WORLD to give Nampower time to initialize.
 local nampowerCheckFrame = CreateFrame("Frame")
-local nampowerCheckTimer = 0
-local nampowerCheckDone = false
 nampowerCheckFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-nampowerCheckFrame:RegisterEvent("PLAYER_LOGOUT")
 nampowerCheckFrame:SetScript("OnEvent", function()
-  -- Handle shutdown to prevent crash 132
-  if event == "PLAYER_LOGOUT" then
+  -- Defer to next frame so Nampower is fully initialized
+  this:SetScript("OnUpdate", function()
+    this:SetScript("OnUpdate", nil)
     this:UnregisterAllEvents()
     this:SetScript("OnEvent", nil)
-    this:SetScript("OnUpdate", nil)
-    return
-  end
-  
-  nampowerCheckFrame:SetScript("OnUpdate", function()
-    nampowerCheckTimer = nampowerCheckTimer + arg1
-    if nampowerCheckTimer >= 5 and not nampowerCheckDone then
-      nampowerCheckDone = true
-      
-      if GetNampowerVersion then
-        local major, minor, patch = GetNampowerVersion()
-        patch = patch or 0
-        local versionString = major .. "." .. minor .. "." .. patch
-        
-        if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
-          DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
-          
-          -- Enable required Nampower CVars
-          if SetCVar and GetCVar then
-            local cvarsToEnable = {
-              "NP_EnableSpellStartEvents",
-              "NP_EnableSpellGoEvents", 
-              "NP_EnableAuraCastEvents",
-              "NP_EnableAutoAttackEvents"
-            }
-            
-            local totalCvars = table.getn(cvarsToEnable)
-            local enabledCount = 0
-            local alreadyEnabledCount = 0
-            local failedCount = 0
-            
-            for _, cvar in ipairs(cvarsToEnable) do
-              local success, currentValue = pcall(GetCVar, cvar)
-              if success and currentValue then
-                if currentValue == "1" then
-                  alreadyEnabledCount = alreadyEnabledCount + 1
-                else
-                  local setSuccess = pcall(SetCVar, cvar, "1")
-                  if setSuccess then
-                    enabledCount = enabledCount + 1
-                  else
-                    failedCount = failedCount + 1
-                  end
-                end
+
+    if GetNampowerVersion then
+      local major, minor, patch = GetNampowerVersion()
+      patch = patch or 0
+      local versionString = major .. "." .. minor .. "." .. patch
+
+      if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
+
+        if SetCVar and GetCVar then
+          local cvarsToEnable = {
+            "NP_EnableSpellStartEvents",
+            "NP_EnableSpellGoEvents",
+            "NP_EnableAuraCastEvents",
+            "NP_EnableAutoAttackEvents",
+          }
+          local enabledCount = 0
+          local alreadyEnabledCount = 0
+          local failedCount = 0
+
+          for _, cvar in ipairs(cvarsToEnable) do
+            local success, currentValue = pcall(GetCVar, cvar)
+            if success and currentValue then
+              if currentValue == "1" then
+                alreadyEnabledCount = alreadyEnabledCount + 1
               else
-                failedCount = failedCount + 1
+                local setSuccess = pcall(SetCVar, cvar, "1")
+                if setSuccess then enabledCount = enabledCount + 1
+                else failedCount = failedCount + 1 end
               end
-            end
-            
-            if enabledCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Enabled " .. enabledCount .. " Nampower CVars")
-            end
-            
-            if alreadyEnabledCount == totalCvars then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r All required Nampower CVars already enabled")
-            elseif alreadyEnabledCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r " .. alreadyEnabledCount .. " CVars were already enabled")
-            end
-            
-            if failedCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff]|r Warning: Could not check/set " .. failedCount .. " CVars")
+            else
+              failedCount = failedCount + 1
             end
           end
-          
-        elseif major == 2 and minor == 38 and patch == 0 then
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.38.0 detected!|r")
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.38.0 or higher!|r")
-          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
-        else
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.38.0 or higher.|r")
-          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
+
+          if enabledCount > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Enabled " .. enabledCount .. " Nampower CVars")
+          elseif alreadyEnabledCount == table.getn(cvarsToEnable) then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r All required Nampower CVars already enabled")
+          end
+          if failedCount > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff]|r Warning: Could not check/set " .. failedCount .. " CVars")
+          end
         end
+
       else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Nampower not found! Debuff tracking disabled.|r")
-        StaticPopup_Show("LIBDEBUFF_NAMPOWER_MISSING")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.38.0 or higher.|r")
+        StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
       end
-      
-      nampowerCheckFrame:SetScript("OnUpdate", nil)
+    else
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Nampower not found! Debuff tracking disabled.|r")
+      StaticPopup_Show("LIBDEBUFF_NAMPOWER_MISSING")
     end
   end)
 end)
@@ -1588,10 +1561,14 @@ if hasNampower then
       
     elseif event == "DEBUFF_ADDED_OTHER" then
       local guid = arg1
-      local displaySlot = arg2  -- This is DISPLAY slot (1-16), NOT aura slot!
+      local displaySlot = arg2  -- Display slot (1-16), compacted
       local spellId = arg3
       local stacks = arg4
-      
+      local auraSlot_0based = arg6  -- Nampower 2.29+: raw slot 0-based (32-47)
+
+      -- Convert 0-based (Nampower event) to 1-based (Lua GetUnitField array)
+      local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
+
       -- Invalidate slot map cache for this GUID
       slotMapCache[guid] = nil
       
@@ -1608,11 +1585,13 @@ if hasNampower then
         return
       end
       
-      -- Find the REAL aura slot (33-48) via GetUnitField
-      local auraSlot = nil
-      local slotMap = GetDebuffSlotMap(guid)
-      if slotMap and slotMap[displaySlot] then
-        auraSlot = slotMap[displaySlot].auraSlot
+      -- Get auraSlot from event parameter (Nampower 2.29+)
+      -- Fallback to GetUnitField lookup if not available
+      if not auraSlot then
+        local slotMap = GetDebuffSlotMap(guid)
+        if slotMap and slotMap[displaySlot] then
+          auraSlot = slotMap[displaySlot].auraSlot
+        end
       end
       
       -- Fallback: Calculate aura slot if GetUnitField didn't work
@@ -1714,9 +1693,13 @@ if hasNampower then
       
     elseif event == "DEBUFF_REMOVED_OTHER" then
       local guid = arg1
-      local displaySlot = arg2  -- This is DISPLAY slot (1-16), NOT aura slot!
+      local displaySlot = arg2  -- Display slot (1-16), compacted
       local spellId = arg3
-      
+      local auraSlot_0based = arg6  -- Nampower 2.29+: raw slot 0-based (32-47)
+
+      -- Convert 0-based (Nampower event) to 1-based (Lua GetUnitField array)
+      local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
+
       -- Invalidate slot map cache for this GUID
       slotMapCache[guid] = nil
       
@@ -1725,8 +1708,8 @@ if hasNampower then
       if debugStats.enabled then
         debugStats.debuff_removed = debugStats.debuff_removed + 1
         if IsCurrentTarget(guid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[DEBUFF_REMOVED]|r display=%d %s", 
-            GetDebugTimestamp(), displaySlot, spellName))
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[DEBUFF_REMOVED]|r display=%d aura=%d (0based=%d) %s", 
+            GetDebugTimestamp(), displaySlot, auraSlot or -1, auraSlot_0based or -1, spellName))
         end
       end
       
@@ -1736,15 +1719,17 @@ if hasNampower then
         return
       end
       
-      -- Find the auraSlot using displaySlot mapping
+      -- Get auraSlot from event parameter (Nampower 2.29+)
+      -- Fallback to displayToAura mapping if not available
+      local foundAuraSlot = auraSlot
+      if not foundAuraSlot and displayToAura[guid] and displayToAura[guid][displaySlot] then
+        foundAuraSlot = displayToAura[guid][displaySlot]
+      end
+
       local wasOurs = false
       local removedCasterGuid = nil
-      local foundAuraSlot = nil
-      
-      -- Use displayToAura mapping to find the correct auraSlot
-      if displayToAura[guid] and displayToAura[guid][displaySlot] then
-        foundAuraSlot = displayToAura[guid][displaySlot]
-        
+
+      if foundAuraSlot then
         -- Get ownership info for this specific slot
         if slotOwnership[guid] and slotOwnership[guid][foundAuraSlot] then
           local ownership = slotOwnership[guid][foundAuraSlot]
@@ -1761,7 +1746,7 @@ if hasNampower then
         end
         
         if debugStats.enabled and IsCurrentTarget(guid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d %s wasOurs=%s caster=%s", 
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d [arg6] %s wasOurs=%s caster=%s", 
             GetDebugTimestamp(), foundAuraSlot, spellName, tostring(wasOurs), DebugGuid(removedCasterGuid)))
         end
       end
@@ -1796,11 +1781,13 @@ if hasNampower then
       end
       
     elseif event == "PLAYER_TARGET_CHANGED" then
-      -- Nothing special needed - GetUnitField will get fresh data on next query
       if not UnitExists then return end
       local _, targetGuid = UnitExists("target")
       
       if targetGuid and targetGuid ~= "" then
+        -- Invalidate slot map cache on retarget
+        -- Prevents stale slot mappings after untarget/retarget cycles
+        slotMapCache[targetGuid] = nil
         -- Cleanup expired timers for new target
         CleanupExpiredTimers(targetGuid)
       end

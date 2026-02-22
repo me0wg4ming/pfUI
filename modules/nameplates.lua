@@ -2,8 +2,21 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
-  -- check for SuperWoW support (use SUPERWOW_VERSION global)
-  local superwow_active = SUPERWOW_VERSION ~= nil
+  -- Check for Nampower support (preferred)
+  local hasNampower = false
+  if GetNampowerVersion then
+    local major, minor, patch = GetNampowerVersion()
+    patch = patch or 0
+    if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+      hasNampower = true
+    end
+  end
+
+  -- Check for SuperWoW support (fallback)
+  local hasSuperwow = SUPERWOW_VERSION ~= nil
+
+  -- Use either Nampower or SuperWoW for GetName(1) GUID support
+  local superwow_active = hasNampower or hasSuperwow
 
   -- Local function references for performance
   local GetTime = GetTime

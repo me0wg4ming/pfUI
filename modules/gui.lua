@@ -1032,6 +1032,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "default:" .. T["Default"],
         "tukui:TukUI"
       },
+      ["raidmarker_grow"] = {
+        "down:Down",
+        "up:Up",
+      },
       ["uf_color"] = {
         "0:" .. T["Class"],
         "1:" .. T["Custom"],
@@ -1968,6 +1972,24 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Ranged Bar Color"], C.unitframes, "swingtimerrangedcolor", "color")
       CreateConfig(nil, T["Ranged Warn Color (Hunter)"], C.unitframes, "swingtimerrangedwarncolor", "color")
       CreateConfig(nil, T["Show HS/Cleave Queue Color (Warrior)"], C.unitframes, "swingtimerhsqueue", "checkbox")
+
+      CreateConfig(nil, "Raid Markers", nil, nil, "header")
+      CreateConfig(nil, "Raid Marker Width", C.unitframes, "raidmarkerwidth")
+      CreateConfig(nil, "Raid Marker Height", C.unitframes, "raidmarkerheight")
+      CreateConfig(nil, "Raid Marker Grow", C.unitframes, "raidmarkergrow", "dropdown", pfUI.gui.dropdowns.raidmarker_grow)
+      CreateConfig(nil, "Raid Marker Texture", C.unitframes, "raidmarkertexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture)
+      CreateConfig(nil, "Raid Marker Font Size", C.unitframes, "raidmarkerfontsize")
+      CreateConfig(nil, "Show Name", C.unitframes, "raidmarkershowname", "checkbox")
+      CreateConfig(nil, "Show Percent HP", C.unitframes, "raidmarkershowpct", "checkbox")
+      CreateConfig(nil, "Show Portrait", C.unitframes, "raidmarkershowportrait", "checkbox")
+      CreateConfig(nil, "Star Color", C.unitframes, "raidmarkercolor_star", "color")
+      CreateConfig(nil, "Circle Color", C.unitframes, "raidmarkercolor_circle", "color")
+      CreateConfig(nil, "Diamond Color", C.unitframes, "raidmarkercolor_diamond", "color")
+      CreateConfig(nil, "Triangle Color", C.unitframes, "raidmarkercolor_triangle", "color")
+      CreateConfig(nil, "Moon Color", C.unitframes, "raidmarkercolor_moon", "color")
+      CreateConfig(nil, "Square Color", C.unitframes, "raidmarkercolor_square", "color")
+      CreateConfig(nil, "Cross Color", C.unitframes, "raidmarkercolor_cross", "color")
+      CreateConfig(nil, "Skull Color", C.unitframes, "raidmarkercolor_skull", "color")
 
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
