@@ -51,9 +51,37 @@ function SlashCmdList.PFFOCUS(msg)
   if msg ~= "" then
     -- Try to resolve GUID via short target swap
     if UnitExists then
+      local _, prevGUID = UnitExists("target")
+      local prevPlayer = UnitIsUnit("target", "player")
+
+      -- Suppress "Unknown unit" errors during targeting attempts (fired async)
+      UIErrorsFrame:UnregisterEvent("UI_ERROR_MESSAGE")
+
+      -- Try exact match first, then prefix match via /tar
       TargetByName(msg, true)
       local _, guid = UnitExists("target")
-      TargetLastTarget()
+
+      if not guid or guid == "0x0000000000000000" then
+        -- Fallback: prefix match (like /tar storm -> Stormwind Guard)
+        SlashCmdList.TARGET(msg)
+        _, guid = UnitExists("target")
+      end
+
+      -- Re-enable errors next frame (errors are fired async)
+      local restore = CreateFrame("Frame")
+      restore:SetScript("OnUpdate", function()
+        UIErrorsFrame:RegisterEvent("UI_ERROR_MESSAGE")
+        restore:SetScript("OnUpdate", nil)
+      end)
+
+      -- Restore previous target
+      if prevGUID and prevGUID ~= "0x0000000000000000" then
+        TargetUnit(prevGUID)
+      elseif prevPlayer then
+        TargetUnit("player")
+      else
+        ClearTarget()
+      end
 
       if guid and guid ~= "0x0000000000000000" then
         SetFocusByGUID(guid)
