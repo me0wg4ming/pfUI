@@ -1,4 +1,23 @@
-pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
+local function getAdjustedTickTimer()
+  local adjustedEnergyTick = 2
+
+  -- Check rogue talents and compute energy tick timing reduction for Combat spec (1.18.0 Blade Rush Talent)
+  if UnitClass("player") == "Rogue" then
+    local _, _, _, _, currRank = GetTalentInfo(2, 16)
+    local bladeRushRank = currRank or 0
+
+    if bladeRushRank > 0 then
+      local agility = UnitStat("player", 2)       -- 2 is agility stat index
+      local reductionPerAgi = 0.0006 * bladeRushRank -- 0.0006 for rank 1, 0.0012 for rank 2
+      local totalReduction = agility * reductionPerAgi
+      adjustedEnergyTick = adjustedEnergyTick - totalReduction
+    end
+  end
+
+  return adjustedEnergyTick
+end
+
+pfUI:RegisterModule("energytick", "vanilla:tbc", function()
   if not pfUI.uf or not pfUI.uf.player then return end
 
   local energytick = CreateFrame("Frame", nil, pfUI.uf.player.power.bar)
@@ -44,13 +63,13 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
         this.target = 5
       elseif this.mode == "MANA" and diff > 0 then
         if this.max ~= 5 and diff > (this.badtick and this.badtick*1.2 or 5) then
-          this.target = 2
+          this.target = getAdjustedTickTimer()
         else
           this.badtick = diff
         end
-      elseif this.mode == "ENERGY" and diff > 0 then
+      elseif this.mode == "ENERGY" and diff >= 0 then
         if not this.ignoreNextGain then
-          this.target = 2
+          this.target = getAdjustedTickTimer()
         end
         this.ignoreNextGain = false
       end
@@ -73,7 +92,7 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
     this.current = GetTime() - this.start
 
     if this.current > this.max then
-      this.start, this.max, this.current = GetTime(), 2, 0
+      this.start, this.max, this.current = GetTime(), getAdjustedTickTimer(), 0
     end
 
     local pos = (C.unitframes.player.pwidth ~= "-1" and C.unitframes.player.pwidth or C.unitframes.player.width) * (this.current / this.max)

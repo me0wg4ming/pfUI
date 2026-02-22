@@ -287,8 +287,11 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
 
   -- RAID_TARGET_UPDATE: fires when a raid marker is set/cleared
   -- PLAYER_ENTERING_WORLD: fires on login, reload, and zone transitions
+  -- UNIT_HEALTH/UNIT_MAXHEALTH: fires on HP changes for real-time bar updates
   scanner:RegisterEvent("RAID_TARGET_UPDATE")
   scanner:RegisterEvent("PLAYER_ENTERING_WORLD")
+  scanner:RegisterEvent("UNIT_HEALTH")
+  scanner:RegisterEvent("UNIT_MAXHEALTH")
 
   scanner:SetScript("OnEvent", function()
     UpdateDisplay()

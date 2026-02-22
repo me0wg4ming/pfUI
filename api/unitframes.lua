@@ -14,98 +14,19 @@ end)
 pfUI.uf.frames = {}
 pfUI.uf.delayed = {}
 
--- =====================================================
--- CENTRAL EVENT-HANDLER for Raid/Party Performance
--- =====================================================
-pfUI.uf.unitmap = {}  -- Maps "raid1" -> frame, "party2" -> frame, etc.
-
+-- ============================================================================
 -- GUID-based Roster Tracking for Smart Updates
 -- Only updates frames where the unit actually changed, not ALL 40 frames
+-- ============================================================================
 pfUI.uf.guidTracker = {
-  frameToGuid = {},  -- Maps frame -> guid
+  -- Maps frame to its last known GUID: frame -> guid
+  frameToGuid = {},
 }
 
+-- Clear all GUID tracking (forces full update next time)
 function pfUI.uf.ClearGuidTracking()
   pfUI.uf.guidTracker.frameToGuid = {}
 end
-
-pfUI.uf.RebuildUnitmap = function()
-  -- Clear old mappings
-  for k in pairs(pfUI.uf.unitmap) do
-    pfUI.uf.unitmap[k] = nil
-  end
-  
-  -- Rebuild raid mappings
-  if pfUI.uf.raid then
-    for i = 1, 40 do
-      local frame = pfUI.uf.raid[i]
-      if frame and frame.label then
-        -- Map by current unit assignment (label..id) for event routing
-        -- Note: Do NOT map by cache_raid (frame position) - after raid.lua
-        -- sorts frames, cache_raid != id, and the cache_raid mapping would
-        -- overwrite correct label..id mappings from earlier iterations.
-        if frame.id and frame.id ~= 0 and frame.id ~= "" then
-          pfUI.uf.unitmap[frame.label .. frame.id] = frame
-        elseif frame.label == "player" then
-          pfUI.uf.unitmap["player"] = frame
-        end
-      end
-    end
-  end
-  
-  -- Rebuild party mappings (only if not used as raid)
-  if C.unitframes.raidforgroup ~= "1" then
-    for i = 1, 4 do
-      local frame = _G["pfGroup" .. i]
-      if frame and frame.label == "party" then
-        pfUI.uf.unitmap["party" .. frame.id] = frame
-      end
-    end
-  end
-end
-
-pfUI.uf.eventframe = CreateFrame("Frame")
-pfUI.uf.eventframe:RegisterEvent("UNIT_HEALTH")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXHEALTH")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MANA")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXMANA")
-pfUI.uf.eventframe:RegisterEvent("UNIT_RAGE")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXRAGE")
-pfUI.uf.eventframe:RegisterEvent("UNIT_ENERGY")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MAXENERGY")
-pfUI.uf.eventframe:RegisterEvent("UNIT_AURA")
-pfUI.uf.eventframe:RegisterEvent("UNIT_PORTRAIT_UPDATE")
-pfUI.uf.eventframe:RegisterEvent("UNIT_MODEL_CHANGED")
-pfUI.uf.eventframe:RegisterEvent("UNIT_DISPLAYPOWER")
-pfUI.uf.eventframe:RegisterEvent("UNIT_FACTION")
-pfUI.uf.eventframe:RegisterEvent("RAID_ROSTER_UPDATE")
-pfUI.uf.eventframe:RegisterEvent("PARTY_MEMBERS_CHANGED")
-
-pfUI.uf.eventframe:SetScript("OnEvent", function()
-  -- Rebuild unitmap on roster changes
-  if event == "RAID_ROSTER_UPDATE" or event == "PARTY_MEMBERS_CHANGED" then
-    pfUI.uf.RebuildUnitmap()
-    return
-  end
-
-  if not arg1 then return end
-  
-  -- Find the correct frame directly
-  local frame = pfUI.uf.unitmap[arg1]
-  if not frame then return end
-  
-  -- Process event (same logic as before)
-  if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
-    frame.update_portrait = true
-  elseif event == "UNIT_AURA" then
-    frame.update_aura = true
-  elseif event == "UNIT_FACTION" then
-    frame.update_pvp = true
-  else
-    frame.update_full = true
-  end
-end)
--- =====================================================
 
 -- slash command to toggle unitframe test mode
 _G.SLASH_PFTEST1, _G.SLASH_PFTEST2 = "/pftest", "/pfuftest"
@@ -1208,6 +1129,14 @@ function pfUI.uf.OnShow()
 end
 
 function pfUI.uf.OnEvent()
+  -- Handle shutdown to prevent crash 132
+  if event == "PLAYER_LOGOUT" then
+    this:UnregisterAllEvents()
+    this:SetScript("OnEvent", nil)
+    this:SetScript("OnUpdate", nil)
+    return
+  end
+
   -- update indicators
   if event == "PARTY_LEADER_CHANGED" or
      event == "PARTY_LOOT_METHOD_CHANGED" or
@@ -1222,29 +1151,39 @@ function pfUI.uf.OnEvent()
   -- abort on broken unitframes (e.g focus)
   if not this.label then return end
 
-  -- Handle shutdown to prevent crash 132
-  if event == "PLAYER_LOGOUT" then
-    this:UnregisterAllEvents()
-    this:SetScript("OnEvent", nil)
-    this:SetScript("OnUpdate", nil)
-    return
-  end
-
   -- update regular frames
   if event == "PLAYER_ENTERING_WORLD" then
+    this.update_full = true
     -- Clear GUID tracking on zone change for full rebuild
     if pfUI.uf.ClearGuidTracking then pfUI.uf.ClearGuidTracking() end
-    this.update_full = true
   elseif this.label == "target" and event == "PLAYER_TARGET_CHANGED" and not pfScanActive == true then
     this.update_full = true
   elseif ( this.label == "raid" or this.label == "party" or this.label == "player" ) and event == "PARTY_MEMBERS_CHANGED" then
-    this.update_full = true
+    -- Smart update: check if THIS frame's unit actually changed
+    if pfUI.uf.guidTracker and this.id then
+      local unit = this.label == "player" and "player" or (this.label .. this.id)
+      local _, newGuid = UnitExists(unit)
+      local oldGuid = pfUI.uf.guidTracker.frameToGuid[this]
+      if newGuid ~= oldGuid then
+        pfUI.uf.guidTracker.frameToGuid[this] = newGuid
+        this.update_full = true
+      end
+    else
+      this.update_full = true
+    end
   elseif ( this.label == "raid" or this.label == "party" ) and event == "PARTY_MEMBER_ENABLE" then
     this.update_full = true
   elseif ( this.label == "raid" or this.label == "party" ) and event == "PARTY_MEMBER_DISABLE" then
     this.update_full = true
   elseif ( this.label == "raid" or this.label == "party" ) and event == "RAID_ROSTER_UPDATE" then
-    this.update_full = true
+    -- Note: Smart GUID-based updates are handled in raid.lua OnUpdate
+    -- after frame IDs are reassigned. We don't set update_full here anymore
+    -- for raid frames to avoid the freeze.
+    if this.label == "party" then
+      -- Party frames still need the old logic (no smart tracking yet)
+      this.update_full = true
+    end
+    -- Raid frames: update_full is set by raid.lua GUID tracker
   elseif this.label == "pet" and event == "UNIT_PET" then
     this.update_full = true
   elseif this.label == "player" and (event == "PLAYER_AURAS_CHANGED" or event == "UNIT_INVENTORY_CHANGED") then
@@ -1253,6 +1192,8 @@ function pfUI.uf.OnEvent()
     this.update_full = true
   -- UNIT_XXX Events
   elseif arg1 and arg1 == this.label .. this.id then
+    this.lastEventUpdate = GetTime()
+
     if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
       this.update_portrait = true
     elseif event == "UNIT_AURA" then
@@ -1262,7 +1203,7 @@ function pfUI.uf.OnEvent()
     elseif event == "UNIT_COMBAT" then
       CombatFeedback_OnCombatEvent(arg2, arg3, arg4, arg5)
     else
-      this.update_full = true
+      this.update_base = true
     end
   end
 end
@@ -1591,54 +1532,34 @@ end
 
 function pfUI.uf:EnableEvents()
   local f = self
-  local unitstr = f.label .. f.id
 
-  -- Raid/Party Frames: Register in central handler instead of self
-  if f.label == "raid" or f.label == "party" then
-    -- Only register non-UNIT_* events ourselves
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:RegisterEvent("PLAYER_LOGOUT")
-    f:RegisterEvent("PARTY_MEMBERS_CHANGED")
-    f:RegisterEvent("PARTY_LEADER_CHANGED")
-    f:RegisterEvent("RAID_ROSTER_UPDATE")
-    f:RegisterEvent("PARTY_LOOT_METHOD_CHANGED")
-    f:RegisterEvent("RAID_TARGET_UPDATE")
-    f:RegisterEvent("PARTY_MEMBER_ENABLE")
-    f:RegisterEvent("PARTY_MEMBER_DISABLE")
-    f:RegisterEvent("PLAYER_UPDATE_RESTING")
-    
-    -- Unitmap aktualisieren
-    pfUI.uf.RebuildUnitmap()
-  else
-    -- All other frames: Normal event registration
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:RegisterEvent("PLAYER_LOGOUT")
-    f:RegisterEvent("UNIT_DISPLAYPOWER")
-    f:RegisterEvent("UNIT_HEALTH")
-    f:RegisterEvent("UNIT_MAXHEALTH")
-    f:RegisterEvent("UNIT_MANA")
-    f:RegisterEvent("UNIT_MAXMANA")
-    f:RegisterEvent("UNIT_RAGE")
-    f:RegisterEvent("UNIT_MAXRAGE")
-    f:RegisterEvent("UNIT_ENERGY")
-    f:RegisterEvent("UNIT_MAXENERGY")
-    f:RegisterEvent("UNIT_FOCUS")
-    f:RegisterEvent("UNIT_PORTRAIT_UPDATE")
-    f:RegisterEvent("UNIT_MODEL_CHANGED")
-    f:RegisterEvent("UNIT_FACTION")
-    f:RegisterEvent("UNIT_AURA")
-    f:RegisterEvent("PLAYER_AURAS_CHANGED")
-    f:RegisterEvent("UNIT_INVENTORY_CHANGED")
-    f:RegisterEvent("PARTY_MEMBERS_CHANGED")
-    f:RegisterEvent("PARTY_LEADER_CHANGED")
-    f:RegisterEvent("RAID_ROSTER_UPDATE")
-    f:RegisterEvent("PLAYER_UPDATE_RESTING")
-    f:RegisterEvent("PLAYER_TARGET_CHANGED")
-    f:RegisterEvent("PARTY_LOOT_METHOD_CHANGED")
-    f:RegisterEvent("RAID_TARGET_UPDATE")
-    f:RegisterEvent("UNIT_PET")
-    f:RegisterEvent("UNIT_HAPPINESS")
-  end
+  f:RegisterEvent("PLAYER_ENTERING_WORLD")
+  f:RegisterEvent("PLAYER_LOGOUT")
+  f:RegisterEvent("UNIT_DISPLAYPOWER")
+  f:RegisterEvent("UNIT_HEALTH")
+  f:RegisterEvent("UNIT_MAXHEALTH")
+  f:RegisterEvent("UNIT_MANA")
+  f:RegisterEvent("UNIT_MAXMANA")
+  f:RegisterEvent("UNIT_RAGE")
+  f:RegisterEvent("UNIT_MAXRAGE")
+  f:RegisterEvent("UNIT_ENERGY")
+  f:RegisterEvent("UNIT_MAXENERGY")
+  f:RegisterEvent("UNIT_FOCUS")
+  f:RegisterEvent("UNIT_PORTRAIT_UPDATE")
+  f:RegisterEvent("UNIT_MODEL_CHANGED")
+  f:RegisterEvent("UNIT_FACTION")
+  f:RegisterEvent("UNIT_AURA") -- frame=buff, frame=debuff
+  f:RegisterEvent("PLAYER_AURAS_CHANGED") -- label=player && frame=buff
+  f:RegisterEvent("UNIT_INVENTORY_CHANGED") -- label=player && frame=buff
+  f:RegisterEvent("PARTY_MEMBERS_CHANGED") -- label=party, frame=leaderIcon
+  f:RegisterEvent("PARTY_LEADER_CHANGED") -- frame=leaderIcon
+  f:RegisterEvent("RAID_ROSTER_UPDATE") -- label=raidIcon
+  f:RegisterEvent("PLAYER_UPDATE_RESTING") -- label=restIcon
+  f:RegisterEvent("PLAYER_TARGET_CHANGED") -- label=target
+  f:RegisterEvent("PARTY_LOOT_METHOD_CHANGED") -- frame=lootIcon
+  f:RegisterEvent("RAID_TARGET_UPDATE") -- frame=raidIcon
+  f:RegisterEvent("UNIT_PET")
+  f:RegisterEvent("UNIT_HAPPINESS")
 
   f:RegisterForClicks('LeftButtonUp', 'RightButtonUp',
     'MiddleButtonUp', 'Button4Up', 'Button5Up')
