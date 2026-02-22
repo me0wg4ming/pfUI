@@ -32,20 +32,30 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
         end
       end
 
-      -- refresh rip duration on ferocious bite
+      -- refresh rip and rake duration on ferocious bite (Turtle WoW feature)
+      -- Only refresh if Ferocious Bite actually hit (not missed/dodged/parried/etc.)
       local match = string.find(arg1, "Ferocious Bite")
-      if match and arg2 then
+      if match and arg2 and not libdebuff:DidSpellFail("Ferocious Bite") then
         local name = UnitName("target")
         local level = UnitLevel("target")
+        
+        -- Refresh Rip mit existierender Duration
         if libdebuff.objects[name] and libdebuff.objects[name][level] and libdebuff.objects[name][level]["Rip"] then
-          libdebuff:AddEffect(name, level, "Rip")
+          local existingDuration = libdebuff.objects[name][level]["Rip"].duration
+          libdebuff:AddEffect(name, level, "Rip", existingDuration)
+        end
+        
+        -- Refresh Rake mit existierender Duration
+        if libdebuff.objects[name] and libdebuff.objects[name][level] and libdebuff.objects[name][level]["Rake"] then
+          local existingDuration = libdebuff.objects[name][level]["Rake"].duration
+          libdebuff:AddEffect(name, level, "Rake", existingDuration)
         end
       end
 
       -- refresh Immolate duration after cast Conflagrate
+      -- Only refresh if Conflagrate actually hit
       local conflagrate = string.find(string.sub(arg1,6,17), "Conflagrate")
-      --arg2 is spell dmg when it hits, nil when it misses
-      if conflagrate and arg2 then
+      if conflagrate and arg2 and not libdebuff:DidSpellFail("Conflagrate") then
         local name = UnitName("target")
         local level = UnitLevel("target")
         if libdebuff.objects[name] and libdebuff.objects[name][level] and libdebuff.objects[name][level]["Immolate"] then

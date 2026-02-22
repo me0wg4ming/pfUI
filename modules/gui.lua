@@ -351,13 +351,13 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
             entry.text = text
             entry.func = function()
-              if category[config] ~= value then
+              if category and category[config] ~= value then
                 category[config] = value
                 if ufunc then ufunc() else pfUI.gui.settingChanged = true end
               end
             end
 
-            if category[config] == value then
+            if category and category[config] == value then
               frame.input.current = i
             end
 
@@ -656,7 +656,11 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
     pfUI.gui.hoverbind:SetHeight(25)
     pfUI.gui.hoverbind:SetText(T["Hoverbind"])
     pfUI.gui.hoverbind:SetScript("OnClick", function()
-      if pfUI.hoverbind then pfUI.hoverbind:Show() end
+      if pfUI.hoverbind then
+        pfUI.hoverbind:Show()
+      else
+        message("Please enable the Hoverbind module to use this feature.")
+      end
     end)
 
     SkinButton(pfUI.gui.hoverbind)
@@ -671,6 +675,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       if pfShare then
         pfShare:Show()
         pfShareExport:Click()
+      else
+        message("Please enable the Share module to share your config.")
       end
     end)
     SkinButton(pfUI.gui.share)
@@ -884,6 +890,15 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "6:" .. T["Medium"],
         "7:" .. T["Small"],
         "8:" .. T["Tiny (PixelPerfect)"],
+      },
+      ["abbrevnum"] = {
+        "0:" .. T["Full Numbers (4250)"],
+        "1:" .. T["Abbreviate 2 Decimals (4.25k)"],
+        "2:" .. T["Abbreviate 1 Decimal (4.2k)"],
+      },
+      ["castbardecimals"] = {
+        "1:" .. T["1 Decimal (2.1)"],
+        "2:" .. T["2 Decimals (2.14)"],
       },
       ["orientation"] = {
         "HORIZONTAL:" .. T["Horizontal"],
@@ -1372,7 +1387,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       donate:SetHeight(20)
       donate:SetText(T["Donate"])
       donate:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://ko-fi.com/shagu")
+        pfUI.chat.urlcopy.CopyText("https://buymeacoffee.com/w1ot8abps4")
       end)
       SkinButton(donate)
 
@@ -1382,7 +1397,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       github:SetHeight(20)
       github:SetText(T["GitHub"])
       github:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://github.com/shagu/pfUI")
+        pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI")
       end)
       SkinButton(github)
 
@@ -1392,7 +1407,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       website:SetHeight(20)
       website:SetText(T["Website"])
       website:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://shagu.org/pfUI")
+        pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI")
       end)
       SkinButton(website)
     end)
@@ -1490,7 +1505,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Disable Errors in UIErrors Frame"], C.global, "errors_hide", "checkbox")
       CreateConfig(nil, T["Highlight Settings That Require Reload"], C.gui, "reloadmarker", "checkbox")
       CreateConfig(nil, T["Show Incompatible Config Entries"], C.gui, "showdisabled", "checkbox")
-      CreateConfig(nil, T["Abbreviate Numbers (4200 -> 4.2k)"], C.unitframes, "abbrevnum", "checkbox")
+      CreateConfig(nil, T["Abbreviate Numbers"], C.unitframes, "abbrevnum", "dropdown", pfUI.gui.dropdowns.abbrevnum)
+      CreateConfig(nil, T["Castbar Timer Decimals"], C.unitframes, "castbardecimals", "dropdown", pfUI.gui.dropdowns.castbardecimals)
       CreateConfig(nil, T["Abbreviate Unit Names"], C.unitframes, "abbrevname", "checkbox")
       CreateConfig(nil, T["Health Point Estimation"], nil, nil, "header")
       CreateConfig(nil, T["Estimate Enemy Health Points"], C.global, "libhealth", "checkbox")
@@ -1584,7 +1600,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Cooldown Text Font Size (Blizzard Frames)"], C.appearance.cd, "font_size_blizz")
       CreateConfig(nil, T["Cooldown Text Font Size (Foreign Frames)"], C.appearance.cd, "font_size_foreign")
       CreateConfig(nil, T["Cooldown Text Time Threshold"], C.appearance.cd, "threshold")
-      CreateConfig(nil, T["Display Debuff Durations"], C.appearance.cd, "debuffs", "checkbox")
       CreateConfig(nil, T["Enable Durations On Blizzard Frames"], C.appearance.cd, "blizzard", "checkbox")
       CreateConfig(nil, T["Enable Durations On Foreign Frames"], C.appearance.cd, "foreign", "checkbox")
       CreateConfig(nil, T["Hide Foreign Cooldown Animations"], C.appearance.cd, "hideanim", "checkbox")
@@ -1610,6 +1625,321 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Selected Core"], C.gm, "server", "dropdown", pfUI.gui.dropdowns.gmserver_text)
     end)
 
+    -- Throttling Menu
+    CreateGUIEntry(T["Throttling"], T["Nameplates"], function()
+      local header = CreateConfig(nil, T["Nameplate Update Rate"], nil, nil, "header")
+      header:GetParent().objectCount = header:GetParent().objectCount - 1
+      header:SetHeight(20)
+      
+      local targetCustom  -- declare first so callback can use it
+      
+      CreateConfig(function()
+        -- Callback when dropdown changes - update custom field immediately
+        if targetCustom and targetCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("nameplates_target")
+          if not isCustom then
+            -- Preset selected - show FPS from preset, make readonly
+            targetCustom.input:EnableMouse(false)
+            targetCustom.input:EnableKeyboard(false)
+            targetCustom.input:ClearFocus()
+            targetCustom.input:SetTextColor(.5,.5,.5,1)
+            targetCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_target")))
+          else
+            -- Custom selected - make editable
+            targetCustom.input:EnableMouse(true)
+            targetCustom.input:EnableKeyboard(true)
+            targetCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.nameplates_target_custom then
+              targetCustom.input:SetText(_G.pfUI_throttle.nameplates_target_custom)
+            end
+          end
+        end
+      end, T["Target/Casting Plates"], _G.pfUI_throttle, "nameplates_target", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      -- Now create custom field AFTER dropdown
+      targetCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_target_custom")
+      
+      -- Set initial state
+      local isCustom = pfUI.throttle:IsCustom("nameplates_target")
+      if not isCustom then
+        targetCustom.input:EnableMouse(false)
+        targetCustom.input:EnableKeyboard(false)
+        targetCustom.input:SetTextColor(.5,.5,.5,1)
+        targetCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_target")))
+      else
+        targetCustom.input:EnableMouse(true)
+        targetCustom.input:EnableKeyboard(true)
+        targetCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.nameplates_target_custom then
+          targetCustom.input:SetText(_G.pfUI_throttle.nameplates_target_custom)
+        end
+      end
+      
+      -- Spacer after custom field
+      local spacer1 = CreateConfig(nil, " ", nil, nil, "header")
+      spacer1:GetParent().objectCount = spacer1:GetParent().objectCount - 1
+      spacer1:SetHeight(5)
+      
+      local normalCustom
+      
+      CreateConfig(function()
+        if normalCustom and normalCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("nameplates")
+          if not isCustom then
+            normalCustom.input:EnableMouse(false)
+            normalCustom.input:EnableKeyboard(false)
+            normalCustom.input:ClearFocus()
+            normalCustom.input:SetTextColor(.5,.5,.5,1)
+            normalCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates")))
+          else
+            normalCustom.input:EnableMouse(true)
+            normalCustom.input:EnableKeyboard(true)
+            normalCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.nameplates_custom then
+              normalCustom.input:SetText(_G.pfUI_throttle.nameplates_custom)
+            end
+          end
+        end
+      end, T["Normal Plates"], _G.pfUI_throttle, "nameplates", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      normalCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_custom")
+      
+      local isCustom2 = pfUI.throttle:IsCustom("nameplates")
+      if not isCustom2 then
+        normalCustom.input:EnableMouse(false)
+        normalCustom.input:EnableKeyboard(false)
+        normalCustom.input:SetTextColor(.5,.5,.5,1)
+        normalCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates")))
+      else
+        normalCustom.input:EnableMouse(true)
+        normalCustom.input:EnableKeyboard(true)
+        normalCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.nameplates_custom then
+          normalCustom.input:SetText(_G.pfUI_throttle.nameplates_custom)
+        end
+      end
+      
+      -- Spacer after custom field
+      local spacer2 = CreateConfig(nil, " ", nil, nil, "header")
+      spacer2:GetParent().objectCount = spacer2:GetParent().objectCount - 1
+      spacer2:SetHeight(5)
+      
+      local massCustom
+      
+      CreateConfig(function()
+        if massCustom and massCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("nameplates_mass")
+          if not isCustom then
+            massCustom.input:EnableMouse(false)
+            massCustom.input:EnableKeyboard(false)
+            massCustom.input:ClearFocus()
+            massCustom.input:SetTextColor(.5,.5,.5,1)
+            massCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_mass")))
+          else
+            massCustom.input:EnableMouse(true)
+            massCustom.input:EnableKeyboard(true)
+            massCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.nameplates_mass_custom then
+              massCustom.input:SetText(_G.pfUI_throttle.nameplates_mass_custom)
+            end
+          end
+        end
+      end, T["Mass Pulls (20+ Plates)"], _G.pfUI_throttle, "nameplates_mass", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      massCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_mass_custom")
+      
+      local isCustom3 = pfUI.throttle:IsCustom("nameplates_mass")
+      if not isCustom3 then
+        massCustom.input:EnableMouse(false)
+        massCustom.input:EnableKeyboard(false)
+        massCustom.input:SetTextColor(.5,.5,.5,1)
+        massCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_mass")))
+      else
+        massCustom.input:EnableMouse(true)
+        massCustom.input:EnableKeyboard(true)
+        massCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.nameplates_mass_custom then
+          massCustom.input:SetText(_G.pfUI_throttle.nameplates_mass_custom)
+        end
+      end
+      
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(10)
+      
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("nameplates_target")
+        pfUI.throttle:ResetToDefault("nameplates")
+        pfUI.throttle:ResetToDefault("nameplates_mass")
+        -- Also reset custom fields to their default FPS values
+        _G.pfUI_throttle.nameplates_target_custom = "50"
+        _G.pfUI_throttle.nameplates_custom = "10"
+        _G.pfUI_throttle.nameplates_mass_custom = "7"
+        Reload()
+      end, true)
+    end)
+
+    CreateGUIEntry(T["Throttling"], T["Tooltips"], function()
+      local header = CreateConfig(nil, T["Tooltip Update Rate"], nil, nil, "header")
+      header:GetParent().objectCount = header:GetParent().objectCount - 1
+      header:SetHeight(20)
+      
+      local cursorCustom
+      
+      CreateConfig(function()
+        if cursorCustom and cursorCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("tooltip_cursor")
+          if not isCustom then
+            cursorCustom.input:EnableMouse(false)
+            cursorCustom.input:EnableKeyboard(false)
+            cursorCustom.input:ClearFocus()
+            cursorCustom.input:SetTextColor(.5,.5,.5,1)
+            cursorCustom.input:SetText(tostring(pfUI.throttle:GetFps("tooltip_cursor")))
+          else
+            cursorCustom.input:EnableMouse(true)
+            cursorCustom.input:EnableKeyboard(true)
+            cursorCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.tooltip_cursor_custom then
+              cursorCustom.input:SetText(_G.pfUI_throttle.tooltip_cursor_custom)
+            end
+          end
+        end
+      end, T["Cursor Follow"], _G.pfUI_throttle, "tooltip_cursor", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      cursorCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "tooltip_cursor_custom")
+      
+      local isCustom = pfUI.throttle:IsCustom("tooltip_cursor")
+      if not isCustom then
+        cursorCustom.input:EnableMouse(false)
+        cursorCustom.input:EnableKeyboard(false)
+        cursorCustom.input:SetTextColor(.5,.5,.5,1)
+        cursorCustom.input:SetText(tostring(pfUI.throttle:GetFps("tooltip_cursor")))
+      else
+        cursorCustom.input:EnableMouse(true)
+        cursorCustom.input:EnableKeyboard(true)
+        cursorCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.tooltip_cursor_custom then
+          cursorCustom.input:SetText(_G.pfUI_throttle.tooltip_cursor_custom)
+        end
+      end
+      
+      -- Small spacer
+      local spacer1 = CreateConfig(nil, " ", nil, nil, "header")
+      spacer1:GetParent().objectCount = spacer1:GetParent().objectCount - 1
+      spacer1:SetHeight(5)
+      
+      -- Info note about Native mode
+      local infoText = CreateConfig(nil, T["Note: Only works when Cursor Align is NOT 'Native'"], nil, nil, "header")
+      infoText:GetParent().objectCount = infoText:GetParent().objectCount - 1
+      infoText:SetHeight(25)
+      
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(5)
+      
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("tooltip_cursor")
+        _G.pfUI_throttle.tooltip_cursor_custom = "10"
+        Reload()
+      end, true)
+    end)
+    CreateGUIEntry(T["Throttling"], T["Chat Tab"], function()
+      local chatCustom
+      
+      CreateConfig(function()
+        if chatCustom and chatCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("chat_tab")
+          if not isCustom then
+            chatCustom.input:EnableMouse(false)
+            chatCustom.input:EnableKeyboard(false)
+            chatCustom.input:ClearFocus()
+            chatCustom.input:SetTextColor(.5,.5,.5,1)
+            chatCustom.input:SetText(tostring(pfUI.throttle:GetFps("chat_tab")))
+          else
+            chatCustom.input:EnableMouse(true)
+            chatCustom.input:EnableKeyboard(true)
+            chatCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.chat_tab_custom then
+              chatCustom.input:SetText(_G.pfUI_throttle.chat_tab_custom)
+            end
+          end
+        end
+      end, T["Chat Tab Hover Check"], _G.pfUI_throttle, "chat_tab", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+      
+      chatCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "chat_tab_custom")
+      
+      local isCustom = pfUI.throttle:IsCustom("chat_tab")
+      if not isCustom then
+        chatCustom.input:EnableMouse(false)
+        chatCustom.input:EnableKeyboard(false)
+        chatCustom.input:SetTextColor(.5,.5,.5,1)
+        chatCustom.input:SetText(tostring(pfUI.throttle:GetFps("chat_tab")))
+      else
+        chatCustom.input:EnableMouse(true)
+        chatCustom.input:EnableKeyboard(true)
+        chatCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.chat_tab_custom then
+          chatCustom.input:SetText(_G.pfUI_throttle.chat_tab_custom)
+        end
+      end
+      
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(10)
+      
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("chat_tab")
+        _G.pfUI_throttle.chat_tab_custom = "10"
+        Reload()
+      end, true)
+    end)
+
     CreateGUIEntry(T["Unit Frames"], T["General"], function()
       CreateConfig(nil, T["Disable pfUI Unit Frames"], C.unitframes, "disable", "checkbox")
       CreateConfig(nil, T["Healthbar Animation Speed"], C.unitframes, "animation_speed", "dropdown", pfUI.gui.dropdowns.uf_animationspeed)
@@ -1623,6 +1953,21 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Enable Energy Ticks"], C.unitframes.player, "energy", "checkbox")
       CreateConfig(nil, T["Enable Mana Ticks"], C.unitframes.player, "manatick", "checkbox")
       CreateConfig(nil, T["Detect Enemy Buffs"], C.unitframes, "buffdetect", "checkbox", nil, nil, nil, nil, "vanilla" )
+
+      CreateConfig(nil, T["Swing Timer"], nil, nil, "header")
+      CreateConfig(nil, T["Swing Timer Width"], C.unitframes, "swingtimerwidth")
+      CreateConfig(nil, T["Swing Timer Height"], C.unitframes, "swingtimerheight")
+      CreateConfig(nil, T["Swing Timer Texture"], C.unitframes, "swingtimertexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture)
+      CreateConfig(nil, T["Swing Timer Font Size"], C.unitframes, "swingtimerfontsize")
+      CreateConfig(nil, T["Show Timer Text"], C.unitframes, "swingtimertext", "checkbox")
+      CreateConfig(nil, T["Show MH/OH Labels"], C.unitframes, "swingtimerlabel", "checkbox")
+      CreateConfig(nil, T["Show Offhand Bar"], C.unitframes, "swingtimeroffhand", "checkbox")
+      CreateConfig(nil, T["Show Ranged Bar"], C.unitframes, "swingtimerranged", "checkbox")
+      CreateConfig(nil, T["Mainhand Bar Color"], C.unitframes, "swingtimermhcolor", "color")
+      CreateConfig(nil, T["Offhand Bar Color"], C.unitframes, "swingtimerohcolor", "color")
+      CreateConfig(nil, T["Ranged Bar Color"], C.unitframes, "swingtimerrangedcolor", "color")
+      CreateConfig(nil, T["Ranged Warn Color (Hunter)"], C.unitframes, "swingtimerrangedwarncolor", "color")
+      CreateConfig(nil, T["Show HS/Cleave Queue Color (Warrior)"], C.unitframes, "swingtimerhsqueue", "checkbox")
 
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
@@ -1653,10 +1998,29 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Energy Color"], C.unitframes, "energycolor", "color")
       CreateConfig(nil, T["Focus Color"], C.unitframes, "focuscolor", "color")
 
-      CreateConfig(nil, T["SuperWoW Settings"], nil, nil, "header")
+      CreateConfig(nil, T["Druid Settings"], nil, nil, "header")
       CreateConfig(nil, T["Show Druid Mana Bar"], C.unitframes, "druidmanabar", "checkbox", nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Druid Mana Bar Height"], C.unitframes, "druidmanaheight", nil, nil, nil, nil, nil, "vanilla" )
-      CreateConfig(nil, T["Druid Mana Bar Text"], C.unitframes, "druidmanatext", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Druid Mana Bar Width (-1 = auto)"], C.unitframes, "druidmanawidth", nil, nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Druid Mana Bar X-Offset"], C.unitframes, "druidmanaoffx", nil, nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Druid Mana Bar Y-Offset"], C.unitframes, "druidmanaoffy", nil, nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Druid Mana Bar Spacing"], C.unitframes, "druidmanaspace", nil, nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Druid Mana Bar Texture"], C.unitframes, "druidmanatexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture, nil, nil, nil, "vanilla" )
+
+
+      CreateConfig(nil, T["SuperWoW Settings"], nil, nil, "header")
+      CreateConfig(nil, T["Track Group on Minimap"], C.unitframes, "track_group", "checkbox", nil, nil, nil, nil, "vanilla" )
+
+      CreateConfig(nil, T["Nampower Settings"], nil, nil, "header")
+      CreateConfig(nil, T["Show Spell Queue Indicator"], C.unitframes, "spellqueue", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Spell Queue Icon Size"], C.unitframes, "spellqueuesize", nil, nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Show Reactive Spell Indicator"], C.unitframes, "reactive_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Reactive Indicator Size"], C.unitframes, "reactive_size", nil, nil, nil, nil, nil, "vanilla" )
+
+      CreateConfig(nil, T["UnitXP Settings"], nil, nil, "header")
+      CreateConfig(nil, T["Show Line of Sight Indicator"], C.unitframes, "los_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Show Behind Indicator"], C.unitframes, "behind_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Enable OS Notifications"], C.unitframes, "unitxp_notify", "checkbox", nil, nil, nil, nil, "vanilla" )
     end)
 
     -- Shared Unit- and Groupframes
@@ -1813,7 +2177,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
         CreateConfig(U[c], T["Timer"], nil, nil, "header")
         CreateConfig(U[c], T["Show Timer Text"], C.unitframes[c], "cooldown_text", "checkbox")
-        CreateConfig(U[c], T["Show Timer Animation"], C.unitframes[c], "cooldown_anim", "checkbox")
+        CreateConfig(Reload, T["Show Timer Animation"], C.unitframes[c], "cooldown_anim", "checkbox")
 
         CreateConfig(U[c], T["Buffs"], nil, nil, "header")
         CreateConfig(U[c], T["Buff Position"], C.unitframes[c], "buffs", "dropdown", pfUI.gui.dropdowns.uf_buff_position)
@@ -2014,7 +2378,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["bars"], T["Button Animation"], C.bars, "animation", "dropdown", pfUI.gui.dropdowns.actionbuttonanimations)
       CreateConfig(U["bars"], T["Button Animation Trigger"], C.bars, "animmode", "dropdown", pfUI.gui.dropdowns.animationmode)
       CreateConfig(U["bars"], T["Show Animation On Hidden Bars"], C.bars, "animalways", "checkbox")
-      CreateConfig(U["bars"], T["Scan Macros For Spells"], C.bars, "macroscan", "checkbox", nil, nil, nil, nil, "vanilla")
+      if not pfUI:MacroAddonsLoaded() then
+        CreateConfig(U["bars"], T["Scan Macros For Spells"], C.bars, "macroscan", "checkbox", nil, nil, nil, nil, "vanilla")
+      end
       CreateConfig(U["bars"], T["Show Reagent Count"], C.bars, "reagents", "checkbox")
       CreateConfig(U["bars"], T["Highlight Equipped Items"], C.bars, "showequipped", "checkbox")
       CreateConfig(U["bars"], T["Equipped Item Color"], C.bars, "eqcolor", "color")
@@ -2263,6 +2629,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Generate Playerlinks"], C.chat.text, "playerlinks", "checkbox")
       CreateConfig(nil, T["Enable URL Detection"], C.chat.text, "detecturl", "checkbox")
       CreateConfig(nil, T["Enable Class Colors"], C.chat.text, "classcolor", "checkbox")
+      CreateConfig(nil, T["Enable Player Levels"], C.chat.text, "playerlevel", "checkbox")
       CreateConfig(nil, T["Who Search Unknown Classes (|cffffaaaaExperimental|r)"], C.chat.text, "whosearchunknown", "checkbox")
       CreateConfig(nil, T["Colorize Unknown Classes"], C.chat.text, "tintunknown", "checkbox")
       CreateConfig(nil, T["Unknown Class Color"], C.chat.text, "unknowncolor", "color")
@@ -2294,6 +2661,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
     CreateGUIEntry(T["Nameplates"], nil, function()
       CreateConfig(U["nameplates"], T["Show On Hostile Units"], C.nameplates, "showhostile", "checkbox")
       CreateConfig(U["nameplates"], T["Show On Friendly Units"], C.nameplates, "showfriendly", "checkbox")
+      CreateConfig(U["nameplates"], T["Disable Hostile Nameplates In Friendly Zones"], C.nameplates, "disable_hostile_in_friendly", "checkbox")
+      CreateConfig(U["nameplates"], T["Disable Friendly Nameplates In Friendly Zones"], C.nameplates, "disable_friendly_in_friendly", "checkbox")
       CreateConfig(U["nameplates"], T["Vertical Offset (|cffffaaaaExperimental|r)"], C.nameplates, "vertical_offset", nil, nil, nil, nil, nil, "vanilla")
       CreateConfig(U["nameplates"], T["Inactive Nameplate Alpha"], C.nameplates, "notargalpha", "dropdown", pfUI.gui.dropdowns.percent_small)
       CreateConfig(U["nameplates"], T["Draw Glow Around Target Nameplate"], C.nameplates, "targetglow", "checkbox")
@@ -2334,6 +2703,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Debuff Icon Size"], C.nameplates, "debuffsize")
       CreateConfig(U["nameplates"], T["Estimate Debuffs"], C.nameplates, "guessdebuffs", "checkbox")
       CreateConfig(U["nameplates"], T["Show Debuff Stacks"], C.nameplates.debuffs, "showstacks", "checkbox")
+      CreateConfig(U["nameplates"], T["Enable Debuff Timers"], C.nameplates, "debufftimers", "checkbox")
+      CreateConfig(U["nameplates"], T["Show Timer Text"], C.nameplates, "debufftext", "checkbox")
+      CreateConfig(Reload, T["Show Timer Animation"], C.nameplates, "debuffanim", "checkbox")
+
       CreateConfig(U["nameplates"], T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.nameplates, "selfdebuff", "checkbox")
       CreateConfig(U["nameplates"], T["Filter Mode"], C.nameplates.debuffs, "filter", "dropdown", pfUI.gui.dropdowns.buffbarfilter)
       CreateConfig(U["nameplates"], T["Blacklist"], C.nameplates.debuffs, "blacklist", "list")
@@ -2406,6 +2779,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, "BetterCharacterStats", C.thirdparty.bcs, "enable", "checkbox", nil, nil, nil, nil, "vanilla")
       CreateConfig(nil, "Crafty", C.thirdparty.crafty, "enable", "checkbox", nil, nil, nil, nil, "vanilla")
       CreateConfig(nil, "CleverMacro", C.thirdparty.clevermacro, "enable", "checkbox", nil, nil, nil, nil, "vanilla")
+      CreateConfig(nil, "SuperCleveRoidMacros", C.thirdparty.supercleveroidmacros, "enable", "checkbox", nil, nil, nil, nil, "vanilla")
       CreateConfig(nil, "AckisRecipeList", C.thirdparty.ackis, "enable", "checkbox", nil, nil, nil, nil, "tbc")
       CreateConfig(nil, "SheepWatch", C.thirdparty.sheepwatch, "enable", "checkbox", nil, nil, nil, nil, "tbc")
       CreateConfig(nil, "TotemTimers", C.thirdparty.totemtimers, "enable", "checkbox", nil, nil, nil, nil, "tbc")
@@ -2423,7 +2797,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
     CreateGUIEntry(T["Components"], T["Modules"], function()
       table.sort(pfUI.modules)
       for i,m in pairs(pfUI.modules) do
-        if m ~= "gui" then
+        -- skip gui and macrotweak when macro addons are loaded
+        if m ~= "gui" and not (m == "macrotweak" and pfUI:MacroAddonsLoaded()) then
           -- create disabled entry if not existing and display
           pfUI:UpdateConfig("disabled", nil, m, "0")
           CreateConfig(nil, T["Disable Module"] .. " " .. m, C.disabled, m, "checkbox")

@@ -3,6 +3,82 @@ pfUI.api = { }
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
+-- [ DLL Detection Helpers ]
+-- Detects presence of various DLL extensions for enhanced functionality
+
+-- [ HasSuperWoW ]
+-- Returns true if SuperWoW DLL is active
+-- SuperWoW provides: UNIT_CASTEVENT, UnitPosition, SetMouseoverUnit, SpellInfo, etc.
+function pfUI.api.HasSuperWoW()
+  return SUPERWOW_VERSION or (SetAutoloot and SpellInfo)
+end
+
+-- [ HasUnitXP ]
+-- Returns true if UnitXP_SP3 DLL is active
+-- UnitXP provides: distance, line of sight, behind detection, targeting helpers
+function pfUI.api.HasUnitXP()
+  local success = pcall(UnitXP, "nop", "nop")
+  return success
+end
+
+-- [ HasNampower ]
+-- Returns true if Nampower DLL is active
+-- Nampower provides: spell queuing, GetCastInfo, GetSpellIdCooldown, IsSpellInRange, etc.
+function pfUI.api.HasNampower()
+  return GetNampowerVersion and true or false
+end
+
+-- [ GetUnitDistance ]
+-- Returns distance to unit using best available method
+-- 'unit1'    [string]    first unit (default: "player")
+-- 'unit2'    [string]    second unit
+-- returns:   [number]    distance in yards, or nil if unavailable
+function pfUI.api.GetUnitDistance(unit1, unit2)
+  if not unit2 then
+    unit2 = unit1
+    unit1 = "player"
+  end
+
+  if not UnitExists(unit2) then return nil end
+
+  -- Try UnitXP first (most accurate)
+  if pfUI.api.HasUnitXP() then
+    local success, distance = pcall(UnitXP, "distanceBetween", unit1, unit2)
+    if success and distance then return distance end
+  end
+
+  -- Try SuperWoW UnitPosition
+  if pfUI.api.HasSuperWoW() and UnitPosition then
+    local x1, y1, z1 = UnitPosition(unit1)
+    local x2, y2, z2 = UnitPosition(unit2)
+    if x1 and y1 and z1 and x2 and y2 and z2 then
+      return ((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2)^0.5
+    end
+  end
+
+  return nil
+end
+
+-- [ UnitInLineOfSight ]
+-- Returns true if unit1 has line of sight to unit2
+-- Requires UnitXP_SP3
+function pfUI.api.UnitInLineOfSight(unit1, unit2)
+  if not pfUI.api.HasUnitXP() then return nil end
+  local success, inSight = pcall(UnitXP, "inSight", unit1, unit2)
+  if success then return inSight end
+  return nil
+end
+
+-- [ UnitIsBehind ]
+-- Returns true if unit1 is behind unit2
+-- Requires UnitXP_SP3
+function pfUI.api.UnitIsBehind(unit1, unit2)
+  if not pfUI.api.HasUnitXP() then return nil end
+  local success, behind = pcall(UnitXP, "behind", unit1, unit2)
+  if success then return behind end
+  return nil
+end
+
 -- Client API shortcuts
 gfind = string.gmatch or string.gfind
 mod = math.mod or mod
@@ -369,18 +445,33 @@ end
 -- 'number'     [number]           the number that should be abbreviated
 -- 'returns:    [string]           the abbreviated value
 function pfUI.api.Abbreviate(number)
-  if pfUI_config.unitframes.abbrevnum == "1" then
+  local mode = pfUI_config.unitframes.abbrevnum
+  -- mode "0" = disabled (full numbers)
+  -- mode "1" = 2 decimals (4250 -> 4.25k) [legacy/default]
+  -- mode "2" = 1 decimal (4250 -> 4.2k) - always rounds DOWN
+  
+  if mode == "1" or mode == "2" then
     local sign = number < 0 and -1 or 1
     number = math.abs(number)
 
     if number > 1000000 then
-      return pfUI.api.round(number/1000000*sign,2) .. "m"
+      if mode == "2" then
+        -- 1 decimal, round DOWN: 4.18m -> 4.1m
+        return (floor(number/100000) / 10 * sign) .. "m"
+      else
+        return pfUI.api.round(number/1000000*sign, 2) .. "m"
+      end
     elseif number > 1000 then
-      return pfUI.api.round(number/1000*sign,2) .. "k"
+      if mode == "2" then
+        -- 1 decimal, round DOWN: 4180 -> 4.1k (not 4.2k)
+        return (floor(number/100) / 10 * sign) .. "k"
+      else
+        return pfUI.api.round(number/1000*sign, 2) .. "k"
+      end
     end
   end
 
-  return number
+  return math.floor(number)
 end
 
 -- [ SendChatMessageWide ]
@@ -1184,6 +1275,10 @@ function pfUI.api.EnableAutohide(frame, timeout, combat)
   end
 
   frame.hover:SetScript("OnUpdate", function()
+    -- throttle to 0.05s
+    if (this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + 0.05
+
     if this.activeTo == "keep" then return end
 
     if MouseIsOver(this, 10, -10, -10, 10) then
@@ -1370,4 +1465,34 @@ function pfUI.api.GetNoNameObject(frame, objtype, layer, arg1, arg2)
       end
     end
   end
+end
+
+-- [ TryMemoizedFuncLoadstringForSpellCasts ]
+-- Memoizes lua function strings for spell casts to improve performance.
+-- Supports both string functions and direct function values.
+-- 'funcOrStr'  [function|string]  Either a function or a lua string to execute
+-- return:      [function|nil]     The function to execute, or nil on error
+local memoizedFuncs = {}
+function pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(funcOrStr)
+  -- If it's already a function, return it directly
+  if type(funcOrStr) == "function" then
+    return funcOrStr
+  end
+  
+  -- If it's a string, try to memoize it
+  if type(funcOrStr) == "string" then
+    -- Check if we've already compiled this string
+    if memoizedFuncs[funcOrStr] then
+      return memoizedFuncs[funcOrStr]
+    end
+    
+    -- Try to compile the string
+    local func = loadstring(funcOrStr)
+    if func then
+      memoizedFuncs[funcOrStr] = func
+      return func
+    end
+  end
+  
+  return nil
 end

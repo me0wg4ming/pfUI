@@ -87,6 +87,10 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
   pfUI.uf.raid:RegisterEvent("VARIABLES_LOADED")
   pfUI.uf.raid:SetScript("OnEvent", function() this:Show() end)
   pfUI.uf.raid:SetScript("OnUpdate", function()
+    -- Throttle raid roster updates to 1 FPS
+    if (this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + 1.0
+
     -- don't proceed without raid or during combat
     if not UnitInRaid("player") or (InCombatLockdown and InCombatLockdown()) then return end
 
@@ -107,6 +111,32 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
       if name and not pfUI.uf.raid.tankrole[name] then
         pfUI.uf.raid:AddUnitToGroup(i, subgroup)
       end
+    end
+
+    -- Smart GUID-based updates: only refresh frames where unit changed
+    if pfUI.uf.guidTracker then
+      local tracker = pfUI.uf.guidTracker
+      
+      for i = 1, maxraid do
+        local frame = pfUI.uf.raid[i]
+        if frame and frame.id and frame.id > 0 then
+          local unit = "raid" .. frame.id
+          local _, newGuid = UnitExists(unit)
+          local oldGuid = tracker.frameToGuid[frame]
+          
+          if newGuid ~= oldGuid then
+            -- GUID changed = different player = need full update
+            tracker.frameToGuid[frame] = newGuid
+            frame.update_full = true
+            frame.update_aura = true  -- Force aura refresh!
+          end
+        end
+      end
+    end
+
+    -- rebuild unitmap after frame IDs are assigned
+    if pfUI.uf.RebuildUnitmap then
+      pfUI.uf.RebuildUnitmap()
     end
 
     this:Hide()

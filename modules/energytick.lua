@@ -7,6 +7,9 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
   energytick:RegisterEvent("UNIT_DISPLAYPOWER")
   energytick:RegisterEvent("UNIT_ENERGY")
   energytick:RegisterEvent("UNIT_MANA")
+  energytick:RegisterEvent("CHAT_MSG_SPELL_SELF_BUFF")
+  energytick:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_SELF_BUFFS")
+  
   energytick:SetScript("OnEvent", function()
     if UnitPowerType("player") == 0 and C.unitframes.player.manatick == "1" then
       this.mode = "MANA"
@@ -16,6 +19,14 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
       this:Show()
     else
       this:Hide()
+    end
+
+    -- Filter nur eigene Energy-Gewinne von Talents/Buffs
+    if event == "CHAT_MSG_SPELL_SELF_BUFF" or event == "CHAT_MSG_SPELL_PERIODIC_SELF_BUFFS" then
+      if string.find(arg1, "You gain") and string.find(arg1, "Energy from") then
+        this.ignoreNextGain = true
+      end
+      return
     end
 
     if event == "PLAYER_ENTERING_WORLD" then
@@ -38,13 +49,20 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
           this.badtick = diff
         end
       elseif this.mode == "ENERGY" and diff > 0 then
-        this.target = 2
+        if not this.ignoreNextGain then
+          this.target = 2
+        end
+        this.ignoreNextGain = false
       end
       this.lastMana = this.currentMana
     end
   end)
 
   energytick:SetScript("OnUpdate", function()
+    -- Throttle for performance
+    if (this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + 0.020
+    
     if this.target then
       this.start, this.max = GetTime(), this.target
       this.target = nil
@@ -69,14 +87,10 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function ()
   energytick.spark:SetWidth(C.unitframes.player.pheight + 5)
   energytick.spark:SetBlendMode('ADD')
 
-  -- update spark size on player frame changes
   local hookUpdateConfig = pfUI.uf.player.UpdateConfig
   function pfUI.uf.player.UpdateConfig()
-    -- update spark sizes
     energytick.spark:SetHeight(C.unitframes.player.pheight + 15)
     energytick.spark:SetWidth(C.unitframes.player.pheight + 5)
-
-    -- run default unitframe update function
     hookUpdateConfig(pfUI.uf.player)
   end
 end)

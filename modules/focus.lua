@@ -17,17 +17,95 @@ end)
 
 -- register focus emulation commands for vanilla
 if pfUI.client > 11200 then return end
+
+-- Helper: set focus frame to a GUID
+local function SetFocusByGUID(guid)
+  pfUI.uf.focus.unitname = nil
+  pfUI.uf.focus.label = guid
+  pfUI.uf.focus.id = ""
+
+  if pfUI.uf.focustarget then
+    pfUI.uf.focustarget.unitname = nil
+    pfUI.uf.focustarget.label = guid .. "target"
+    pfUI.uf.focustarget.id = ""
+  end
+end
+
+-- Helper: set focus frame by name (fallback, no Nampower)
+local function SetFocusByName(name)
+  pfUI.uf.focus.unitname = strlower(name)
+  pfUI.uf.focus.label = nil
+  pfUI.uf.focus.id = nil
+
+  if pfUI.uf.focustarget then
+    pfUI.uf.focustarget.unitname = strlower(name) .. "target"
+    pfUI.uf.focustarget.label = nil
+    pfUI.uf.focustarget.id = nil
+  end
+end
+
 SLASH_PFFOCUS1, SLASH_PFFOCUS2 = '/focus', '/pffocus'
 function SlashCmdList.PFFOCUS(msg)
   if not pfUI.uf or not pfUI.uf.focus then return end
 
   if msg ~= "" then
-    pfUI.uf.focus.unitname = strlower(msg)
-  elseif UnitName("target") then
-    pfUI.uf.focus.unitname = strlower(UnitName("target"))
+    -- Try to resolve GUID via short target swap
+    if UnitExists then
+      local _, prevGUID = UnitExists("target")
+      local prevPlayer = UnitIsUnit("target", "player")
+
+      -- Suppress "Unknown unit" errors during targeting attempts (fired async)
+      UIErrorsFrame:UnregisterEvent("UI_ERROR_MESSAGE")
+
+      -- Try exact match first, then prefix match via /tar
+      TargetByName(msg, true)
+      local _, guid = UnitExists("target")
+
+      if not guid or guid == "0x0000000000000000" then
+        -- Fallback: prefix match (like /tar storm -> Stormwind Guard)
+        SlashCmdList.TARGET(msg)
+        _, guid = UnitExists("target")
+      end
+
+      -- Re-enable errors next frame (errors are fired async)
+      local restore = CreateFrame("Frame")
+      restore:SetScript("OnUpdate", function()
+        UIErrorsFrame:RegisterEvent("UI_ERROR_MESSAGE")
+        restore:SetScript("OnUpdate", nil)
+      end)
+
+      -- Restore previous target
+      if prevGUID and prevGUID ~= "0x0000000000000000" then
+        TargetUnit(prevGUID)
+      elseif prevPlayer then
+        TargetUnit("player")
+      else
+        ClearTarget()
+      end
+
+      if guid and guid ~= "0x0000000000000000" then
+        SetFocusByGUID(guid)
+        return
+      end
+    end
+
+    -- Fallback: name-based (non-Nampower clients)
+    SetFocusByName(msg)
   else
-    pfUI.uf.focus.unitname = nil
-    pfUI.uf.focus.label = nil
+    -- No msg: use current target
+    if UnitExists then
+      local _, guid = UnitExists("target")
+      if guid and guid ~= "0x0000000000000000" then
+        SetFocusByGUID(guid)
+        return
+      end
+    end
+
+    -- Fallback: name-based
+    local name = UnitName("target")
+    if name then
+      SetFocusByName(name)
+    end
   end
 end
 
@@ -53,11 +131,56 @@ function SlashCmdList.PFCASTFOCUS(msg)
     return
   end
 
+  local func = pfUI.api.TryMemoizedFuncLoadstringForSpellCasts(msg)
+  local focusGUID = pfUI.uf.focus.label
+  local hasGUID = focusGUID and focusGUID ~= "" and focusGUID ~= "0x0000000000000000"
+
+  -- GUID-based cast (Nampower) - no target toggle needed
+  if hasGUID and CastSpellByName and not func then
+    CastSpellByName(msg, focusGUID)
+    return
+  end
+
+  -- For lua functions with GUID: short target swap via GUID
+  if hasGUID and func then
+    local _, currentGUID = UnitExists("target")
+    local isPlayer = UnitIsUnit("target", "player")
+
+    TargetUnit(focusGUID)
+    local _, newGUID = UnitExists("target")
+
+    if newGUID ~= focusGUID then
+      -- Could not target focus, restore and fail
+      if currentGUID and currentGUID ~= "0x0000000000000000" then
+        TargetUnit(currentGUID)
+      elseif isPlayer then
+        TargetUnit("player")
+      else
+        TargetLastTarget()
+      end
+      UIErrorsFrame:AddMessage(SPELL_FAILED_BAD_TARGETS, 1, 0, 0)
+      return
+    end
+
+    func()
+
+    if currentGUID and currentGUID ~= "0x0000000000000000" then
+      TargetUnit(currentGUID)
+    elseif isPlayer then
+      TargetUnit("player")
+    else
+      TargetLastTarget()
+    end
+    return
+  end
+
+  -- Fallback: name-based target swap (no Nampower / no GUID)
   local skiptarget = false
   local player = UnitIsUnit("target", "player")
   local unitname = ""
 
-  if pfUI.uf.focus.label and UnitIsUnit("target", pfUI.uf.focus.label .. pfUI.uf.focus.id) then
+  if pfUI.uf.focus.label and pfUI.uf.focus.id and
+     UnitIsUnit("target", pfUI.uf.focus.label .. pfUI.uf.focus.id) then
     skiptarget = true
   else
     pfScanActive = true
@@ -69,7 +192,7 @@ function SlashCmdList.PFCASTFOCUS(msg)
       TargetByName(pfUI.uf.focus.unitname, true)
     end
 
-    if strlower(UnitName("target")) ~= strlower(unitname) then
+    if strlower(UnitName("target") or "") ~= strlower(unitname or "") then
       pfScanActive = nil
       TargetLastTarget()
       UIErrorsFrame:AddMessage(SPELL_FAILED_BAD_TARGETS, 1, 0, 0)
@@ -77,7 +200,6 @@ function SlashCmdList.PFCASTFOCUS(msg)
     end
   end
 
-  local func = loadstring(msg or "")
   if func then
     func()
   else
@@ -98,9 +220,26 @@ SLASH_PFSWAPFOCUS1, SLASH_PFSWAPFOCUS2 = '/swapfocus', '/pfswapfocus'
 function SlashCmdList.PFSWAPFOCUS(msg)
   if not pfUI.uf or not pfUI.uf.focus then return end
 
-  local oldunit = UnitExists("target") and strlower(UnitName("target"))
-  if oldunit and pfUI.uf.focus.unitname then
-    TargetByName(pfUI.uf.focus.unitname)
-    pfUI.uf.focus.unitname = oldunit
+  local _, guid = nil, nil
+  if UnitExists then
+    _, guid = UnitExists("target")
+  end
+
+  if guid and guid ~= "0x0000000000000000" then
+    local oldGUID = pfUI.uf.focus.label
+
+    SetFocusByGUID(guid)
+
+    -- Target old focus if we had one
+    if oldGUID and oldGUID ~= "" and oldGUID ~= "0x0000000000000000" then
+      TargetUnit(oldGUID)
+    end
+  else
+    -- Fallback: name-based swap
+    local oldunit = UnitExists("target") and strlower(UnitName("target") or "")
+    if oldunit and pfUI.uf.focus.unitname then
+      TargetByName(pfUI.uf.focus.unitname, true)
+      pfUI.uf.focus.unitname = oldunit
+    end
   end
 end
