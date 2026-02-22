@@ -1,5 +1,7 @@
 local function getAdjustedTickTimer()
   local adjustedEnergyTick = 2
+
+  -- Check rogue talents and compute energy tick timing reduction for Combat spec (1.18.0 Blade Rush Talent)
   if UnitClass("player") == "Rogue" then
     local _, _, _, _, currRank = GetTalentInfo(2, 16)
     local bladeRushRank = currRank or 0
@@ -58,8 +60,6 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function()
       if this.lastMana then
         diff = this.currentMana - this.lastMana
       end
-
-      -- Check rogue talents and compute energy tick timing reduction for Combat spec (1.18.0 Blade Rush Talent)
 
       if this.mode == "MANA" and diff < 0 then
         this.target = 5
