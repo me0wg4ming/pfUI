@@ -953,6 +953,11 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "20x2:" .. "20x2",
         "40x1:" .. "40x1",
       },
+      ["uf_raidfill"] = {
+        "HORIZONTAL:" .. T["Horizontal"],
+        "VERTICAL:" .. T["Vertical 1->5"],
+        "VERTICAL2:" .. T["Vertical 5->1"],
+      },
       ["uf_powerbar_position"] = {
         "TOPLEFT:" .. T["Left"],
         "TOP:" .. T["Center"],
@@ -2130,8 +2135,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           CreateConfig(U[c], T["Layout"], nil, nil, "header")
           CreateConfig(U["raid"], T["Raid Padding"], C.unitframes[c], "raidpadding")
           CreateConfig(U["raid"], T["Raid Layout"], C.unitframes[c], "raidlayout", "dropdown", pfUI.gui.dropdowns.uf_raidlayout)
-          CreateConfig(U["raid"], T["Raid Fill Direction"], C.unitframes[c], "raidfill", "dropdown", pfUI.gui.dropdowns.orientation)
-          CreateConfig(U["raid"], T["Raid Fill Top to Bottom"], C.unitframes[c], "raidfillreverse", "checkbox")
+          CreateConfig(U["raid"], T["Raid Fill Direction"], C.unitframes[c], "raidfill", "dropdown", pfUI.gui.dropdowns.uf_raidfill)
         end
 
         CreateConfig(U[c], T["Healthbar"], nil, nil, "header")
