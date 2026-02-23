@@ -293,11 +293,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     end
 
     if isOffhand and swingState.offhand.speed > 0 then
-      swingState.offhand.nextSwing = now + swingState.offhand.speed
+      -- Continue from previous nextSwing to avoid timer jumps
+      local base = (swingState.offhand.swinging and swingState.offhand.nextSwing > (now - 0.5)) and swingState.offhand.nextSwing or now
+      swingState.offhand.nextSwing = base + swingState.offhand.speed
       swingState.offhand.swinging = true
       if sw_showoh then pfUI.swingtimer.offhand:Show() end
     else
-      swingState.mainhand.nextSwing = now + swingState.mainhand.speed
+      -- Continue from previous nextSwing to avoid timer jumps on HS/normal swing
+      local base = (swingState.mainhand.swinging and swingState.mainhand.nextSwing > (now - 0.5)) and swingState.mainhand.nextSwing or now
+      swingState.mainhand.nextSwing = base + swingState.mainhand.speed
       swingState.mainhand.swinging = true
       pfUI.swingtimer.mainhand:Show()
     end
@@ -481,7 +485,31 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
   events:RegisterEvent("UNIT_DIED")
   events:RegisterEvent("SPELL_QUEUE_EVENT")
-  events:RegisterEvent("SPELL_GO_SELF")
+
+  -- Use libdebuff SPELL_GO_SELF hook instead of registering the event separately
+  pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
+  pfUI.libdebuff_spell_go_hooks["swingtimer"] = function(spellId)
+    if RANGED_SPELLIDS[spellId] then
+      StartRangedSwing()
+    elseif hsSpellIDs[spellId] then
+      hsQueued = false; cleaveQueued = false
+      StartSwing(false)
+    elseif cleaveSpellIDs[spellId] then
+      hsQueued = false; cleaveQueued = false
+      StartSwing(false)
+    end
+  end
+
+  -- Use libdebuff SPELL_CAST_EVENT hook instead of registering the event separately
+  pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
+  pfUI.libdebuff_spell_cast_hooks["swingtimer"] = function(success, spellId)
+    if success ~= 1 then return end
+    if hsSpellIDs[spellId] then
+      hsQueued = true; cleaveQueued = false
+    elseif cleaveSpellIDs[spellId] then
+      cleaveQueued = true; hsQueued = false
+    end
+  end
 
   local function ResetSwingTimers()
     swingState.mainhand.swinging = false
@@ -498,9 +526,10 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   events:SetScript("OnEvent", function()
     if event == "AUTO_ATTACK_SELF" then
       local hitInfo = arg4 or 0
-      -- HITINFO_NOACTION: server did not advance the swing clock, ignore
-      if bit.band(hitInfo, HITINFO_NOACTION) ~= 0 then return end
       local isOffhand = bit.band(hitInfo, HITINFO_LEFTSWING) ~= 0
+      local noAction = bit.band(hitInfo, HITINFO_NOACTION) ~= 0
+      -- HITINFO_NOACTION: server did not advance the swing clock, ignore
+      if noAction then return end
       StartSwing(isOffhand)
 
     elseif event == "AUTO_ATTACK_OTHER" then
@@ -530,9 +559,11 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
           hsQueued = true; cleaveQueued = false
         elseif cleaveSpellIDs[spellId] then
           cleaveQueued = true; hsQueued = false
+        else
         end
       elseif eventCode == ON_SWING_QUEUE_POPPED then
         hsQueued = false; cleaveQueued = false
+      else
       end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -542,12 +573,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       playerGUID = guid
       UpdateWeaponSpeeds()
       RebuildQueueSlotCache()
-
-    elseif event == "SPELL_GO_SELF" then
-      local spellId = arg2 or 0
-      if RANGED_SPELLIDS[spellId] then
-        StartRangedSwing()
-      end
 
     elseif event == "UNIT_INVENTORY_CHANGED" then
       if arg1 and arg1 ~= "player" then return end

@@ -89,9 +89,9 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
   pfUI.raidmarkers = CreateFrame("Frame", "pfMarkerTracker", UIParent)
   pfUI.raidmarkers:SetFrameStrata("MEDIUM")
   if GROW == "up" then
-    pfUI.raidmarkers:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -20, 200)
+    pfUI.raidmarkers:SetPoint("BOTTOM", UIParent, "CENTER", 0, 0)
   else
-    pfUI.raidmarkers:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
+    pfUI.raidmarkers:SetPoint("TOP", UIParent, "CENTER", 0, 0)
   end
   pfUI.raidmarkers:SetWidth(TOTAL_ROW_WIDTH)
   pfUI.raidmarkers:SetHeight(8 * (ROW_HEIGHT + 1) + border * 2 - 1)

@@ -160,6 +160,12 @@ pfUI.libdebuff_all_slots = pfUI.libdebuff_all_slots or {}
 -- [targetGuid][spellName][casterGuid] = timestamp
 pfUI.libdebuff_recent_casts = pfUI.libdebuff_recent_casts or {}
 local recentCasts = pfUI.libdebuff_recent_casts
+
+-- Callbacks fired after SPELL_GO_SELF is processed: fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
+
+-- Callbacks fired after SPELL_CAST_EVENT is processed: fn(success, spellId, castType, targetGuid)
+pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
 local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
 
 -- Captured combo points from SPELL_CAST_EVENT (before client consumes them)
@@ -1262,6 +1268,13 @@ if hasNampower then
           carnageCheckFrame:Show()
         end
       end
+
+      -- Fire registered SPELL_GO_SELF hooks (only for own casts)
+      if event == "SPELL_GO_SELF" and pfUI.libdebuff_spell_go_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_go_hooks) do
+          fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+        end
+      end
       
     elseif event == "SPELL_FAILED_OTHER" then
       local casterGuid = arg1
@@ -1310,6 +1323,13 @@ if hasNampower then
       -- Only capture CPs for combo-point abilities
       if spellName and IsComboPointAbility(spellName) then
         capturedCP = GetComboPoints() or 0
+      end
+
+      -- Fire registered SPELL_CAST_EVENT hooks
+      if pfUI.libdebuff_spell_cast_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_cast_hooks) do
+          fn(success, spellId, castType, targetGuid)
+        end
       end
       
     elseif event == "AURA_CAST_ON_SELF" or event == "AURA_CAST_ON_OTHER" then
