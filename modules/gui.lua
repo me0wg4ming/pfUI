@@ -956,7 +956,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       ["uf_raidfill"] = {
         "HORIZONTAL:" .. T["Horizontal"],
         "VERTICAL:" .. T["Vertical 1->5"],
-        "VERTICAL2:" .. T["Vertical 5->1"],
+        "VERTICALR:" .. T["Vertical 5->1"],
       },
       ["uf_powerbar_position"] = {
         "TOPLEFT:" .. T["Left"],

@@ -51,7 +51,7 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
         end
         i = i + 1
         end end
-    elseif fill == "VERTICAL2" then
+    elseif fill == "VERTICALR" then
         for r=1, x do for g=y, 1, -1 do
           if pfUI.uf.raid[i] then
             pfUI.uf.raid[i]:ClearAllPoints()
