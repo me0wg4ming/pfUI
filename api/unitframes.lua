@@ -2378,9 +2378,9 @@ function pfUI.uf:RefreshUnit(unit, component)
     if table.getn(unit.indicators) > 0 then
       for i=1,32 do
         local texture, count = UnitBuff(unitstr, i)
-        local timeleft, _
+        local timeleft, buffName, _
         if pfUI.client > 11200 then
-          _, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
+          buffName, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
         end
 
         if texture then
@@ -2388,6 +2388,13 @@ function pfUI.uf:RefreshUnit(unit, component)
           for _, filter in pairs(unit.indicators) do
             if filter == string.lower(texture) then
               if string.lower(texture) == "interface\\icons\\spell_nature_rejuvenation" then
+                -- Also verify spell name to avoid false matches from spells sharing this icon
+                if not buffName then
+                  scanner = scanner or libtipscan:GetScanner("unitframes")
+                  scanner:SetUnitBuff(unitstr, i)
+                  buffName = scanner:Line(1) or ""
+                end
+                if string.lower(buffName) ~= "rejuvenation" then break end
                 local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Reju")
                 pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
                 pos = pos + 1
@@ -2398,6 +2405,13 @@ function pfUI.uf:RefreshUnit(unit, component)
                 pos = pos + 1
                 break
               elseif string.lower(texture) == "interface\\icons\\spell_nature_resistnature" then
+                -- Also verify spell name to avoid false matches from spells sharing this icon
+                if not buffName then
+                  scanner = scanner or libtipscan:GetScanner("unitframes")
+                  scanner:SetUnitBuff(unitstr, i)
+                  buffName = scanner:Line(1) or ""
+                end
+                if string.lower(buffName) ~= "regrowth" then break end
                 local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Regr")
                 pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
                 pos = pos + 1
