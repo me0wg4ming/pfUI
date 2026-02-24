@@ -1973,7 +1973,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Ranged Warn Color (Hunter)"], C.unitframes, "swingtimerrangedwarncolor", "color")
       CreateConfig(nil, T["Show HS/Cleave Queue Color (Warrior)"], C.unitframes, "swingtimerhsqueue", "checkbox")
 
-      CreateConfig(nil, "Raid Markers", nil, nil, "header")
+      CreateConfig(nil, "Mark Tracking", nil, nil, "header")
       CreateConfig(nil, "Raid Marker Width", C.unitframes, "raidmarkerwidth")
       CreateConfig(nil, "Raid Marker Height", C.unitframes, "raidmarkerheight")
       CreateConfig(nil, "Raid Marker Grow", C.unitframes, "raidmarkergrow", "dropdown", pfUI.gui.dropdowns.raidmarker_grow)

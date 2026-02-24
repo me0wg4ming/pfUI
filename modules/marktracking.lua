@@ -1,4 +1,4 @@
-pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
+pfUI:RegisterModule("marktracking", "vanilla:tbc", function ()
   -- Requires mark1-mark8 unit tokens (Turtle WoW / Nampower)
   if not UnitExists("mark1") and not UnitExists("mark8") then
     if not pcall(function() UnitExists("mark1") end) then return end
@@ -86,40 +86,45 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
   local TOTAL_ROW_WIDTH = BAR_WIDTH + 20 + (rm_showportrait and (PORTRAIT_SIZE + 2) or 0)
 
   -- Container frame
-  pfUI.raidmarkers = CreateFrame("Frame", "pfMarkerTracker", UIParent)
-  pfUI.raidmarkers:SetFrameStrata("MEDIUM")
-  if GROW == "up" then
-    pfUI.raidmarkers:SetPoint("BOTTOM", UIParent, "CENTER", 0, 0)
-  else
-    pfUI.raidmarkers:SetPoint("TOP", UIParent, "CENTER", 0, 0)
+    -- Migrate position from old frame name (RaidMarkers -> MarkTracking)
+  if C.position and C.position["pfMarkerTracker"] and not C.position["pfMarkTracking"] then
+    C.position["pfMarkTracking"] = C.position["pfMarkerTracker"]
   end
-  pfUI.raidmarkers:SetWidth(TOTAL_ROW_WIDTH)
-  pfUI.raidmarkers:SetHeight(8 * (ROW_HEIGHT + 1) + border * 2 - 1)
-  pfUI.raidmarkers:Hide()
 
-  CreateBackdrop(pfUI.raidmarkers)
-  CreateBackdropShadow(pfUI.raidmarkers)
-  UpdateMovable(pfUI.raidmarkers)
+pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
+  pfUI.marktracking:SetFrameStrata("MEDIUM")
+  if GROW == "up" then
+    pfUI.marktracking:SetPoint("BOTTOM", UIParent, "CENTER", 0, 0)
+  else
+    pfUI.marktracking:SetPoint("TOP", UIParent, "CENTER", 0, 0)
+  end
+  pfUI.marktracking:SetWidth(TOTAL_ROW_WIDTH)
+  pfUI.marktracking:SetHeight(8 * (ROW_HEIGHT + 1) + border * 2 - 1)
+  pfUI.marktracking:Hide()
 
-  pfUI.raidmarkers:SetScript("OnMouseUp", function()
+  CreateBackdrop(pfUI.marktracking)
+  CreateBackdropShadow(pfUI.marktracking)
+  UpdateMovable(pfUI.marktracking)
+
+  pfUI.marktracking:SetScript("OnMouseUp", function()
     if pfUI.unlock and pfUI.unlock:IsShown() then
       this:StopMovingOrSizing()
       local _, _, _, x, y = this:GetPoint()
       this:ClearAllPoints()
       this:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", math.floor(x + 0.5), math.floor(y + 0.5))
-      C.position["pfMarkerTracker"] = C.position["pfMarkerTracker"] or {}
-      C.position["pfMarkerTracker"]["anchor"] = "BOTTOMRIGHT"
-      C.position["pfMarkerTracker"]["xpos"] = math.floor(x + 0.5)
-      C.position["pfMarkerTracker"]["ypos"] = math.floor(y + 0.5)
+      C.position["pfMarkTracking"] = C.position["pfMarkTracking"] or {}
+      C.position["pfMarkTracking"]["anchor"] = "BOTTOMRIGHT"
+      C.position["pfMarkTracking"]["xpos"] = math.floor(x + 0.5)
+      C.position["pfMarkTracking"]["ypos"] = math.floor(y + 0.5)
     end
   end)
 
   -- Create 8 marker rows
-  pfUI.raidmarkers.rows = {}
+  pfUI.marktracking.rows = {}
   for idx = 1, 8 do
     local i = markerOrder[idx]
 
-    local row = CreateFrame("Button", nil, pfUI.raidmarkers)
+    local row = CreateFrame("Button", nil, pfUI.marktracking)
     row:SetWidth(TOTAL_ROW_WIDTH)
     row:SetHeight(ROW_HEIGHT)
     row:Hide()
@@ -183,7 +188,7 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
     row.markerIndex = i
     row.label = "mark"  -- enables /pfcast mouseover support via GetMouseFocus()
     row.id = i
-    pfUI.raidmarkers.rows[i] = row
+    pfUI.marktracking.rows[i] = row
   end
 
   local function UpdateDisplay()
@@ -194,7 +199,7 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
 
     for idx = 1, 8 do
       local i = markerOrder[idx]
-      local row = pfUI.raidmarkers.rows[i]
+      local row = pfUI.marktracking.rows[i]
       local token = markerTokens[i]
 
       if UnitExists(token) and not UnitIsDead(token) then
@@ -230,13 +235,13 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
             if prevRow then
               row:SetPoint("BOTTOM", prevRow, "TOP", 0, 1)
             else
-              row:SetPoint("BOTTOM", pfUI.raidmarkers, "BOTTOM", 0, border)
+              row:SetPoint("BOTTOM", pfUI.marktracking, "BOTTOM", 0, border)
             end
           else
             if prevRow then
               row:SetPoint("TOP", prevRow, "BOTTOM", 0, -1)
             else
-              row:SetPoint("TOP", pfUI.raidmarkers, "TOP", 0, -border)
+              row:SetPoint("TOP", pfUI.marktracking, "TOP", 0, -border)
             end
           end
           row:Show()
@@ -253,10 +258,10 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
     end
 
     if anyActive then
-      pfUI.raidmarkers:SetHeight(visibleCount * (ROW_HEIGHT + 1) + border * 2 - 1)
-      pfUI.raidmarkers:Show()
+      pfUI.marktracking:SetHeight(visibleCount * (ROW_HEIGHT + 1) + border * 2 - 1)
+      pfUI.marktracking:Show()
     elseif not (pfUI.unlock and pfUI.unlock:IsShown()) then
-      pfUI.raidmarkers:Hide()
+      pfUI.marktracking:Hide()
     end
   end
 
@@ -268,10 +273,10 @@ pfUI:RegisterModule("raidmarkers", "vanilla:tbc", function ()
       isUnlocked = true
       -- hide all rows, show container at 1-row height as drag handle
       for i = 1, 8 do
-        pfUI.raidmarkers.rows[i]:Hide()
+        pfUI.marktracking.rows[i]:Hide()
       end
-      pfUI.raidmarkers:SetHeight(ROW_HEIGHT + border * 2)
-      pfUI.raidmarkers:Show()
+      pfUI.marktracking:SetHeight(ROW_HEIGHT + border * 2)
+      pfUI.marktracking:Show()
     end)
 
     local origHide = pfUI.unlock:GetScript("OnHide")
