@@ -398,7 +398,7 @@ local function GetDebuffSlotMap(guid)
   -- Check cache first
   local now = GetTime()
   local cached = slotMapCache[guid]
-  if cached and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
+  if cached and cached.map and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
     return cached.map
   end
   
@@ -420,7 +420,7 @@ local function GetDebuffSlotMap(guid)
     local spellId = auras[auraSlot]
     if spellId and spellId > 0 then
       displaySlot = displaySlot + 1
-      local spellName = SpellInfo(spellId)
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name") or SpellInfo(spellId)
       local texture = libdebuff:GetSpellIcon(spellId)
       
       -- Get stacks from auraApplications (0-indexed, so +1 for display)
@@ -446,11 +446,12 @@ local function GetDebuffSlotMap(guid)
     end
   end
   
-  -- Cache the result
-  slotMapCache[guid] = {
-    map = map,
-    timestamp = now
-  }
+  -- Cache the result (separate from buffMap to avoid cross-invalidation)
+  if not slotMapCache[guid] then
+    slotMapCache[guid] = { timestamp = now }
+  end
+  slotMapCache[guid].map = map
+  slotMapCache[guid].timestamp = now
   
   return map
 end
