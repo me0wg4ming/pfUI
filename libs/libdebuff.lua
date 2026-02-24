@@ -423,9 +423,8 @@ local function GetDebuffSlotMap(guid)
       local spellName = SpellInfo(spellId)
       local texture = libdebuff:GetSpellIcon(spellId)
       
-      -- Get stacks from auraApplications (extract immediately - reusable table)
-      local stacks = auraApps and auraApps[auraSlot] or 0
-      if stacks == 0 then stacks = 1 end  -- 0 means 1 stack (no stacking)
+      -- Get stacks from auraApplications (0-indexed, so +1 for display)
+      local stacks = (auraApps and auraApps[auraSlot] or 0) + 1
       
       -- Get debuff type from SpellRec DBC
       local dtype = nil
