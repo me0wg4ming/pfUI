@@ -103,12 +103,6 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
       explorecaches[k] = nil
     end
 
-    -- reset NUM_WORLDMAP_OVERLAYS to original Blizzard value to prevent unbounded texture growth
-    if not BASE_WORLDMAP_OVERLAYS then
-      BASE_WORLDMAP_OVERLAYS = NUM_WORLDMAP_OVERLAYS
-    end
-    NUM_WORLDMAP_OVERLAYS = BASE_WORLDMAP_OVERLAYS
-
     -- create metatable if not yet created
     this.overlayData = this.overlayData or setmetatable(pfMapOverlayData, {__index = function(t,k)
       local v = {}
