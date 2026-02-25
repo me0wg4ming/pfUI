@@ -98,6 +98,17 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
   end
 
   local function pfWorldMapFrame_Update()
+    -- clear stale texture references to prevent memory leak / Error 132
+    for k in pairs(explorecaches) do
+      explorecaches[k] = nil
+    end
+
+    -- reset NUM_WORLDMAP_OVERLAYS to original Blizzard value to prevent unbounded texture growth
+    if not BASE_WORLDMAP_OVERLAYS then
+      BASE_WORLDMAP_OVERLAYS = NUM_WORLDMAP_OVERLAYS
+    end
+    NUM_WORLDMAP_OVERLAYS = BASE_WORLDMAP_OVERLAYS
+
     -- create metatable if not yet created
     this.overlayData = this.overlayData or setmetatable(pfMapOverlayData, {__index = function(t,k)
       local v = {}
@@ -113,7 +124,8 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
     local prefix = string.format("Interface\\WorldMap\\%s\\",mapFileName)
     local numOverlays = GetNumMapOverlays()
 
-    local alreadyknown = {}
+    -- reuse upvalue table to avoid GC pressure
+    for k in pairs(alreadyknown) do alreadyknown[k] = nil end
     for i=1, numOverlays do
       local textureName, textureWidth, textureHeight, offsetX, offsetY, mapPointX, mapPointY = GetMapOverlayInfo(i)
       local overlayHash = create_hash(textureName, textureWidth, textureHeight, offsetX, offsetY, mapPointX, mapPointY)
