@@ -69,6 +69,8 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
 
   local explores = {}
   local explorecaches = {}
+  local alreadyknown = {}
+  local BASE_WORLDMAP_OVERLAYS = nil
 
   local exploreEnter = function()
     WorldMapTooltip:ClearLines()

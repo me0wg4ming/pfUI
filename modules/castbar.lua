@@ -145,7 +145,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       
       if not cast and UnitChannelInfo then
         -- scan for channel spells if no cast was found
-        channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(query)
+        channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(this.unitstr or this.unitname)
         cast = channel
       end
 
