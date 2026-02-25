@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-7.6.2-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-7.7.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Required-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Required-purple.svg)](https://gitea.com/avitasia/nampower)
@@ -11,6 +11,62 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+
+🎯 What's New in Version 7.7.0 (February 25, 2026)
+🗡️ Swingtimer Overhaul (swingtimer.lua)
+Complete rewrite of HS/Cleave detection and StartSwing timing for accurate warrior swing tracking:
+Previously, Heroic Strike and Cleave were detected via SPELL_GO_SELF by matching against a hardcoded spell ID list. The timer calculation used now + speed which caused visible jumps when HS consumed the swing.
+HS/Cleave Detection via SPELL_GO_SELF hook:
+
+✅ HS/Cleave now detected via pfUI.libdebuff_spell_go_hooks["swingtimer"] — reuses libdebuff's existing SPELL_GO_SELF event instead of registering a duplicate event handler
+✅ cachedHSSlots / cachedCleaveSlots — actionbar slots pre-scanned on UNIT_INVENTORY_CHANGED and ACTIONBAR_SLOT_CHANGED, no per-swing scanning
+✅ IsHSOrCleaveQueued() — lightweight check via CheckQueuedAction() on cached slots
+
+StartSwing timing fix:
+
+✅ nextSwing = previousNextSwing + speed instead of now + speed — timer continues from the previous swing boundary, preventing jumps when HS/normal swing alternates
+✅ 100ms dual-wield guard — detects missing isOffhand flag by checking MH swing age, prevents MH swings being misclassified as OH
+
+Ranged swing (Auto Shot / Throw):
+
+✅ Triggered via SPELL_GO_SELF hook (same hook as HS/Cleave) — no separate event registration
+✅ Ranged swing cancels MH bar display while active
+
+
+🛡️ Raid Performance: Buff Cache Seeding (api/unitframes.lua)
+Eliminated tooltip scans for all known buffs on cold cache:
+Previously, DetectBuff checked pfUI_cache.buff_icons for known buff icons. On a cold cache (raid join, reload), every unknown icon triggered a scanner:SetUnitBuff + scanner:Line(1) tooltip scan. With 40 raid frames × 32 buff slots = up to 1280 scans per UNIT_AURA event.
+The Fix:
+
+✅ buff_icons_seeded flag — runs once per login
+✅ On first DetectBuff call, all entries from L["icons"] are pre-loaded into pfUI_cache.buff_icons (icon path → spell name)
+✅ All known buffs (Fort, MotW, Shadow Protection, Mark, etc.) hit the cache immediately — scanner never triggered for them
+✅ Fixed broken cache check: removed L["icons"][detect_name] condition (detect_name was always nil at that point)
+
+
+🏷️ RaidMarkers → MarkTracking Module Rename (modules/marktracking.lua)
+Module renamed and extended with color configuration:
+
+✅ Module renamed from raidmarkers to marktracking for clarity
+✅ Per-marker color configuration — each of the 8 raid markers has individually configurable RGBA color
+✅ Default colors per marker type (skull=red, cross=blue, square=blue, moon=silver, etc.)
+✅ ParseColor() helper for robust color string parsing
+
+
+🐛 Bug Fixes
+Castbar: Channel spell name missing after queued cast (castbar.lua)
+
+✅ Fixed UnitChannelInfo being called with player name string instead of "player" unitstring
+✅ When a channel spell (Arcane Missiles, Icicles) was queued after a normal cast, the castbar showed only "Channeling" without spell name or icon
+✅ UnitChannelInfo now always receives this.unitstr — full spell info returned correctly
+
+Map Reveal: Memory leak and Error 132 crash fix (modules/mapreveal.lua)
+
+✅ explorecaches cleared at the start of every pfWorldMapFrame_Update call
+✅ Previously, texture references accumulated indefinitely — WoW internally recycles textures, causing stale pointers → ACCESS_VIOLATION (Error 132)
+✅ alreadyknown table reused as upvalue instead of allocating a new table every update — reduces GC pressure
 
 ---
 
@@ -1493,7 +1549,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 7.6.2
-**Release Date:** February 6, 2026  
+**Version:** 7.7.0
+**Release Date:** February 25, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable
