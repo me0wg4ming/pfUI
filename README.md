@@ -14,7 +14,8 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ---
 
-🎯 What's New in Version 7.7.0 (February 25, 2026)
+## 🎯 What's New in Version 7.7.0 (February 25, 2026)
+
 🗡️ Swingtimer Overhaul (swingtimer.lua)
 Complete rewrite of HS/Cleave detection and StartSwing timing for accurate warrior swing tracking:
 Previously, Heroic Strike and Cleave were detected via SPELL_GO_SELF by matching against a hardcoded spell ID list. The timer calculation used now + speed which caused visible jumps when HS consumed the swing.
