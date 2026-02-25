@@ -1,5 +1,3 @@
-if TURTLE_WOW_VERSION then return end
-
 pfUI:RegisterModule("hdgraphic", "vanilla", function ()
   -- inject video settings to provide advanced slider values
   _G.OptionsFrameSliders[3].maxValue = 15
