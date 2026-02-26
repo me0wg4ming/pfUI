@@ -1539,6 +1539,7 @@ if hasNampower then
       end
       
       local data = ownDebuffs[targetGuid][spellName]
+      if not data then return end  -- race condition: cleared by DEBUFF_REMOVED between init and use
       
       -- Downrank Protection: Check if existing debuff is still active and has higher rank
       if data.startTime and data.duration and data.rank and rankNum > 0 then
