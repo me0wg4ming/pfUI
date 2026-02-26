@@ -354,6 +354,12 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     local now = GetTime()
     local anyActive = false
 
+    -- Execute delayed regen reset (only if combat hasn't resumed)
+    if swingState.regenResetPending and now >= swingState.regenResetPending then
+      swingState.regenResetPending = nil
+      ResetSwingTimers()
+    end
+
     local curR, curG, curB = mhDefaultR, mhDefaultG, mhDefaultB
     if sw_hsqueue and isWarrior then
       local hs, cl = IsHSOrCleaveQueued()
@@ -590,10 +596,13 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       RebuildQueueSlotCache()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
+      swingState.regenResetPending = nil  -- cancel delayed reset, combat resumed
       UpdateWeaponSpeeds()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-      ResetSwingTimers()
+      -- Delay reset to avoid false resets between mobs in raids
+      -- If combat resumes within 2s (PLAYER_REGEN_DISABLED), cancel the reset
+      swingState.regenResetPending = GetTime() + 2.0
       hsQueued     = false
       cleaveQueued = false
 
