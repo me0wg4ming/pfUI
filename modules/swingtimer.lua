@@ -346,6 +346,16 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     pfUI.swingtimer:Show()
   end
 
+  local function ResetSwingTimers()
+    swingState.mainhand.swinging = false
+    swingState.offhand.swinging  = false
+    swingState.ranged.swinging   = false
+    pfUI.swingtimer.mainhand:Hide()
+    pfUI.swingtimer.offhand:Hide()
+    pfUI.swingtimer.ranged:Hide()
+    pfUI.swingtimer:Hide()
+  end
+
   local swingThrottle = 0
   pfUI.swingtimer:SetScript("OnUpdate", function()
     swingThrottle = swingThrottle + arg1
@@ -515,16 +525,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     elseif cleaveSpellIDs[spellId] then
       cleaveQueued = true; hsQueued = false
     end
-  end
-
-  local function ResetSwingTimers()
-    swingState.mainhand.swinging = false
-    swingState.offhand.swinging  = false
-    swingState.ranged.swinging   = false
-    pfUI.swingtimer.mainhand:Hide()
-    pfUI.swingtimer.offhand:Hide()
-    pfUI.swingtimer.ranged:Hide()
-    pfUI.swingtimer:Hide()
   end
 
   local playerGUID = nil
