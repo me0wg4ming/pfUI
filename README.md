@@ -18,7 +18,9 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ### 🔗 libdebuff External Hook System (libs/libdebuff.lua)
 
-Full event hook system exposed on `pfUI` global — external addons from other creators can now register callbacks for all events processed by libdebuff without registering duplicate event listeners.
+Full event hook system exposed on `pfUI` global.
+This is for external addons from other creators that want to register callbacks for all events processed by libdebuff without registering duplicate event listeners.
+(always make sure to do this as an optional variant if you want your addon to still work without libdebuff from pfui)
 
 **Usage:**
 ```lua
