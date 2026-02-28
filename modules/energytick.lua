@@ -84,7 +84,7 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function()
     if (this.tick or 0) > GetTime() then
       return
     end
-    this.tick = GetTime() + 0.020  -- ~50 FPS
+    this.tick = GetTime() + 0.020
 
     if this.target then
       this.start, this.max = GetTime(), this.target
