@@ -124,6 +124,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     cfg.spellname = C.nameplates.spellname == "1"
     cfg.showhp = C.nameplates.showhp == "1"
     cfg.showdebuffs = C.nameplates["showdebuffs"] == "1"
+    cfg.showdebuffs_hostile = C.nameplates["showdebuffs_hostile"] == "1"
+    cfg.showdebuffs_friendly = C.nameplates["showdebuffs_friendly"] == "1"
     cfg.targetzoom = C.nameplates.targetzoom == "1"
     cfg.zoomval = (tonumber(C.nameplates.targetzoomval) or 0.4) + 1
     cfg.width = tonumber(C.nameplates.width) or 120
@@ -1168,7 +1170,9 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     -- update debuffs
     local index = 1
 
-    if cfg.showdebuffs then
+    local isFriendly = unittype == "FRIENDLY_PLAYER" or unittype == "FRIENDLY_NPC"
+    local showDebuffsForType = cfg.showdebuffs and (isFriendly and cfg.showdebuffs_friendly or (not isFriendly and cfg.showdebuffs_hostile))
+    if showDebuffsForType then
       local verify = string.format("%s:%s", (name or ""), (level or ""))
 
       -- update cached debuffs

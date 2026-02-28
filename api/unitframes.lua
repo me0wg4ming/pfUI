@@ -2753,20 +2753,16 @@ function pfUI.uf:ClickAction(button)
       -- run click cast action
       local is_macro = string.find(this.clickactions[modstring], "^%/(.+)")
 
-      if superwow_active and not is_macro then
-        CastSpellByName(this.clickactions[modstring], unitstr)
+      local tswitch = UnitIsUnit(unitstr, "target")
+      TargetUnit(unitstr)
+
+      if is_macro then
+        RunMacroText(this.clickactions[modstring])
       else
-        local tswitch = UnitIsUnit(unitstr, "target")
-        TargetUnit(unitstr)
-
-        if is_macro then
-          RunMacroText(this.clickactions[modstring])
-        else
-          CastSpellByName(this.clickactions[modstring])
-        end
-
-        if not tswitch then TargetLastTarget() end
+        CastSpellByName(this.clickactions[modstring])
       end
+
+      if not tswitch then TargetLastTarget() end
 
       return
     end
