@@ -424,7 +424,7 @@ local dispelTypeMap = {
 -- Get current debuff state directly from WoW via GetUnitField
 -- Returns: { [displaySlot] = {auraSlot, spellId, spellName, stacks, texture, dtype} }
 local function GetDebuffSlotMap(guid)
-  if not guid or not GetUnitField or not SpellInfo then
+  if not guid or not GetUnitField then
     return nil
   end
   
@@ -1275,9 +1275,13 @@ if hasNampower then
       end
       
       if numMissed > 0 or numHit == 0 then return end
-      if not SpellInfo then return end
-      
-      local spellName, spellRankString = SpellInfo(spellId)
+
+      local spellName, spellRankString
+      if SpellInfo then
+        spellName, spellRankString = SpellInfo(spellId)
+      elseif GetSpellRecField then
+        spellName = GetSpellRecField(spellId, "name")
+      end
       if not spellName then return end
       
       local castRank = 0
@@ -1411,10 +1415,10 @@ if hasNampower then
       local durationMs = arg8
       local auraCapStatus = arg9
       
-      if not SpellInfo or not spellId then return end
+      if not spellId then return end
       if not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000" then return end
       
-      local spellName = SpellInfo(spellId)
+      local spellName = SpellInfo and SpellInfo(spellId) or (GetSpellRecField and GetSpellRecField(spellId, "name"))
       if not spellName then return end
       
       -- Deduplicate: Ignore if we processed this exact cast recently (within 100ms)
