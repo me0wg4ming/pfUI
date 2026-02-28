@@ -1505,10 +1505,14 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       -- Get GUID for CastEvents lookup - use cached GUID when available
       if isTargetPlate then
         targetGUID = state and state.targetGuid
+        if not targetGUID then
+          local _, guid = UnitExists("target")
+          targetGUID = guid
+        end
       end
       
       -- Use cached GUID for non-target plates
-      if superwow_active and not isTargetPlate then
+      if not isTargetPlate then
         unitstr = nameplate.cachedGuid
       end
       
@@ -1557,32 +1561,32 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
           nameplate.castbar:Show()
         end
       else
-        -- Fallback to API calls if no event data (for non-SuperWoW or target)
+        -- Fallback to API calls only when no GUID available (Nampower not tracking this unit)
         local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
-        
-        -- Try to get cast info for target plates
-        if isTargetPlate and UnitExists("target") then
+
+        if targetGUID then
+          -- We have a GUID = Nampower is authority, no cast means no cast
+          nameplate.castbar:Hide()
+        elseif isTargetPlate and UnitExists("target") then
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
-          if not cast then 
+          if not cast then
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
           end
-        -- NAMPOWER: For non-target plates, use GUID or mobName
         elseif unitstr then
-          -- unitstr is GUID from Nampower
-          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(unitstr)
+          local _, guid = UnitExists(unitstr)
+          local q = guid or unitstr
+          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(q)
           if not cast then
-            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(unitstr)
+            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(q)
           end
         elseif name then
-          -- Fallback to mob name (for CHAT_MSG castbars)
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(name)
           if not cast then
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(name)
           end
         end
-        
+
         if not cast and not channel then
-          -- No cast data = hide castbar (fixes stuck castbar on FAIL for non-target plates)
           nameplate.castbar:Hide()
         else
           local effect = cast or channel
@@ -1594,21 +1598,20 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
           nameplate.castbar:SetMinMaxValues(0, duration/1000)
           nameplate.castbar:SetValue(cur)
-          -- Show remaining time (countdown), not elapsed time
           local remaining = max - cur
-          if channel then remaining = cur end  -- Channel already counts down
+          if channel then remaining = cur end
           if C.unitframes.castbardecimals == "1" then
             nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
           else
             nameplate.castbar.text:SetText(string.format("%.2f", remaining))
           end
-          
+
           if C.nameplates.spellname == "1" then
             nameplate.castbar.spell:SetText(effect)
           else
             nameplate.castbar.spell:SetText("")
           end
-          
+
           nameplate.castbar:Show()
 
           if texture then
