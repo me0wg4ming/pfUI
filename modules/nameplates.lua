@@ -12,12 +12,6 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
   end
 
-  -- Check for SuperWoW support (fallback)
-  local hasSuperwow = SUPERWOW_VERSION ~= nil
-
-  -- Use either Nampower or SuperWoW for GetName(1) GUID support
-  local superwow_active = hasNampower or hasSuperwow
-
   -- Local function references for performance
   local GetTime = GetTime
   local UnitExists = UnitExists
@@ -947,7 +941,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local font_size = C.nameplates.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
 
     -- use superwow unit guid as unitstr if possible
-    if superwow_active and not unitstr then
+    if hasNampower and not unitstr then
       unitstr = plate.parent:GetName(1)
     end
 
@@ -998,7 +992,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     end
 
     -- target indicator
-    if superwow_active and cfg.outcombatstate then
+    if hasNampower and cfg.outcombatstate then
       local guid = plate.parent:GetName(1) or ""
 
       -- determine color based on combat state
@@ -1088,7 +1082,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       local rhp, rhpmax, estimated
       
       -- Try Nampower first for real HP values via GUID
-      local guid = superwow_active and plate.parent:GetName(1) or nil
+      local guid = hasNampower and plate.parent:GetName(1) or nil
       if guid and GetUnitField then
         local npHp = GetUnitField(guid, "health")
         local npMaxHp = GetUnitField(guid, "maxHealth")
@@ -1138,11 +1132,11 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       r, g, b, a = RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b, 1
     end
 
-    if superwow_active and unitstr and UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
+    if hasNampower and unitstr and UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
       r, g, b, a = .5, .5, .5, .8
     end
 
-    if superwow_active and cfg.barcombatstate then
+    if hasNampower and cfg.barcombatstate then
       local guid = plate.parent:GetName(1) or ""
       local color = GetCombatStateColor(guid)
 
@@ -1249,7 +1243,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local nameplate = frame.nameplate
 
     -- Register GUID when plate becomes visible
-    if superwow_active then
+    if hasNampower then
       local guid = frame:GetName(1)
       if guid then
         nameplate.cachedGuid = guid
@@ -1265,7 +1259,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local now = state and state.now or GetTime()
     
     -- Update GUID registry (lightweight, needed for event routing)
-    if superwow_active then
+    if hasNampower then
       local guid = frame:GetName(1)
       if guid and guid ~= nameplate.cachedGuid then
         if nameplate.cachedGuid and guidRegistry[nameplate.cachedGuid] == frame then
@@ -1397,7 +1391,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     -- trigger update when name color changed (includes combat state check)
     local r, g, b = original.name:GetTextColor()
     local inCombatWithPlayer = false
-    if superwow_active and cfg.namefightcolor then
+    if hasNampower and cfg.namefightcolor then
       local guid = nameplate.cachedGuid
       if guid then
         inCombatWithPlayer = UnitAffectingCombat(guid) and UnitAffectingCombat("player")
