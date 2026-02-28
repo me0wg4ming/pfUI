@@ -56,12 +56,11 @@ pfUI:RegisterModule("player", "vanilla:tbc", function ()
     end
   end
 
-  UpdatePlayerModCastingTime()
-
   local talentFrame = CreateFrame("Frame")
+  talentFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
   talentFrame:RegisterEvent("LEARNED_SPELL_IN_TAB")
   talentFrame:SetScript("OnEvent", function()
-    -- Debounce LEARNED_SPELL_IN_TAB by delaying 1s
+    -- Delay 1s for both PLAYER_ENTERING_WORLD and LEARNED_SPELL_IN_TAB
     local checkAt = GetTime() + 1
     talentFrame:SetScript("OnUpdate", function()
       if GetTime() >= checkAt then
