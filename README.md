@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-7.7.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-7.8.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Required-purple.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Required-purple.svg)](https://gitea.com/avitasia/nampower)
@@ -11,6 +11,79 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+
+## 🎯 What's New in Version 7.8.0
+
+### 🔗 libdebuff External Hook System (libs/libdebuff.lua)
+
+Full event hook system exposed on `pfUI` global — external addons from other creators can now register callbacks for all events processed by libdebuff without registering duplicate event listeners.
+
+**Usage:**
+```lua
+-- Register a hook (key = your addon name, value = callback function)
+pfUI.libdebuff_spell_go_other_hooks["myaddon"] = function(spellId, casterGuid, targetGuid)
+  -- fired when any other unit completes a spell cast
+end
+
+-- Unregister
+pfUI.libdebuff_spell_go_other_hooks["myaddon"] = nil
+```
+
+**Available Hooks:**
+
+| Hook Table | Callback Signature | Fired When |
+|---|---|---|
+| `pfUI.libdebuff_spell_go_hooks` | `fn(spellId, arg1..arg7)` | `SPELL_GO_SELF` processed (your own casts) |
+| `pfUI.libdebuff_spell_go_other_hooks` | `fn(spellId, casterGuid, targetGuid)` | `SPELL_GO_OTHER` processed |
+| `pfUI.libdebuff_spell_start_self_hooks` | `fn(spellId, casterGuid, targetGuid, castTime)` | `SPELL_START_SELF` processed |
+| `pfUI.libdebuff_spell_start_other_hooks` | `fn(spellId, casterGuid, targetGuid, castTime)` | `SPELL_START_OTHER` processed |
+| `pfUI.libdebuff_spell_failed_other_hooks` | `fn(casterGuid, spellId)` | `SPELL_FAILED_OTHER` processed |
+| `pfUI.libdebuff_spell_cast_hooks` | `fn(success, spellId, castType, targetGuid)` | `SPELL_CAST_EVENT` processed (your own casts) |
+| `pfUI.libdebuff_aura_cast_on_self_hooks` | `fn(spellId, casterGuid, targetGuid)` | `AURA_CAST_ON_SELF` processed |
+| `pfUI.libdebuff_aura_cast_on_other_hooks` | `fn(spellId, casterGuid, targetGuid)` | `AURA_CAST_ON_OTHER` processed |
+| `pfUI.libdebuff_debuff_added_other_hooks` | `fn(guid, luaSlot, spellId, stackCount)` | `DEBUFF_ADDED_OTHER` processed |
+| `pfUI.libdebuff_debuff_removed_other_hooks` | `fn(guid, luaSlot, spellId, stackCount)` | `DEBUFF_REMOVED_OTHER` processed |
+| `pfUI.libdebuff_unit_health_hooks` | `fn(unitToken)` | `UNIT_HEALTH` processed |
+| `pfUI.libdebuff_unit_died_hooks` | `fn(guid)` | `UNIT_DIED` processed (real death only, not Feign Death) |
+| `pfUI.libdebuff_player_target_changed_hooks` | `fn()` | `PLAYER_TARGET_CHANGED` processed |
+
+### 📖 libdebuff Public API (pfUI.api.libdebuff)
+
+For direct data access, `pfUI.api.libdebuff` exposes the following methods:
+
+```lua
+local libdebuff = pfUI.api.libdebuff
+
+-- Get debuff info for a unit by display slot (equivalent to UnitDebuff)
+-- Returns: texture, stacks, debuffType, duration, timeleft, caster, spellId
+libdebuff:UnitDebuff(unit, displaySlot)
+
+-- Check if you have a specific debuff on a unit (by name or spellId)
+-- Returns: texture, stacks, debuffType, duration, timeleft, spellId
+libdebuff:UnitOwnDebuff(unit, id)
+
+-- Get the best/most recent aura cast info for a spell on a target
+-- Returns: { casterGuid, rank, time }
+libdebuff:GetBestAuraCast(guid, spellName)
+
+-- Get all enhanced debuff data for a target GUID (Nampower path)
+-- Returns table of active debuffs with full metadata
+libdebuff:GetEnhancedDebuffs(targetGUID)
+
+-- Get the spell icon texture for a spellId
+-- Returns: texture path string or nil
+libdebuff:GetSpellIcon(spellId)
+
+-- Get duration info for a debuff effect
+-- Returns: duration in seconds
+libdebuff:GetDuration(effect, rank)
+
+-- Get the maximum known rank for a debuff effect
+-- Returns: rank number
+libdebuff:GetMaxRank(effect)
+```
 
 ---
 

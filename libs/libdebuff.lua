@@ -164,6 +164,39 @@ local recentCasts = pfUI.libdebuff_recent_casts
 -- Callbacks fired after SPELL_GO_SELF is processed: fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
 
+-- Callbacks fired after SPELL_GO_OTHER is processed: fn(spellId, casterGuid, targetGuid)
+pfUI.libdebuff_spell_go_other_hooks = pfUI.libdebuff_spell_go_other_hooks or {}
+
+-- Callbacks fired after SPELL_START_SELF is processed: fn(spellId, casterGuid, targetGuid, castTime)
+pfUI.libdebuff_spell_start_self_hooks = pfUI.libdebuff_spell_start_self_hooks or {}
+
+-- Callbacks fired after SPELL_START_OTHER is processed: fn(spellId, casterGuid, targetGuid, castTime)
+pfUI.libdebuff_spell_start_other_hooks = pfUI.libdebuff_spell_start_other_hooks or {}
+
+-- Callbacks fired after SPELL_FAILED_OTHER is processed: fn(casterGuid, spellId)
+pfUI.libdebuff_spell_failed_other_hooks = pfUI.libdebuff_spell_failed_other_hooks or {}
+
+-- Callbacks fired after AURA_CAST_ON_SELF is processed: fn(spellId, casterGuid, targetGuid)
+pfUI.libdebuff_aura_cast_on_self_hooks = pfUI.libdebuff_aura_cast_on_self_hooks or {}
+
+-- Callbacks fired after AURA_CAST_ON_OTHER is processed: fn(spellId, casterGuid, targetGuid)
+pfUI.libdebuff_aura_cast_on_other_hooks = pfUI.libdebuff_aura_cast_on_other_hooks or {}
+
+-- Callbacks fired after DEBUFF_ADDED_OTHER is processed: fn(guid, luaSlot, spellId, stackCount)
+pfUI.libdebuff_debuff_added_other_hooks = pfUI.libdebuff_debuff_added_other_hooks or {}
+
+-- Callbacks fired after DEBUFF_REMOVED_OTHER is processed: fn(guid, luaSlot, spellId, stackCount)
+pfUI.libdebuff_debuff_removed_other_hooks = pfUI.libdebuff_debuff_removed_other_hooks or {}
+
+-- Callbacks fired after UNIT_HEALTH is processed: fn(unitToken)
+pfUI.libdebuff_unit_health_hooks = pfUI.libdebuff_unit_health_hooks or {}
+
+-- Callbacks fired after PLAYER_TARGET_CHANGED is processed: fn()
+pfUI.libdebuff_player_target_changed_hooks = pfUI.libdebuff_player_target_changed_hooks or {}
+
+-- Callbacks fired after UNIT_DIED is processed: fn(guid)
+pfUI.libdebuff_unit_died_hooks = pfUI.libdebuff_unit_died_hooks or {}
+
 -- Callbacks fired after SPELL_CAST_EVENT is processed: fn(success, spellId, castType, targetGuid)
 pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
 local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
@@ -1129,6 +1162,7 @@ if hasNampower then
   frame:RegisterEvent("SPELL_GO_SELF")
   frame:RegisterEvent("SPELL_GO_OTHER")
   frame:RegisterEvent("SPELL_FAILED_OTHER")
+  frame:RegisterEvent("UNIT_DIED")
   frame:RegisterEvent("SPELL_CAST_EVENT")
   frame:RegisterEvent("AURA_CAST_ON_SELF")
   frame:RegisterEvent("AURA_CAST_ON_OTHER")
@@ -1155,7 +1189,12 @@ if hasNampower then
       if guid and UnitIsDead and UnitIsDead(guid) then
         CleanupUnit(guid)
       end
-      
+      if pfUI.libdebuff_unit_health_hooks then
+        for _, fn in pairs(pfUI.libdebuff_unit_health_hooks) do
+          fn(arg1)
+        end
+      end
+
     elseif event == "SPELL_START_SELF" or event == "SPELL_START_OTHER" then
       local itemId = arg1
       local spellId = arg2
@@ -1208,7 +1247,17 @@ if hasNampower then
         endTime = castTime and (GetTime() + castTime / 1000) or nil,
         event = "START"
       }
-      
+
+      if event == "SPELL_START_SELF" and pfUI.libdebuff_spell_start_self_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_start_self_hooks) do
+          fn(spellId, casterGuid, arg4, castTime)
+        end
+      elseif event == "SPELL_START_OTHER" and pfUI.libdebuff_spell_start_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_start_other_hooks) do
+          fn(spellId, casterGuid, arg4, castTime)
+        end
+      end
+
     elseif event == "SPELL_GO_SELF" or event == "SPELL_GO_OTHER" then
       local itemId = arg1
       local spellId = arg2
@@ -1275,14 +1324,33 @@ if hasNampower then
           fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
         end
       end
-      
+
+      -- Fire registered SPELL_GO_OTHER hooks
+      if event == "SPELL_GO_OTHER" and pfUI.libdebuff_spell_go_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_go_other_hooks) do
+          fn(spellId, casterGuid, targetGuid)
+        end
+      end
+
+    elseif event == "UNIT_DIED" then
+      if pfUI.libdebuff_unit_died_hooks then
+        for _, fn in pairs(pfUI.libdebuff_unit_died_hooks) do
+          fn(arg1)
+        end
+      end
+
     elseif event == "SPELL_FAILED_OTHER" then
       local casterGuid = arg1
       
       if casterGuid and pfUI.libdebuff_casts[casterGuid] then
         pfUI.libdebuff_casts[casterGuid] = nil
       end
-      
+      if pfUI.libdebuff_spell_failed_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_failed_other_hooks) do
+          fn(casterGuid, arg2)
+        end
+      end
+
     elseif event == "SPELL_CAST_EVENT" then
       -- Capture combo points BEFORE they're consumed
       -- This event fires when YOU cast a spell (before server processes it)
@@ -1579,7 +1647,16 @@ if hasNampower then
         caster = "player",
         stacks = 1
       }
-      
+      if event == "AURA_CAST_ON_SELF" and pfUI.libdebuff_aura_cast_on_self_hooks then
+        for _, fn in pairs(pfUI.libdebuff_aura_cast_on_self_hooks) do
+          fn(spellId, casterGuid, targetGuid)
+        end
+      elseif event == "AURA_CAST_ON_OTHER" and pfUI.libdebuff_aura_cast_on_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_aura_cast_on_other_hooks) do
+          fn(spellId, casterGuid, targetGuid)
+        end
+      end
+
     elseif event == "DEBUFF_ADDED_OTHER" then
       local guid = arg1
       local displaySlot = arg2  -- Display slot (1-16), compacted
@@ -1711,7 +1788,12 @@ if hasNampower then
       if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
         pfUI.nameplates:OnAuraUpdate(guid)
       end
-      
+      if pfUI.libdebuff_debuff_added_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_debuff_added_other_hooks) do
+          fn(arg1, arg2, arg3, arg4)
+        end
+      end
+
     elseif event == "DEBUFF_REMOVED_OTHER" then
       local guid = arg1
       local displaySlot = arg2  -- Display slot (1-16), compacted
@@ -1800,7 +1882,12 @@ if hasNampower then
       if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
         pfUI.nameplates:OnAuraUpdate(guid)
       end
-      
+      if pfUI.libdebuff_debuff_removed_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_debuff_removed_other_hooks) do
+          fn(arg1, arg2, arg3, arg4)
+        end
+      end
+
     elseif event == "PLAYER_TARGET_CHANGED" then
       if not UnitExists then return end
       local _, targetGuid = UnitExists("target")
@@ -1811,6 +1898,11 @@ if hasNampower then
         slotMapCache[targetGuid] = nil
         -- Cleanup expired timers for new target
         CleanupExpiredTimers(targetGuid)
+      end
+      if pfUI.libdebuff_player_target_changed_hooks then
+        for _, fn in pairs(pfUI.libdebuff_player_target_changed_hooks) do
+          fn()
+        end
       end
     end
     
