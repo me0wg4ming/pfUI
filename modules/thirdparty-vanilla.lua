@@ -1014,85 +1014,21 @@ pfUI:RegisterModule("thirdparty-vanilla", "vanilla", function()
     end)
   end)
 
-HookAddonOrVariable("BetterCharacterStats", function()
+  HookAddonOrVariable("BetterCharacterStats", function()
     if C.thirdparty.bcs.enable == "0" then return end
+    StripTextures(BetterCharacterAttributesFrame)
 
-    local bcsframe = _G["BCSFrame"]
-    if not bcsframe then return end
-
-    local bgframes = {
-      "PlayerStatLeftTop", "PlayerStatLeftMiddle", "PlayerStatLeftBottom",
-      "PlayerStatRightTop", "PlayerStatRightMiddle", "PlayerStatRightBottom",
-      "PlayerStatBackgroundTop", "PlayerStatBackgroundBottom",
-    }
-
-    local function ApplyBCSSkin()
-      for _, region in ipairs({bcsframe:GetRegions()}) do
-        if region and region.Hide then region:Hide() end
-      end
-
-      --for _, name in ipairs(bgframes) do
-      --  local f = _G[name]
-      --  if f then StripTextures(f) f:Hide() end
-      --end
-
-      if not bcsframe.pfborder then
-        local rawborder, border = GetBorderSize()
-        local er, eg, eb, ea = GetStringColor(pfUI_config.appearance.border.color)
-
-        local b = CreateFrame("Frame", nil, bcsframe:GetParent())
-        b:SetFrameLevel(bcsframe:GetFrameLevel() - 2)
-        b:SetPoint("TOPLEFT", bcsframe, "TOPLEFT", -border, border)
-        b:SetPoint("BOTTOMRIGHT", bcsframe, "BOTTOMRIGHT", border, -border)
-        b:SetBackdrop(pfUI.backdrop)
-        b:SetBackdropColor(0, 0, 0, .8)
-        b:SetBackdropBorderColor(er, eg, eb, ea)
-        bcsframe.pfborder = b
-
-        local shadow = CreateFrame("Frame", nil, bcsframe:GetParent())
-        shadow:SetFrameLevel(bcsframe:GetFrameLevel() - 3)
-        shadow:SetPoint("TOPLEFT", b, "TOPLEFT", -3, 3)
-        shadow:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 3, -3)
-        shadow:SetBackdrop({ bgFile = pfUI.media["img:blank"], tile = true, tileSize = 1 })
-        shadow:SetBackdropColor(0, 0, 0, .5)
-        bcsframe.pfborder_shadow = shadow
-      end
+    if PlayerStatFrameLeftDropDown then
+      SkinDropDown(PlayerStatFrameLeftDropDown, nil, nil, nil, true)
+      PlayerStatFrameLeftDropDown.backdrop:SetPoint("TOPLEFT", 19, -2)
+      PlayerStatFrameLeftDropDown.backdrop:SetPoint("BOTTOMRIGHT", -19, 7)
     end
 
-    local function ApplyDropDownSkin()
-      if bcsframe.pfdropskinned then return end
-
-      local left = _G["PlayerStatFrameLeftDropDown"]
-      local right = _G["PlayerStatFrameRightDropDown"]
-
-      if left and left:GetObjectType() == "Frame" then
-        SkinDropDown(left, nil, nil, nil, true)
-        if left.backdrop then
-          left.backdrop:SetPoint("TOPLEFT", 19, -2)
-          left.backdrop:SetPoint("BOTTOMRIGHT", -19, 7)
-        end
-      end
-
-      if right and right:GetObjectType() == "Frame" then
-        SkinDropDown(right, nil, nil, nil, true)
-        if right.backdrop then
-          right.backdrop:SetPoint("TOPLEFT", 19, -2)
-          right.backdrop:SetPoint("BOTTOMRIGHT", -19, 7)
-        end
-      end
-
-      bcsframe.pfdropskinned = true
+    if PlayerStatFrameRightDropDown then
+      SkinDropDown(PlayerStatFrameRightDropDown, nil, nil, nil, true)
+      PlayerStatFrameRightDropDown.backdrop:SetPoint("TOPLEFT", 19, -2)
+      PlayerStatFrameRightDropDown.backdrop:SetPoint("BOTTOMRIGHT", -19, 7)
     end
-
-    local dropper = CreateFrame("Frame", nil, UIParent)
-    dropper:RegisterEvent("PLAYER_ENTERING_WORLD")
-    dropper:SetScript("OnEvent", function()
-      this:UnregisterAllEvents()
-      ApplyDropDownSkin()
-    end)
-
-    HookScript(bcsframe, "OnShow", ApplyBCSSkin)
-    ApplyBCSSkin()
   end)
 
   HookAddonOrVariable("MyRolePlay", function()
@@ -1327,76 +1263,6 @@ HookAddonOrVariable("BetterCharacterStats", function()
 
     StripTextures(xpsp3_editBox_FPScap, "BACKGROUND")
     CreateBackdrop(xpsp3_editBox_FPScap)
-  end)
-    
-  HookAddonOrVariable("StatCompare", function()
-    if C.thirdparty.statcompare and C.thirdparty.statcompare.enable == "0" then return end
-
-    local frames = { "StatCompareSelfFrame", "StatCompareTargetFrame" }
-
-    local function SkinStatCompareFrame(frame)
-      if not frame or frame.pfSkinned then return end
-
-      StripTextures(frame)
-
-      if frame.SetBackdrop then frame:SetBackdrop(nil) end
-      if frame.SetBackdropColor then frame:SetBackdropColor(0, 0, 0, 0) end
-
-      CreateBackdrop(frame, nil, nil, .8)
-      CreateBackdropShadow(frame)
-
-      if frame.backdrop then
-        frame.backdrop:SetBackdropColor(0, 0, 0, .8)
-        local er, eg, eb, ea = GetStringColor(pfUI_config.appearance.border.color)
-        frame.backdrop:SetBackdropBorderColor(er, eg, eb, ea)
-      end
-
-      local closeBtn = _G[frame:GetName() .. "CloseButton"]
-      if closeBtn then
-        SkinCloseButton(closeBtn, frame.backdrop)
-      end
-
-      local otherButtons = { "ArmorButton", "StatsButton", "SpellsButton" }
-      local textures = {
-        "Interface\\Icons\\inv_misc_book_08",
-        "Interface\\Icons\\inv_misc_note_01",
-        "Interface\\Icons\\inv_helmet_10",
-      }
-
-      for i, suffix in ipairs(otherButtons) do
-      local btn = _G[frame:GetName() .. suffix]
-      if btn and not btn.pfMoved then
-        SkinButton(btn)
-        btn:ClearAllPoints()
-        btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -(i - 1) * btn:GetWidth(), 0)
-        btn.pfMoved = true
-        if not btn.pfIcon then
-          btn.pfIcon = btn:CreateTexture(nil, "OVERLAY")
-          btn.pfIcon:SetTexture(textures[i])
-          btn.pfIcon:SetTexCoord(.08, .92, .08, .92)
-          SetAllPointsOffset(btn.pfIcon, btn, 3)
-        end
-      end
-    end
-
-      frame.pfSkinned = true
-    end
-
-    for _, name in ipairs(frames) do
-      local f = _G[name]
-      if f then
-        SkinStatCompareFrame(f)
-        HookScript(f, "OnShow", function()
-          SkinStatCompareFrame(this)
-        end)
-      end
-    end
-
-    local origSCShowFrame = SCShowFrame
-    _G.SCShowFrame = function(frame, target, tiptitle, tiptext, anchorx, anchory)
-      origSCShowFrame(frame, target, tiptitle, tiptext, anchorx, anchory)
-      SkinStatCompareFrame(frame)
-    end
   end)
 
 end)
