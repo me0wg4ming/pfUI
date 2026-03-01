@@ -92,6 +92,8 @@ pfUI:RegisterModule("player", "vanilla:tbc", function ()
 
   -- Compute and cache the haste/SP text; called from OnUpdate, throttled to 0.25s
   local function UpdateInfoText()
+    if not GetUnitField then return end -- do nothing for older nampower
+
     local cfg = playerFrame.config
     if not cfg then
       return
