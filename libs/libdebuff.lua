@@ -217,24 +217,29 @@ pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
 -- ============================================================================
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
-  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.41.0+\n\nPlease update Nampower!",
-  button1 = "OK",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Update Required!\n\nYour current version: %s\nRequired version: 2.41.0+\n\nPlease update Nampower to continue using pfUI!",
+  button1 = "Show Download Link",
+  button2 = "Dismiss",
   timeout = 0,
   whileDead = 1,
-  hideOnEscape = 1,
+  hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.41.0")
+    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[pfUI]|r Nampower download: https://gitea.com/avitasia/nampower/releases/tag/v2.41.0")
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
-  text = "Nampower Not Found!\n\nNampower 2.41.0+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
-  button1 = "OK",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Not Found!\n\nNampower 2.41.0+ is required for pfUI to function correctly.\n\nPlease install Nampower!",
+  button1 = "Show Download Link",
+  button2 = "Dismiss",
   timeout = 0,
   whileDead = 1,
-  hideOnEscape = 1,
+  hideOnEscape = 0,
   preferredIndex = 3,
+  OnAccept = function()
+    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[pfUI]|r Nampower download: https://gitea.com/avitasia/nampower/releases")
+  end,
 }
 
 -- ============================================================================
