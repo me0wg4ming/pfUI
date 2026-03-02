@@ -39,7 +39,7 @@ if GetNampowerVersion then
   local major, minor, patch = GetNampowerVersion()
   patch = patch or 0
   -- Minimum required version: 3.0.0 (GetUnitGUID support)
-  if major > 2 or (major == 2 and minor > 41) or (major == 2 and minor == 41 and patch >= 0) then
+  if major > 3 or (major == 3 and minor > 0) or (major == 3 and minor == 0 and patch >= 0) then
     hasNampower = true
   end
 end
@@ -60,7 +60,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
       patch = patch or 0
       local versionString = major .. "." .. minor .. "." .. patch
 
-      if major > 2 or (major == 2 and minor > 41) or (major == 2 and minor == 41 and patch >= 0) then
+      if major > 2 or (major == 3 and minor > 0) or (major == 3 and minor == 0 and patch >= 0) then
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
 
         if SetCVar and GetCVar then
