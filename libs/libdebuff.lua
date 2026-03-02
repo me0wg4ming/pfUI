@@ -218,7 +218,7 @@ pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
   text = "|cffff0000!!!WARNING!!!|r\n\nNampower Update Required!\n\nYour current version: %s\nRequired version: 2.41.0+\n\nPlease update Nampower to continue using pfUI!",
-  button1 = "Show Download Link",
+  button1 = "Show Download",
   button2 = "Dismiss",
   timeout = 0,
   whileDead = 1,
