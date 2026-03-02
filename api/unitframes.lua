@@ -247,7 +247,7 @@ end)
 -- GetUnitStats - Nampower Integration for Health + Power
 -- Returns: hp, maxHp, power, maxPower, powerType
 -- IMPORTANT: Uses _G.UnitExists directly to avoid conflicts with Nampower's
---            extended UnitExists that returns (exists, guid)
+--            use GetUnitGUID(unit) for GUID lookup (Nampower 3.0.0+)
 -- ============================================================================
 
 -- Cache für Stats-Tracking (nur Änderungen zählen)
@@ -1168,7 +1168,7 @@ function pfUI.uf.OnEvent()
     -- Smart update: check if THIS frame's unit actually changed
     if pfUI.uf.guidTracker and this.id then
       local unit = this.label == "player" and "player" or (this.label .. this.id)
-      local _, newGuid = UnitExists(unit)
+      local newGuid = GetUnitGUID(unit)
       local oldGuid = pfUI.uf.guidTracker.frameToGuid[this]
       if newGuid ~= oldGuid then
         pfUI.uf.guidTracker.frameToGuid[this] = newGuid
@@ -1455,7 +1455,7 @@ function pfUI.uf.OnUpdate()
         -- O(1) Nampower lookup via GUID (same pattern as nameplates.lua)
         local health, maxHealth
         if GetUnitField then
-          local _, guid = UnitExists(unit)
+          local guid = GetUnitGUID(unit)
           if guid then
             health = GetUnitField(guid, "health")
             maxHealth = GetUnitField(guid, "maxHealth")
@@ -3288,7 +3288,7 @@ function pfUI.uf.GetColor(self, preset)
     -- O(1) Nampower lookup for health gradient color
     local hp, hpmax
     if GetUnitField then
-      local _, guid = UnitExists(unitstr)
+      local guid = GetUnitGUID(unitstr)
       if guid then
         hp = GetUnitField(guid, "health")
         hpmax = GetUnitField(guid, "maxHealth")

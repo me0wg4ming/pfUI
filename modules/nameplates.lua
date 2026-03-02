@@ -101,7 +101,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end end
 
   -- Player GUID for filtering
-  local _, PlayerGUID = UnitExists("player")
+  local PlayerGUID = GetUnitGUID("player")
 
   -- ============================================================================
   -- OPTIMIZATION: Config caching
@@ -549,7 +549,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
     elseif event == "PLAYER_TARGET_CHANGED" then
       -- Flag target plate for update via GUID registry
-      local _, targetGuid = UnitExists("target")
+      local targetGuid = GetUnitGUID("target")
       if targetGuid then
         local plate = guidRegistry[targetGuid]
         if plate and plate.nameplate then
@@ -561,7 +561,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
     elseif event == "PLAYER_COMBO_POINTS" or event == "UNIT_COMBO_POINTS" then
       -- Only flag the target plate for combo point update
-      local _, targetGuid = UnitExists("target")
+      local targetGuid = GetUnitGUID("target")
       if targetGuid then
         local plate = guidRegistry[targetGuid]
         if plate and plate.nameplate then
@@ -1504,7 +1504,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       if isTargetPlate then
         targetGUID = state and state.targetGuid
         if not targetGUID then
-          local _, guid = UnitExists("target")
+          local guid = GetUnitGUID("target")
           targetGUID = guid
         end
       end
@@ -1571,7 +1571,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
           end
         elseif unitstr then
-          local _, guid = UnitExists(unitstr)
+          local guid = GetUnitGUID(unitstr)
           local q = guid or unitstr
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(q)
           if not cast then

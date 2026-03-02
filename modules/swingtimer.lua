@@ -575,7 +575,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     elseif event == "PLAYER_ENTERING_WORLD" then
       local _, class = UnitClass("player")
       isWarrior  = (class == "WARRIOR")
-      local _, guid = UnitExists("player")
+      local guid = GetUnitGUID("player")
       playerGUID = guid
       UpdateWeaponSpeeds()
       RebuildQueueSlotCache()

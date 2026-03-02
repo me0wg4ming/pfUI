@@ -38,7 +38,7 @@ local hasNampower = false
 if GetNampowerVersion then
   local major, minor, patch = GetNampowerVersion()
   patch = patch or 0
-  -- Minimum required version: 2.41.0 (CastSpellByName unitStr support, SetMouseoverUnit)
+  -- Minimum required version: 3.0.0 (GetUnitGUID support)
   if major > 2 or (major == 2 and minor > 41) or (major == 2 and minor == 41 and patch >= 0) then
     hasNampower = true
   end
@@ -101,7 +101,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
         end
 
       else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.41.0 or higher.|r")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v3.0.0 or higher.|r")
         StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
       end
     else
@@ -217,7 +217,7 @@ pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
 -- ============================================================================
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
-  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Update Required!\n\nYour current version: %s\nRequired version: 2.41.0+\n\nPlease update Nampower to continue using pfUI!",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Update Required!\n\nYour current version: %s\nRequired version: 3.0.0+\n\nPlease update Nampower to continue using pfUI!",
   button1 = "Show Download",
   button2 = "Dismiss",
   timeout = 0,
@@ -225,12 +225,12 @@ StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
   hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases/tag/v2.41.0")
+    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases/tag/v3.0.0")
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
-  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Not Found!\n\nNampower 2.41.0+ is required for pfUI to function correctly.\n\nPlease install Nampower!",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Not Found!\n\nNampower 3.0.0+ is required for pfUI to function correctly.\n\nPlease install Nampower!",
   button1 = "Show Download",
   button2 = "Dismiss",
   timeout = 0,
@@ -315,8 +315,8 @@ end
 -- Player GUID Cache
 local playerGUID = nil
 local function GetPlayerGUID()
-  if not playerGUID and UnitExists then
-    local _, guid = UnitExists("player")
+  if not playerGUID and GetUnitGUID then
+    local guid = GetUnitGUID("player")
     playerGUID = guid
   end
   return playerGUID
@@ -344,8 +344,8 @@ end
 
 local function IsCurrentTarget(guid)
   if debugStats.trackAllUnits then return true end
-  if not guid or not UnitExists then return false end
-  local _, targetGuid = UnitExists("target")
+  if not guid or not GetUnitGUID then return false end
+  local targetGuid = GetUnitGUID("target")
   return targetGuid == guid
 end
 
@@ -834,8 +834,8 @@ function libdebuff:UnitDebuff(unit, displaySlot)
   local dtype = nil
 
   -- Nampower: Use GetUnitField for ALL debuff data (no Blizzard UnitDebuff needed)
-  if hasNampower and UnitExists then
-    local _, guid = UnitExists(unit)
+  if hasNampower and GetUnitGUID then
+    local guid = GetUnitGUID(unit)
     if not guid then
       -- Safety fallback: no GUID available (should not happen with Nampower)
       local bTexture, bStacks, bDtype = UnitDebuff(unit, displaySlot)
@@ -957,8 +957,8 @@ local _ownDebuffSortFunc = function(a, b)
 end
 
 function libdebuff:UnitOwnDebuff(unit, id)
-  if hasNampower and UnitExists then
-    local _, guid = UnitExists(unit)
+  if hasNampower and GetUnitGUID then
+    local guid = GetUnitGUID(unit)
     if guid and ownDebuffs[guid] then
       -- Build sorted list of our active debuffs
       local sortedDebuffs = {}
@@ -1143,8 +1143,8 @@ if hasNampower then
       end
       
       -- Trigger UI updates
-      if pfTarget and UnitExists("target") then
-        local _, currentTargetGuid = UnitExists("target")
+      if pfTarget and GetUnitGUID("target") then
+        local currentTargetGuid = GetUnitGUID("target")
         if currentTargetGuid == guid then
           pfTarget.update_aura = true
         end
@@ -1586,16 +1586,16 @@ if hasNampower then
         
         -- Notify unitframes of debuff updates (UNIT_AURA doesn't fire on refreshes!)
         -- Check player
-        if UnitExists("player") then
-          local _, playerGuid = UnitExists("player")
+        if GetUnitGUID("player") then
+          local playerGuid = GetUnitGUID("player")
           if playerGuid == targetGuid and pfPlayer then
             pfPlayer.update_aura = true
           end
         end
         
         -- Check target
-        if UnitExists("target") then
-          local _, targetUnitGuid = UnitExists("target")
+        if GetUnitGUID("target") then
+          local targetUnitGuid = GetUnitGUID("target")
           if targetUnitGuid == targetGuid and pfTarget then
             pfTarget.update_aura = true
           end
@@ -1899,8 +1899,8 @@ if hasNampower then
       end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
-      if not UnitExists then return end
-      local _, targetGuid = UnitExists("target")
+      if not GetUnitGUID then return end
+      local targetGuid = GetUnitGUID("target")
       
       if targetGuid and targetGuid ~= "" then
         -- Invalidate slot map cache on retarget
@@ -1963,12 +1963,12 @@ _G.SlashCmdList["LIBDEBUGSTATS"] = function(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00No manual slot shifting needed!|r")
     
   elseif msg == "target" then
-    if not UnitExists("target") then
+    if not GetUnitGUID("target") then
       DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff]|r No target!")
       return
     end
     
-    local _, guid = UnitExists("target")
+    local guid = GetUnitGUID("target")
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff=== TARGET DEBUFF STATE ===|r")
     DEFAULT_CHAT_FRAME:AddMessage(string.format("GUID: %s", tostring(guid)))
     

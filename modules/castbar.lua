@@ -8,8 +8,8 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
   -- Helper function for castbar timer formatting
   local function FormatCastbarTime(value)
     if C.unitframes.castbardecimals == "1" then
-      -- 1 decimal, always floor
-      return string.format("%.1f", floor(value * 10) / 10)
+      -- 1 decimal, round half up (matches Blizzard spellbook display)
+      return string.format("%.1f", floor(value * 10 + 0.5) / 10)
     else
       -- 2 decimals (default)
       return string.format("%.2f", value)
@@ -108,7 +108,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       if this.unitstr and string.find(this.unitstr, "^0x") then
         focusGuid = this.unitstr
       elseif this.unitstr and this.unitstr ~= "player" then
-        local _, guid = UnitExists(this.unitstr)
+        local guid = GetUnitGUID(this.unitstr)
         if guid then focusGuid = guid end
       end
 
@@ -176,7 +176,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
             if pfUI.libdebuff_casts or pfUI.libdebuff_item_icons then
               local castGuid = nil
               if this.unitstr and UnitExists then
-                local _, guid = UnitExists(this.unitstr)
+                local guid = GetUnitGUID(this.unitstr)
                 castGuid = guid
               end
               if castGuid then

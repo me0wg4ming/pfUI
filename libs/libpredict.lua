@@ -140,39 +140,33 @@ libpredict:SetScript("OnEvent", function()
   end
 end)
 
--- GUID->Name cache for dead players (UnitExists returns nil for corpses)
+-- GUID->Name cache for dead players (UnitExists/GetUnitGUID return nil for corpses)
 local guidNameCache = {}  -- [guid] = name
 
 local function resolveNameFromGuid(guid)
   if not guid then return nil end
   if guidNameCache[guid] then return guidNameCache[guid] end
-  local unit = UnitExists(guid)
-  local name = unit and type(unit) == "string" and UnitName(unit) or nil
-  if name then guidNameCache[guid] = name end
-  return name
+  -- UnitExists(guid) reverse lookup not reliable; cache is primary source
+  return nil
 end
 
 -- Register with libdebuff hooks
 local function cacheRaidNames()
-  -- Alle Raid/Party Mitglieder cachen solange sie noch auffindbar sind
+  -- Cache all raid/party members while they are still reachable
   for i = 1, GetNumRaidMembers() do
     local unit = "raid" .. i
-    if UnitExists(unit) then
-      local _, guid = UnitExists(unit)
-      local name = UnitName(unit)
-      if guid and name then guidNameCache[guid] = name end
-    end
+    local guid = GetUnitGUID(unit)
+    local name = UnitName(unit)
+    if guid and name then guidNameCache[guid] = name end
   end
   for i = 1, GetNumPartyMembers() do
     local unit = "party" .. i
-    if UnitExists(unit) then
-      local _, guid = UnitExists(unit)
-      local name = UnitName(unit)
-      if guid and name then guidNameCache[guid] = name end
-    end
+    local guid = GetUnitGUID(unit)
+    local name = UnitName(unit)
+    if guid and name then guidNameCache[guid] = name end
   end
-  -- Spieler selbst
-  local _, pguid = UnitExists("player")
+  -- player self
+  local pguid = GetUnitGUID("player")
   if pguid then guidNameCache[pguid] = UnitName("player") end
 end
 
@@ -478,8 +472,7 @@ function libpredict:ParseChatMessage(sender, msg, comm)
       for i = 1, GetNumRaidMembers() do
         local unit = "raid" .. i
         if UnitName(unit) == sender then
-          local _, guid = UnitExists(unit)
-          senderGuid = guid
+          senderGuid = GetUnitGUID(unit)
           break
         end
       end
@@ -487,8 +480,7 @@ function libpredict:ParseChatMessage(sender, msg, comm)
         for i = 1, GetNumPartyMembers() do
           local unit = "party" .. i
           if UnitName(unit) == sender then
-            local _, guid = UnitExists(unit)
-            senderGuid = guid
+            senderGuid = GetUnitGUID(unit)
             break
           end
         end
@@ -1173,7 +1165,7 @@ function libpredict:GetHotDuration(unit, spell)
   
   -- NEW: Try libdebuff first (Nampower AURA_CAST events)
   if pfUI.api.libdebuff and pfUI.api.libdebuff.GetBestAuraCast then
-    local _, guid = UnitExists(unit)  -- FIX: Get GUID, not exists boolean!
+    local guid = GetUnitGUID(unit)
     if guid then
       -- Get the best (highest rank) aura cast for this spell
       local spellName = spell

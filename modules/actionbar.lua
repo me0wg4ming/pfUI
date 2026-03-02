@@ -1007,7 +1007,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       -- Prowl Spell IDs: 5215 (Rank 1), 6783 (Rank 2), 9913 (Rank 3)
       if event == "UNIT_CASTEVENT" then
         local guid, target, cEvent, spellId = arg1, arg2, arg3, arg4
-        local _, playerGuid = UnitExists("player")
+        local playerGuid = GetUnitGUID("player")
         if guid == playerGuid and cEvent == "CAST" then
           if spellId == 5215 or spellId == 6783 or spellId == 9913 then
             -- Prowl cast detected
