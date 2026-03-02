@@ -225,20 +225,20 @@ StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
   hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[pfUI]|r Nampower download: https://gitea.com/avitasia/nampower/releases/tag/v2.41.0")
+    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases/tag/v2.41.0")
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
   text = "|cffff0000!!!WARNING!!!|r\n\nNampower Not Found!\n\nNampower 2.41.0+ is required for pfUI to function correctly.\n\nPlease install Nampower!",
-  button1 = "Show Download Link",
+  button1 = "Show Download",
   button2 = "Dismiss",
   timeout = 0,
   whileDead = 1,
   hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[pfUI]|r Nampower download: https://gitea.com/avitasia/nampower/releases")
+    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases")
   end,
 }
 
