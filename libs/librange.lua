@@ -1,8 +1,6 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
-local superwow_active = HasSuperWoW()
-
 --[[ librange ]]--
 -- A pfUI library that detects and caches distance to units.
 --
@@ -197,7 +195,7 @@ librange:SetScript("OnUpdate", function()
       end
 
       -- try to read distance via superwow second
-      if superwow_active then
+      if HasSuperWoW() and UnitPosition then
         local x1, y1, z1 = UnitPosition("player")
         local x2, y2, z2 = UnitPosition(unit)
         -- only continue if we got position values

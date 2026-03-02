@@ -14,6 +14,21 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ---
 
+## 🎯 What's New in Version 8.0.0
+
+* **Nampower 3.0.0+ now required** — minimum version bumped from 2.41.0
+* **SuperWoW dependency fully removed** — all SuperWoW-specific code paths eliminated:
+  * `UNIT_CASTEVENT` replaced with `SPELL_GO_SELF` hook for Druid Prowl detection
+  * `UnitCastingInfo`/`UnitChannelInfo` SuperWoW fallbacks removed from libcast
+  * `SpellInfo()` (SuperWoW) replaced with `GetSpellRecField()` (Nampower) throughout
+  * `SPELL_HEAL_BY_SELF` CVar (`NP_EnableSpellHealEvents`) now auto-enabled by libdebuff
+* **`GetUnitGUID()` migration** — replaced all `local _, guid = UnitExists(unit)` with `GetUnitGUID(unit)` across 11 files (Nampower 3.0.0 API)
+* **Player castbar icon fix** — icons for custom Turtle WoW spells (e.g. Swift Travel Form) now correctly resolved via `GetSpellRecField`/`GetSpellIconTexture` instead of falling back to the previous spell's icon
+* **Castbar timer rounding** — 1-decimal mode now rounds correctly to match the Blizzard spellbook display (e.g. 2798ms → 2.8s instead of 2.7s)
+* **Nampower warning popup** — updated to be more prominent (`!!!WARNING!!!` in red, non-dismissable via Escape, uses pfUI URL copy frame for download link)
+
+---
+
 ## 🎯 What's New in Version 7.8.0
 
 ### 🔗 libdebuff External Hook System (libs/libdebuff.lua)

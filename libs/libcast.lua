@@ -53,9 +53,6 @@ local scanner = libtipscan:GetScanner("libcast")
 local libcast = CreateFrame("Frame", "pfEnemyCast")
 local player = UnitName("player")
 
--- Store original SuperWoW UnitChannelInfo if it exists
-local SuperWoW_UnitChannelInfo = _G.UnitChannelInfo
-
 UnitChannelInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
@@ -100,11 +97,7 @@ UnitChannelInfo = function(unit)
     return cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
   end
   
-  -- For non-player units: use SuperWoW if available, otherwise use libcast.db
-  if SuperWoW_UnitChannelInfo then
-    return SuperWoW_UnitChannelInfo(unit)
-  end
-  
+  -- For non-player units: use libdebuff GUID-based tracking or libcast.db
   -- Try GUID-based lookup first (from libdebuff's SPELL_START tracking)
   local db = nil
   if guid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[guid] then
@@ -152,9 +145,6 @@ UnitChannelInfo = function(unit)
   return cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
 end
 
--- Store original SuperWoW UnitCastingInfo if it exists
-local SuperWoW_UnitCastingInfo = _G.UnitCastingInfo
-
 UnitCastingInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
@@ -172,7 +162,6 @@ UnitCastingInfo = function(unit)
   end
   
   -- For player: ALWAYS use libcast.db because it handles pushback correctly
-  -- SuperWoW's UnitCastingInfo doesn't track SPELLCAST_DELAYED events
   local isPlayer = unit == "player" or unitName == player
   
   if isPlayer then
@@ -200,11 +189,7 @@ UnitCastingInfo = function(unit)
     return cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
   end
   
-  -- For non-player units: use SuperWoW if available, otherwise use libcast.db
-  if SuperWoW_UnitCastingInfo then
-    return SuperWoW_UnitCastingInfo(unit)
-  end
-  
+  -- For non-player units: use libdebuff GUID-based tracking or libcast.db
   -- Try GUID-based lookup first (from libdebuff's SPELL_START tracking)
   local db = nil
   if guid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[guid] then
@@ -321,30 +306,34 @@ libcast:RegisterEvent("SPELLCAST_CHANNEL_STOP")
 libcast:RegisterEvent("SPELLCAST_CHANNEL_UPDATE")
 
 local mob, spell, icon, _
+local lastSpellId = nil  -- spellId cached from SPELL_START_SELF (Nampower)
 
 libcast:SetScript("OnEvent", function()
   -- Fill database with player casts
   if event == "SPELLCAST_START" then
-    icon = L["spells"][arg1] and L["spells"][arg1].icon and string.format("%s%s", "Interface\\Icons\\", L["spells"][arg1].icon) or lastcasttex
-    
-    -- Check if SuperWoW already set the cast data (with correct haste-adjusted casttime)
-    -- If so, only update icon if needed, don't overwrite casttime
-    local superWowAlreadySet = this.db[player].cast == arg1 and this.db[player].casttime and this.db[player].casttime > 0
-    
-    if superWowAlreadySet then
-      -- SuperWoW already set correct casttime, only update icon if better
-      if icon and not this.db[player].icon then
-        this.db[player].icon = icon
+    -- Get icon from Nampower using spellId cached from SPELL_START_SELF
+    icon = nil
+    if lastSpellId and GetSpellRecField and GetSpellIconTexture then
+      local iconId = GetSpellRecField(lastSpellId, "spellIconID")
+      if iconId then
+        icon = GetSpellIconTexture(iconId)
+        if icon and not string.find(icon, "\\") then
+          icon = "Interface\\Icons\\" .. icon
+        end
       end
-    else
-      -- No SuperWoW data, use SPELLCAST_START data
-      this.db[player].cast = arg1
-      this.db[player].rank = lastrank
-      this.db[player].start = GetTime()
-      this.db[player].casttime = arg2
-      this.db[player].icon = icon
-      this.db[player].channel = nil
     end
+    -- fallback to L["spells"] / lastcasttex if Nampower didn't provide icon
+    if not icon then
+      icon = L["spells"][arg1] and L["spells"][arg1].icon and string.format("%s%s", "Interface\\Icons\\", L["spells"][arg1].icon) or lastcasttex
+    end
+    lastSpellId = nil
+
+    this.db[player].cast = arg1
+    this.db[player].rank = lastrank
+    this.db[player].start = GetTime()
+    this.db[player].casttime = arg2
+    this.db[player].icon = icon
+    this.db[player].channel = nil
     
     if not L["spells"][arg1] or not L["spells"][arg1].icon or not L["spells"][arg1].t then
       L["spells"][arg1] = L["spells"][arg1] or { }
@@ -353,6 +342,7 @@ libcast:SetScript("OnEvent", function()
     end
     lastcasttex, lastrank = nil, nil
   elseif event == "SPELLCAST_STOP" or event == "SPELLCAST_FAILED" or event == "SPELLCAST_INTERRUPTED" then
+    lastSpellId = nil
     if this.db[player] and not this.db[player].channel then
       -- remove cast action to the database
       this.db[player].cast = nil
@@ -530,7 +520,12 @@ libcast.customcast[strlower(multishot)] = function(begin, duration)
 end
 
 local function CastCustom(id, bookType, rawSpellName, rank, texture, castingTime)
-  if not id or not rawSpellName or not castingTime then return end -- ignore if the spell is not found or if it is instant-cast
+  if not id or not rawSpellName then return end -- ignore if the spell is not found
+  if not castingTime or castingTime == 0 then
+    -- instant-cast: clear lastcasttex so next cast doesn't inherit this icon
+    lastcasttex, lastrank = nil, nil
+    return
+  end
 
   lastrank = rank
   lastcasttex = texture
@@ -570,6 +565,12 @@ hooksecurefunc("UseAction", function(slot, target, button)
 
   CastCustom(cachedSpellId, cachedBookType, cachedRawSpellName, cachedRank, cachedTexture, cachedCastingTime)
 end)
+
+-- Cache spellId from SPELL_START_SELF so SPELLCAST_START can use it for icon lookup
+pfUI.libdebuff_spell_start_self_hooks = pfUI.libdebuff_spell_start_self_hooks or {}
+pfUI.libdebuff_spell_start_self_hooks["libcast_icon"] = function(spellId)
+  lastSpellId = spellId
+end
 
 -- add libcast to pfUI API
 pfUI.api.libcast = libcast

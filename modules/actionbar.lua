@@ -984,7 +984,6 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     local pageswitch = CreateFrame("Frame", "pfActionBarPageSwitch", UIParent)
     pageswitch:RegisterEvent("PLAYER_AURAS_CHANGED")
     pageswitch:RegisterEvent("PLAYER_ENTERING_WORLD")
-    pageswitch:RegisterEvent("UNIT_CASTEVENT")
     pageswitch:RegisterEvent("PLAYER_LOGOUT")
     pageswitch:SetScript("OnEvent", function()
       -- Handle shutdown to prevent crash 132
@@ -994,34 +993,15 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
         this:SetScript("OnUpdate", nil)
         return
       end
-      
+
       if class ~= "DRUID" then return end
-      
+
       -- On login/reload: full scan
       if event == "PLAYER_ENTERING_WORLD" then
         prowling = FullScan()
         return
       end
-      
-      -- UNIT_CASTEVENT: detect Prowl cast instantly
-      -- Prowl Spell IDs: 5215 (Rank 1), 6783 (Rank 2), 9913 (Rank 3)
-      if event == "UNIT_CASTEVENT" then
-        local guid, target, cEvent, spellId = arg1, arg2, arg3, arg4
-        local playerGuid = GetUnitGUID("player")
-        if guid == playerGuid and cEvent == "CAST" then
-          if spellId == 5215 or spellId == 6783 or spellId == 9913 then
-            -- Prowl cast detected
-            inCatForm = true
-            prowlActive = true
-            prowling = true
-          elseif spellId == 768 then
-            -- Cat Form cast (Spell ID 768)
-            inCatForm = true
-          end
-        end
-        return
-      end
-      
+
       -- PLAYER_AURAS_CHANGED: smart scanning
       if event == "PLAYER_AURAS_CHANGED" then
         if prowlActive then
@@ -1047,9 +1027,25 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
           -- Not in cat form, do a full scan (might have just shifted)
           prowling = FullScan()
         end
-        -- If inCatForm but not prowlActive, no scan needed (wait for UNIT_CASTEVENT)
+        -- If inCatForm but not prowlActive, no scan needed (wait for SPELL_GO_SELF hook)
       end
     end)
+
+    -- Prowl/CatForm detection via Nampower SPELL_GO_SELF hook (replaces UNIT_CASTEVENT)
+    -- Prowl Spell IDs: 5215 (Rank 1), 6783 (Rank 2), 9913 (Rank 3)
+    -- Cat Form Spell ID: 768
+    local PROWL_IDS = { [5215] = true, [6783] = true, [9913] = true }
+    pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
+    pfUI.libdebuff_spell_go_hooks["actionbar_prowl"] = function(spellId)
+      if class ~= "DRUID" then return end
+      if PROWL_IDS[spellId] then
+        inCatForm = true
+        prowlActive = true
+        prowling = true
+      elseif spellId == 768 then
+        inCatForm = true
+      end
+    end
     pageswitch:SetScript("OnUpdate", function()
       -- switch actionbar page depending on meta key that is pressed
       if C.bars.pagemastershift == "1" and IsShiftKeyDown() then

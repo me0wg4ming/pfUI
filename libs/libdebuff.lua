@@ -384,11 +384,6 @@ function libdebuff:GetSpellIcon(spellId)
     end
   end
   
-  if not texture and SpellInfo then
-    local _, _, spellTexture = SpellInfo(spellId)
-    texture = spellTexture
-  end
-  
   if not texture then
     texture = "Interface\\Icons\\INV_Misc_QuestionMark"
   end
@@ -459,7 +454,7 @@ local function GetDebuffSlotMap(guid)
     local spellId = auras[auraSlot]
     if spellId and spellId > 0 then
       displaySlot = displaySlot + 1
-      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name") or SpellInfo(spellId)
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       local texture = libdebuff:GetSpellIcon(spellId)
       
       -- Get stacks from auraApplications (0-indexed, so +1 for display)
@@ -1215,9 +1210,7 @@ if hasNampower then
         local rec = GetSpellRec(spellId)
         spellName = rec and rec.name or nil
       end
-      if not spellName and SpellInfo then
-        spellName = SpellInfo(spellId)
-      end
+
       
       local icon = libdebuff:GetSpellIcon(spellId)
       
@@ -1282,12 +1275,8 @@ if hasNampower then
       
       if numMissed > 0 or numHit == 0 then return end
 
-      local spellName, spellRankString
-      if SpellInfo then
-        spellName, spellRankString = SpellInfo(spellId)
-      elseif GetSpellRecField then
-        spellName = GetSpellRecField(spellId, "name")
-      end
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+      local spellRankString
       if not spellName then return end
       
       local castRank = 0
@@ -1377,9 +1366,7 @@ if hasNampower then
         local rec = GetSpellRec(spellId)
         spellName = rec and rec.name or nil
       end
-      if not spellName and SpellInfo then
-        spellName = SpellInfo(spellId)
-      end
+
       
       -- Store pending cast info for libpredict (heal prediction target tracking)
       -- This allows libpredict to resolve the correct target for Nampower queued casts,
@@ -1424,7 +1411,7 @@ if hasNampower then
       if not spellId then return end
       if not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000" then return end
       
-      local spellName = SpellInfo and SpellInfo(spellId) or (GetSpellRecField and GetSpellRecField(spellId, "name"))
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       if not spellName then return end
       
       -- Deduplicate: Ignore if we processed this exact cast recently (within 100ms)
@@ -1680,7 +1667,7 @@ if hasNampower then
       -- Invalidate slot map cache for this GUID
       slotMapCache[guid] = nil
       
-      local spellName = SpellInfo and SpellInfo(spellId)
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       if not spellName then return end
       
       if debugStats.enabled then
@@ -1816,7 +1803,7 @@ if hasNampower then
       -- Invalidate slot map cache for this GUID
       slotMapCache[guid] = nil
       
-      local spellName = SpellInfo and SpellInfo(spellId) or "?"
+      local spellName = (GetSpellRecField and GetSpellRecField(spellId, "name")) or "?"
       
       if debugStats.enabled then
         debugStats.debuff_removed = debugStats.debuff_removed + 1
