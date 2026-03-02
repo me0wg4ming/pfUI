@@ -479,7 +479,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
   nameplates.OnAuraUpdate = function(self, guid)
     if not guid then return end
     
-    -- GUID is actual GUID (0xF13000...) from SuperWoW/Nampower events
+    -- GUID is actual GUID (0xF13000...) from Nampower events
     local plate = guidRegistry[guid]
     if plate and plate.nameplate then
       -- Mark nameplate for aura update in next OnUpdate cycle

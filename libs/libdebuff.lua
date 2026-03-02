@@ -60,7 +60,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
       patch = patch or 0
       local versionString = major .. "." .. minor .. "." .. patch
 
-      if major > 2 or (major == 3 and minor > 0) or (major == 3 and minor == 0 and patch >= 0) then
+      if major > 3 or (major == 3 and minor > 0) or (major == 3 and minor == 0 and patch >= 0) then
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
 
         if SetCVar and GetCVar then
@@ -1204,7 +1204,7 @@ if hasNampower then
       
       if not casterGuid or not spellId then return end
       
-      -- Get spell name - try Nampower first, then SuperWoW
+      -- Get spell name via Nampower
       local spellName = nil
       if GetSpellRec then
         local rec = GetSpellRec(spellId)

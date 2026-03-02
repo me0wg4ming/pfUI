@@ -6,7 +6,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
   -- Only load if Nampower is available
   if not GetNampowerVersion then return end
 
-  -- Safe wrapper for SuperWoW's GetSpellNameAndRankForId (may not be available)
+  -- Safe wrapper for GetSpellNameAndRankForId (may not be available)
   local function SafeGetSpellNameAndRank(spellId)
     if not GetSpellNameAndRankForId then return nil, nil end
     local success, name, rank = pcall(GetSpellNameAndRankForId, spellId)

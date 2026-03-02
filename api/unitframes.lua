@@ -1703,7 +1703,7 @@ end
 function pfUI.uf.OnEnter()
   if not this.label then return end
 
-  -- Nampower/SuperWoW: Set native mouseover unit for macro/addon compatibility
+  -- Nampower: Set native mouseover unit for macro/addon compatibility
   if SetMouseoverUnit then
     local unitstr = this.label .. this.id
     -- For GUID-based frames (focus), use the GUID directly
@@ -1721,7 +1721,7 @@ function pfUI.uf.OnEnter()
 end
 
 function pfUI.uf.OnLeave()
-  -- Nampower/SuperWoW: Clear native mouseover unit
+  -- Nampower: Clear native mouseover unit
   if SetMouseoverUnit then
     SetMouseoverUnit()
   end
