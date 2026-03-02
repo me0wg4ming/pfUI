@@ -31,10 +31,17 @@ if pfUI.api.libpredict then return end
 local libdebuff_available = (pfUI.api.libdebuff and pfUI.api.libdebuff.GetBestAuraCast) and true or false
 
 -- Check if Nampower is available for SPELL_FAILED events
-local hasNampower = GetNampowerVersion ~= nil
 
 local senttarget
 local heals, ress, events, hots = {}, {}, {}, {}
+local spell_queue = { "DUMMY", "DUMMYRank 9", "TARGET" }
+local player = UnitName("player")
+local cache, gear_string = {}, ""
+local rejuvDuration, renewDuration = 12, 15 --default durations
+local ressGuidToName = {} -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
+local healGuidToName = {} -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
+local ress_timers = {}    -- [target][sender] = expiry_timestamp (60s Rez-Fenster)
+local RESS_TIMEOUT = 60   -- Vanilla: Rez-Angebot läuft nach 60s ab
 
 local PRAYER_OF_HEALING
 do -- Prayer of Healing
@@ -96,10 +103,8 @@ do -- Regrowth
   REGROWTH = locales[GetLocale()] or locales["enUS"]
 end
 
--- SuperWoW detection
-local superwow_active = SpellInfo ~= nil
 
--- Spell IDs für UNIT_CASTEVENT (SuperWoW)
+-- Spell IDs für SPELL_GO_SELF callback (Nampower) - Instant HoT Detection
 local SPELL_IDS = {
   -- Rejuvenation (alle Ränge)
   [774] = "Reju", [1058] = "Reju", [1430] = "Reju", [2090] = "Reju", [2091] = "Reju",
@@ -117,11 +122,6 @@ libpredict:RegisterEvent("CHAT_MSG_ADDON")
 libpredict:RegisterEvent("PLAYER_TARGET_CHANGED")
 libpredict:RegisterEvent("PLAYER_LOGOUT")
 
--- SuperWoW: Registriere UNIT_CASTEVENT für akkurate Instant-HoT Detection
-if superwow_active then
-  libpredict:RegisterEvent("UNIT_CASTEVENT")
-end
-
 libpredict:SetScript("OnEvent", function()
   -- Handle shutdown to prevent crash 132
   if event == "PLAYER_LOGOUT" then
@@ -135,105 +135,207 @@ libpredict:SetScript("OnEvent", function()
   elseif event == "UNIT_HEALTH" then
     local name = UnitName(arg1)
     if name and ress[name] and not UnitIsDeadOrGhost(arg1) then
-      ress[name] = nil  -- Reuse 'name' variable instead of calling UnitName again
-    end
-  elseif event == "UNIT_CASTEVENT" and superwow_active then
-    -- arg1 = casterGUID, arg2 = targetGUID, arg3 = event type, arg4 = spellId, arg5 = castTime
-    local casterGUID, targetGUID, castEvent, spellId = arg1, arg2, arg3, arg4
-    
-    -- Nur eigene Casts (player)
-    local _, playerGUID = UnitExists("player")
-    if casterGUID ~= playerGUID then return end
-    
-    -- Nur "CAST" events (erfolgreiche Instant-Casts)
-    if castEvent ~= "CAST" then return end
-    
-    -- Prüfe ob es ein Instant-HoT ist
-    local hotType = SPELL_IDS[spellId]
-    if not hotType then return end
-    
-    -- Finde Target Name
-    local targetName
-    for i = 1, 40 do
-      local unit = "raid" .. i
-      if UnitExists(unit) then
-        local _, guid = UnitExists(unit)
-        if guid == targetGUID then
-          targetName = UnitName(unit)
-          break
-        end
-      end
-    end
-    if not targetName then
-      for i = 1, 4 do
-        local unit = "party" .. i
-        if UnitExists(unit) then
-          local _, guid = UnitExists(unit)
-          if guid == targetGUID then
-            targetName = UnitName(unit)
-            break
-          end
-        end
-      end
-    end
-    if not targetName then
-      local _, guid = UnitExists("player")
-      if guid == targetGUID then
-        targetName = UnitName("player")
-      end
-    end
-    if not targetName then
-      local _, guid = UnitExists("target")
-      if guid == targetGUID then
-        targetName = UnitName("target")
-      end
-    end
-    
-    if not targetName then return end
-    
-    -- Duration bestimmen
-    local duration
-    if hotType == "Reju" then
-      duration = rejuvDuration or 12
-    elseif hotType == "Renew" then
-      duration = renewDuration or 15
-    end
-    
-    -- Extract rank from spellId (if SpellInfo available)
-    local rank = nil
-    if SpellInfo then
-      local _, rankString = SpellInfo(spellId)
-      if rankString and rankString ~= "" then
-        rank = tonumber((string.gsub(rankString, "Rank ", ""))) or nil
-      end
-    end
-    
-    if libpredict.debug then
-      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ffff[UNIT_CASTEVENT]|r spell=%s target=%s dur=%s rank=%s", 
-        hotType, targetName, tostring(duration), tostring(rank or "?")))
-    end
-    
-    -- Sende HoT mit Rank
-    local playerName = UnitName("player")
-    libpredict:Hot(playerName, targetName, hotType, duration, nil, "UNIT_CASTEVENT", rank)
-    
-    -- Sende HealComm Nachricht mit Rank (backwards compatible: rank optional)
-    -- Use "0" for unknown rank instead of empty string to avoid parsing issues
-    local rankStr = rank and tostring(rank) or "0"
-    if libpredict.sender and libpredict.sender.SendHealCommMsg then
-      libpredict.sender:SendHealCommMsg(hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/")
-    else
-      -- Fallback: direkt senden (smart channel selection)
-      local msg = hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/"
-      if GetNumRaidMembers() > 0 then
-        SendAddonMessage("HealComm", msg, "RAID")
-      elseif GetNumPartyMembers() > 0 then
-        SendAddonMessage("HealComm", msg, "PARTY")
-      end
-      -- Note: BATTLEGROUND channel not used (no reliable way to detect BG in Vanilla)
+      ress[name] = nil
     end
   end
 end)
+
+-- GUID->Name Cache für tote Spieler (UnitExists gibt nil für Tote)
+local guidNameCache = {}  -- [guid] = name
+
+local function resolveNameFromGuid(guid)
+  if not guid then return nil end
+  if guidNameCache[guid] then return guidNameCache[guid] end
+  local unit = UnitExists(guid)
+  local name = unit and type(unit) == "string" and UnitName(unit) or nil
+  if name then guidNameCache[guid] = name end
+  return name
+end
+
+-- Register with libdebuff hooks
+local function cacheRaidNames()
+  -- Alle Raid/Party Mitglieder cachen solange sie noch auffindbar sind
+  for i = 1, GetNumRaidMembers() do
+    local unit = "raid" .. i
+    if UnitExists(unit) then
+      local _, guid = UnitExists(unit)
+      local name = UnitName(unit)
+      if guid and name then guidNameCache[guid] = name end
+    end
+  end
+  for i = 1, GetNumPartyMembers() do
+    local unit = "party" .. i
+    if UnitExists(unit) then
+      local _, guid = UnitExists(unit)
+      local name = UnitName(unit)
+      if guid and name then guidNameCache[guid] = name end
+    end
+  end
+  -- Spieler selbst
+  local _, pguid = UnitExists("player")
+  if pguid then guidNameCache[pguid] = UnitName("player") end
+end
+
+local function isRezSpell(spellId)
+  if not L["resurrections"] then return false end
+  local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+  return spellName and L["resurrections"][spellName]
+end
+
+-- Cache beim Betreten der Welt aufbauen
+libpredict:RegisterEvent("PLAYER_ENTERING_WORLD")
+libpredict:RegisterEvent("RAID_ROSTER_UPDATE")
+libpredict:RegisterEvent("PARTY_MEMBERS_CHANGED")
+local origOnEvent = libpredict:GetScript("OnEvent")
+libpredict:SetScript("OnEvent", function()
+  if event == "PLAYER_ENTERING_WORLD" or event == "RAID_ROSTER_UPDATE" or event == "PARTY_MEMBERS_CHANGED" then
+    cacheRaidNames()
+  end
+  if origOnEvent then origOnEvent() end
+end)
+
+-- SPELL_START_SELF: eigener Cast gestartet (Rez + Heals)
+-- Signature: fn(spellId, casterGuid, targetGuid, castTime)
+pfUI.libdebuff_spell_start_self_hooks = pfUI.libdebuff_spell_start_self_hooks or {}
+pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGuid, targetGuid, castTime)
+  cacheRaidNames()
+  local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+  if not spellName then return end
+
+  local target = resolveNameFromGuid(targetGuid) or senttarget or spell_queue[3]
+
+
+  -- Rez
+  if isRezSpell(spellId) then
+    if player and target then
+      libpredict:Ress(player, target, casterGuid)
+      libpredict.sender:SendHealCommMsg("Resurrection/" .. target .. "/start/")
+      libpredict.sender:SendResCommMsg("RES " .. target)
+      libpredict.sender.resurrecting = true
+    end
+    return
+  end
+
+  -- Heal prediction
+  if spell_queue[1] == spellName and cache[spell_queue[2]] then
+    local amount   = cache[spell_queue[2]][1]
+    local casttime = castTime
+
+    if spellName == REGROWTH then
+      local fullSpell = spell_queue[2]
+      local _, _, rankStr = fullSpell and string.find(fullSpell, "Rank (%d+)")
+      local rankNum = rankStr and tonumber(rankStr) or nil
+      if libpredict.sender.regrowth_timer then
+        libpredict.sender.regrowth_target_next = target
+        libpredict.sender.regrowth_rank_next = rankNum
+      else
+        libpredict.sender.regrowth_target = target
+        libpredict.sender.regrowth_rank = rankNum
+      end
+    end
+
+    if spellName == PRAYER_OF_HEALING then
+      for i = 1, 4 do
+        if CheckInteractDistance("party"..i, 4) then
+          local pname = UnitName("party"..i)
+          libpredict:Heal(player, pname, amount, casttime)
+          libpredict.sender:SendHealCommMsg("Heal/" .. pname .. "/" .. amount .. "/" .. casttime .. "/")
+          libpredict.sender.healing = true
+        end
+      end
+    end
+
+    libpredict:Heal(player, target, amount, casttime)
+    libpredict.sender:SendHealCommMsg("Heal/" .. (target or "") .. "/" .. amount .. "/" .. casttime .. "/")
+    libpredict.sender.healing = true
+  end
+
+  -- current_cast für onCastFailed() setzen
+  libpredict.sender.current_cast = spellName
+  libpredict.sender.current_cast_target = target
+end
+
+-- SPELL_START_OTHER: fremder Rez-Cast gestartet
+-- Signature: fn(spellId, casterGuid, targetGuid, castTime)
+pfUI.libdebuff_spell_start_other_hooks = pfUI.libdebuff_spell_start_other_hooks or {}
+pfUI.libdebuff_spell_start_other_hooks["libpredict"] = function(spellId, casterGuid, targetGuid, castTime)
+  if not isRezSpell(spellId) then return end
+  local casterName = resolveNameFromGuid(casterGuid)
+  local targetName = resolveNameFromGuid(targetGuid)
+  if casterName and targetName then
+    libpredict:Ress(casterName, targetName, casterGuid)
+  end
+end
+
+-- SPELL_GO_SELF: eigener Cast gelandet - HoTs + eigener Rez Timer
+-- Signature: fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
+pfUI.libdebuff_spell_go_hooks["libpredict"] = function(spellId, a1, a2, a3, a4, a5, a6, a7)
+  -- Instant HoTs
+  local hotType = SPELL_IDS[spellId]
+  if hotType then
+    local targetGuid = a4
+    local targetName = resolveNameFromGuid(targetGuid)
+    if targetName then
+      local duration
+      if hotType == "Reju" then duration = rejuvDuration or 12
+      elseif hotType == "Renew" then duration = renewDuration or 15
+      end
+      local rank = 0
+      if GetSpellRecField then
+        local rankStr = GetSpellRecField(spellId, "rank")
+        if rankStr and rankStr ~= "" then
+          rank = tonumber((string.gsub(rankStr, "Rank ", ""))) or 0
+        end
+      end
+      local playerName = UnitName("player")
+      libpredict:Hot(playerName, targetName, hotType, duration, nil, "SPELL_GO_SELF", rank)
+      local rankStr = tostring(rank)
+      if libpredict.sender and libpredict.sender.SendHealCommMsg then
+        libpredict.sender:SendHealCommMsg(hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/")
+      elseif GetNumRaidMembers() > 0 then
+        SendAddonMessage("HealComm", hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/", "RAID")
+      elseif GetNumPartyMembers() > 0 then
+        SendAddonMessage("HealComm", hotType .. "/" .. targetName .. "/" .. duration .. "/" .. rankStr .. "/", "PARTY")
+      end
+    end
+  end
+  -- Eigener Rez gelandet: Timer setzen
+  if isRezSpell(spellId) then
+    local targetGuid = a4
+    local targetName = resolveNameFromGuid(targetGuid)
+    local playerName = UnitName("player")
+    if playerName and targetName then
+      libpredict:RessSetTimer(playerName, targetName)
+    end
+  end
+
+end
+
+-- SPELL_GO_OTHER: fremder Rez gelandet - Timer setzen
+-- Signature: fn(spellId, casterGuid, targetGuid)
+pfUI.libdebuff_spell_go_other_hooks = pfUI.libdebuff_spell_go_other_hooks or {}
+pfUI.libdebuff_spell_go_other_hooks["libpredict"] = function(spellId, casterGuid, targetGuid)
+  if not isRezSpell(spellId) then return end
+  local casterName = resolveNameFromGuid(casterGuid)
+  local targetName = resolveNameFromGuid(targetGuid)
+  if casterName and targetName then
+    libpredict:RessSetTimer(casterName, targetName)
+  end
+end
+
+-- SPELL_FAILED_OTHER: abgebrochene Resses/Heals entfernen
+-- Signature: fn(casterGuid, spellId)
+pfUI.libdebuff_spell_failed_other_hooks = pfUI.libdebuff_spell_failed_other_hooks or {}
+pfUI.libdebuff_spell_failed_other_hooks["libpredict"] = function(casterGuid, spellId)
+  if not casterGuid then return end
+  local ressName = ressGuidToName[casterGuid]
+  if ressName then
+    libpredict:RessStop(ressName)
+  end
+  local healName = healGuidToName[casterGuid]
+  if healName then libpredict:HealStop(healName) end
+end
 
 libpredict:SetScript("OnUpdate", function()
   -- throttle cleanup - no need to check every frame
@@ -245,6 +347,16 @@ libpredict:SetScript("OnUpdate", function()
   for timestamp, targets in pairs(events) do
     if now >= timestamp then
       events[timestamp] = nil
+    end
+  end
+
+  -- Rez-Timeout: Angebot nach 60s entfernen wenn Spieler nicht annimmt
+  for target, senders in pairs(ress_timers) do
+    for sender, expiry in pairs(senders) do
+      if now >= expiry then
+        senders[sender] = nil
+        if ress[target] then ress[target][sender] = nil end
+      end
     end
   end
 end)
@@ -359,7 +471,30 @@ function libpredict:ParseChatMessage(sender, msg, comm)
       libpredict:Heal(sender, target, heal, time)
     end
   elseif msgtype == "Ress" then
-    libpredict:Ress(sender, target)
+    -- HealComm: nur für fremde Spieler (eigene Resses via SPELL_START_SELF hook)
+    local playerName = UnitName("player")
+    if sender ~= playerName then
+      local senderGuid
+      for i = 1, GetNumRaidMembers() do
+        local unit = "raid" .. i
+        if UnitName(unit) == sender then
+          local _, guid = UnitExists(unit)
+          senderGuid = guid
+          break
+        end
+      end
+      if not senderGuid then
+        for i = 1, GetNumPartyMembers() do
+          local unit = "party" .. i
+          if UnitName(unit) == sender then
+            local _, guid = UnitExists(unit)
+            senderGuid = guid
+            break
+          end
+        end
+      end
+      libpredict:Ress(sender, target, senderGuid)
+    end
   elseif msgtype == "Hot" then
     -- Duplikat-Check: gleicher sender+target+spell innerhalb DUPLICATE_WINDOW ignorieren
     local now = pfUI.uf.now or GetTime()
@@ -407,7 +542,7 @@ function libpredict:AddEvent(time, target)
   table.insert(events[time], target)
 end
 
-function libpredict:Heal(sender, target, amount, duration)
+function libpredict:Heal(sender, target, amount, duration, senderGuid)
   if not sender or not target or not amount or not duration then
     return
   end
@@ -416,6 +551,7 @@ function libpredict:Heal(sender, target, amount, duration)
   local timeout = duration/1000 + now
   heals[target] = heals[target] or {}
   heals[target][sender] = { amount, timeout }
+  if senderGuid then healGuidToName[senderGuid] = sender end
   libpredict:AddEvent(timeout, target)
 end
 
@@ -489,6 +625,10 @@ function libpredict:HealStop(sender)
       end
     end
   end
+  -- cleanup reverse lookup
+  for guid, name in pairs(healGuidToName) do
+    if name == sender then healGuidToName[guid] = nil end
+  end
 end
 
 function libpredict:HealDelay(sender, delay)
@@ -503,18 +643,38 @@ function libpredict:HealDelay(sender, delay)
   end
 end
 
-function libpredict:Ress(sender, target)
+function libpredict:Ress(sender, target, senderGuid)
   ress[target] = ress[target] or {}
   ress[target][sender] = true
+  if senderGuid then ressGuidToName[senderGuid] = sender end
+  -- kein Timer hier - Timer wird erst gesetzt wenn Cast wirklich durchgeht
+end
+
+function libpredict:RessSetTimer(sender, target)
+  ress_timers[target] = ress_timers[target] or {}
+  local existing = ress_timers[target][sender]
+  if not existing or GetTime() >= existing then
+    ress_timers[target][sender] = GetTime() + RESS_TIMEOUT
+  else
+  end
 end
 
 function libpredict:RessStop(sender)
+  local now = GetTime()
   for ttarget, t in pairs(ress) do
     for tsender in pairs(ress[ttarget]) do
       if sender == tsender then
-        ress[ttarget][tsender] = nil
+        local expiry = ress_timers[ttarget] and ress_timers[ttarget][tsender]
+        if not expiry or now >= expiry then
+          ress[ttarget][tsender] = nil
+          if ress_timers[ttarget] then ress_timers[ttarget][tsender] = nil end
+        else
+        end
       end
     end
+  end
+  for guid, name in pairs(ressGuidToName) do
+    if name == sender then ressGuidToName[guid] = nil end
   end
 end
 
@@ -557,12 +717,8 @@ function libpredict:UnitHasIncomingResurrection(unit)
   return nil
 end
 
-local spell_queue = { "DUMMY", "DUMMYRank 9", "TARGET" }
 local realm = GetRealmName()
-local player = UnitName("player")
-local cache, gear_string = {}, ""
 local resetcache = CreateFrame("Frame")
-local rejuvDuration, renewDuration = 12, 15 --default durations
 local hotsetbonus = libtipscan:GetScanner("hotsetbonus")
 resetcache:RegisterEvent("PLAYER_ENTERING_WORLD")
 resetcache:RegisterEvent("LEARNED_SPELL_IN_TAB")
@@ -667,9 +823,7 @@ hooksecurefunc("CastSpell", function(id, bookType)
     rankNum = tonumber((string.gsub(rank, "Rank ", ""))) or nil
   end
   
-  -- Instant-HoTs: Mit SuperWoW nutzen wir UNIT_CASTEVENT (akkurater)
-  -- Ohne SuperWoW: Fallback auf Hook-Methode mit Cooldown
-  if superwow_active then return end
+  -- Instant-HoTs: libdebuff/Nampower via GetHotDuration, Hook-Methode als Fallback
   
   if effect == REJUVENATION then
     local target = spell_queue[3]
@@ -735,9 +889,7 @@ hooksecurefunc("CastSpellByName", function(effect, target)
     spell_queue[3] = target or mouseover or default
   end
   
-  -- Instant-HoTs: Mit SuperWoW nutzen wir UNIT_CASTEVENT (akkurater)
-  -- Ohne SuperWoW: Fallback auf Hook-Methode mit Cooldown
-  if superwow_active then return end
+  -- Instant-HoTs: libdebuff/Nampower via GetHotDuration, Hook-Methode als Fallback
   
   if effect == REJUVENATION then
     local hotTarget = target or mouseover or default
@@ -793,9 +945,7 @@ hooksecurefunc("UseAction", function(slot, target, selfcast)
     rankNum = tonumber((string.gsub(rank, "Rank ", ""))) or nil
   end
   
-  -- Instant-HoTs: Mit SuperWoW nutzen wir UNIT_CASTEVENT (akkurater)
-  -- Ohne SuperWoW: Fallback auf Hook-Methode mit Cooldown
-  if superwow_active then return end
+  -- Instant-HoTs: libdebuff/Nampower via GetHotDuration, Hook-Methode als Fallback
   
   if effect == REJUVENATION then
     local hotTarget = spell_queue[3]
@@ -885,211 +1035,136 @@ libpredict.sender:SetScript("OnUpdate", function()
   end
 end)
 
-libpredict.sender:RegisterEvent("CHAT_MSG_SPELL_SELF_BUFF")
-libpredict.sender:RegisterEvent("SPELLCAST_START")
-libpredict.sender:RegisterEvent("SPELLCAST_STOP")
-libpredict.sender:RegisterEvent("SPELLCAST_FAILED")
-libpredict.sender:RegisterEvent("SPELLCAST_INTERRUPTED")
-libpredict.sender:RegisterEvent("SPELLCAST_DELAYED")
-
--- Nampower: Register SPELL_FAILED_SELF for more reliable cast fail detection
-if hasNampower then
-  libpredict.sender:RegisterEvent("SPELL_FAILED_SELF")
-  if libpredict.debug then
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[libpredict]|r Nampower detected - SPELL_FAILED_SELF registered")
-  end
-else
-  if libpredict.debug then
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libpredict]|r Nampower NOT detected - using vanilla SPELLCAST_FAILED only")
-  end
-end
+-- Nampower events (SPELL_START_SELF / SPELL_GO_SELF via libdebuff hooks)
+libpredict.sender:RegisterEvent("SPELL_FAILED_SELF")
+libpredict.sender:RegisterEvent("SPELL_DELAYED_SELF")
+libpredict.sender:RegisterEvent("SPELL_HEAL_BY_SELF")
 
 -- force cache updates
 libpredict.sender:RegisterEvent("UNIT_INVENTORY_CHANGED")
 libpredict.sender:RegisterEvent("SKILL_LINES_CHANGED")
 
+-- Shared cleanup helper for failed/interrupted casts
+local function onCastFailed()
+  local s = libpredict.sender
+  if s.healing then
+    libpredict:HealStop(UnitName("player"))
+    s:SendHealCommMsg("Healstop")
+    s.healing = nil
+  elseif s.resurrecting then
+    local target = s.current_cast_target or senttarget or spell_queue[3]
+    libpredict:RessStop(UnitName("player"))
+    s:SendHealCommMsg("Resurrection/stop/")
+    s:SendResCommMsg("RESNO " .. (target or ""))
+    s.resurrecting = nil
+  end
+  if s.current_cast == REGROWTH then
+    s.regrowth_timer = nil
+    s.regrowth_start = nil
+    s.regrowth_target_next = nil
+    s.regrowth_start_next = nil
+  end
+  s.current_cast = nil
+  s.current_cast_target = nil
+end
+
 libpredict.sender:SetScript("OnEvent", function()
-  if event == "CHAT_MSG_SPELL_SELF_BUFF" then -- vanilla
-    local spell, _, heal = cmatch(arg1, HEALEDSELFOTHER) -- "Your %s heals %s for %d."
-    if spell and heal then
-      if spell == spell_queue[1] then UpdateCache(spell_queue[2], heal) end
+  -- ============================================================
+  -- NAMPOWER PATH
+  -- ============================================================
+  if event == "SPELL_HEAL_BY_SELF" then
+    -- arg1=targetGuid, arg2=casterGuid, arg3=spellId, arg4=amount, arg5=critical, arg6=periodic
+    local spellId = arg3
+    local amount  = arg4
+    local isCrit  = arg5 == 1
+    local isPeriodic = arg6 == 1
+    local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+    if spellName and spell_queue[1] == spellName then
+      UpdateCache(spell_queue[2], amount, isCrit)
+    end
+
+  elseif event == "SPELL_START_SELF" then
+    -- arg2=spellId, arg4=targetGuid, arg6=castTime
+    local spellId  = arg2
+    local castTime = arg6
+    local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+    if not spellName then return end
+
+    -- target: via guidNameCache (tote Spieler), fallback spell_queue
+    local targetGuid = arg4
+    local target = resolveNameFromGuid(targetGuid) or senttarget or spell_queue[3]
+
+    this.current_cast = spellName
+    this.current_cast_target = target
+
+    -- Rez: HealComm senden (Ress() bereits via libdebuff_spell_start_self_hooks)
+    if L["resurrections"][spellName] then
+      libpredict.sender:SendHealCommMsg("Resurrection/" .. (target or "") .. "/start/")
+      libpredict.sender:SendResCommMsg("RES " .. (target or ""))
+      libpredict.sender.resurrecting = true
       return
     end
 
-    local spell, heal = cmatch(arg1, HEALEDSELFSELF) -- "Your %s heals you for %d."
-    if spell and heal then
-      if spell == spell_queue[1] then UpdateCache(spell_queue[2], heal) end
-      return
-    end
+    -- Heal prediction
+    if spell_queue[1] == spellName and cache[spell_queue[2]] then
+      local amount   = cache[spell_queue[2]][1]
+      local casttime = castTime
 
-    local spell, heal = cmatch(arg1, HEALEDCRITSELFOTHER) -- "Your %s critically heals %s for %d."
-    if spell and heal then
-      if spell == spell_queue[1] then UpdateCache(spell_queue[2], heal, true) end
-      return
-    end
-
-    local spell, _, heal = cmatch(arg1, HEALEDCRITSELFSELF) -- "Your %s critically heals you for %d."
-    if spell and heal then
-      if spell == spell_queue[1] then UpdateCache(spell_queue[2], heal, true) end
-      return
-    end
-  elseif event == "SPELLCAST_START" then
-    local spell, time = arg1, arg2
-    
-    -- Resolve target from SPELL_CAST_EVENT (via libdebuff) for Nampower queued casts.
-    -- SPELL_CAST_EVENT fires right before SPELLCAST_START with the actual targetGuid,
-    -- solving the problem where spell_queue[3] is stale because CastSpellByName hook
-    -- could not update it while current_cast was set (Nampower spell queuing).
-    local pending = pfUI.libpredict_pending_cast
-    local pendingTarget = nil
-    if pending and pending.spellName == spell and pending.targetGuid
-       and pending.time and (GetTime() - pending.time) < 1 then
-      pendingTarget = UnitName(pending.targetGuid)
-      -- Validate: must be a friendly unit for heal prediction
-      if pendingTarget and pendingTarget ~= UNKNOWNOBJECT and pendingTarget ~= UKNOWNBEING then
-        if libpredict.debug then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format(
-            "|cff00ffff[libpredict]|r SPELL_CAST_EVENT target: %s (guid: %s) for %s",
-            pendingTarget, pending.targetGuid, spell))
-        end
-      else
-        pendingTarget = nil
-      end
-      -- Clear pending after consumption
-      pending.spellId = nil
-      pending.spellName = nil
-      pending.targetGuid = nil
-      pending.time = nil
-    end
-    
-    -- Speichere aktuellen Cast (wird nicht von Instant-Hooks überschrieben)
-    this.current_cast = spell
-    this.current_cast_target = pendingTarget or senttarget or spell_queue[3]
-
-    if spell_queue[1] == spell and cache[spell_queue[2]] then
-      local sender = player
-      local target = pendingTarget or senttarget or spell_queue[3]
-      local amount = cache[spell_queue[2]][1]
-      local casttime = time
-
-      if spell == REGROWTH then
-        -- Extract rank from spell_queue[2] which contains "spell + rank"
+      if spellName == REGROWTH then
         local fullSpell = spell_queue[2]
         local _, _, rankStr = fullSpell and string.find(fullSpell, "Rank (%d+)")
         local rankNum = rankStr and tonumber(rankStr) or nil
-        
         if this.regrowth_timer then
-          this.regrowth_target_next = pendingTarget or spell_queue[3]
+          this.regrowth_target_next = target
           this.regrowth_rank_next = rankNum
         else
-          this.regrowth_target = pendingTarget or spell_queue[3]
+          this.regrowth_target = target
           this.regrowth_rank = rankNum
         end
       end
 
-      if spell == PRAYER_OF_HEALING then
-        target = sender
-
-        for i=1,4 do
+      if spellName == PRAYER_OF_HEALING then
+        for i = 1, 4 do
           if CheckInteractDistance("party"..i, 4) then
-            libpredict:Heal(player, UnitName("party"..i), amount, casttime)
-            libpredict.sender:SendHealCommMsg("Heal/" .. UnitName("party"..i) .. "/" .. amount .. "/" .. casttime .. "/")
+            local pname = UnitName("party"..i)
+            libpredict:Heal(player, pname, amount, casttime)
+            libpredict.sender:SendHealCommMsg("Heal/" .. pname .. "/" .. amount .. "/" .. casttime .. "/")
             libpredict.sender.healing = true
           end
         end
       end
 
       libpredict:Heal(player, target, amount, casttime)
-      libpredict.sender:SendHealCommMsg("Heal/" .. target .. "/" .. amount .. "/" .. casttime .. "/")
+      libpredict.sender:SendHealCommMsg("Heal/" .. (target or "") .. "/" .. amount .. "/" .. casttime .. "/")
       libpredict.sender.healing = true
+    end
 
-    elseif spell_queue[1] == spell and L["resurrections"][spell] then
-      local target = pendingTarget or senttarget or spell_queue[3]
-      libpredict:Ress(player, target)
-      libpredict.sender:SendHealCommMsg("Resurrection/" .. target .. "/start/")
-      libpredict.sender:SendResCommMsg("RES " .. target)
-      libpredict.sender.resurrecting = true
-    end
-  elseif event == "SPELLCAST_FAILED" or event == "SPELLCAST_INTERRUPTED" then
-    if libpredict.sender.healing then
-      libpredict:HealStop(player)
-      
-      -- DEBUG: Log when sending HealStop
-      if libpredict.debug then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[libpredict TX]|r Sending HealStop (via " .. event .. ") to group")
-      end
-      libpredict.sender:SendHealCommMsg("Healstop")
-      libpredict.sender.healing = nil
-    elseif libpredict.sender.resurrecting then
-      local target = this.current_cast_target or senttarget or spell_queue[3]
-      libpredict:RessStop(player)
-      libpredict.sender:SendHealCommMsg("Resurrection/stop/")
-      libpredict.sender:SendResCommMsg("RESNO " .. target)
-      libpredict.sender.resurrecting = nil
-    end
-    -- Nutze current_cast für Regrowth cleanup
-    if this.current_cast == REGROWTH then
-      this.regrowth_timer = nil
-      this.regrowth_start = nil
-      this.regrowth_target_next = nil
-      this.regrowth_start_next = nil
-    end
-    -- Cleanup
-    this.current_cast = nil
-    this.current_cast_target = nil
-  elseif event == "SPELL_FAILED_SELF" then
-    -- Nampower SPELL_FAILED_SELF: More reliable than vanilla SPELLCAST_FAILED
-    -- Same cleanup as SPELLCAST_FAILED
-    if libpredict.sender.healing then
-      libpredict:HealStop(player)
-      
-      -- DEBUG: Log when sending HealStop
-      if libpredict.debug then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[libpredict TX]|r Sending HealStop to group (SPELL_FAILED_SELF)")
-      end
-      libpredict.sender:SendHealCommMsg("Healstop")
-      libpredict.sender.healing = nil
-    elseif libpredict.sender.resurrecting then
-      local target = this.current_cast_target or senttarget or spell_queue[3]
-      libpredict:RessStop(player)
-      libpredict.sender:SendHealCommMsg("Resurrection/stop/")
-      libpredict.sender:SendResCommMsg("RESNO " .. target)
-      libpredict.sender.resurrecting = nil
-    end
-    -- Regrowth cleanup
-    if this.current_cast == REGROWTH then
-      this.regrowth_timer = nil
-      this.regrowth_start = nil
-      this.regrowth_target_next = nil
-      this.regrowth_start_next = nil
-    end
-    -- Cleanup
-    this.current_cast = nil
-    this.current_cast_target = nil
-  elseif event == "SPELLCAST_DELAYED" then
-    if libpredict.sender.healing then
-      libpredict:HealDelay(player, arg1)
-      libpredict.sender:SendHealCommMsg("Healdelay/" .. arg1 .. "/")
-    end
-  elseif event == "SPELLCAST_STOP" then
+  elseif event == "SPELL_GO_SELF" then
+    -- arg2=spellId
     libpredict:HealStop(player)
-    
-    -- Nur Regrowth wird hier verarbeitet (hat Cast-Zeit)
-    -- Nutze this.current_cast (wird bei SPELLCAST_START gesetzt, nicht von Instant-Hooks überschrieben)
-    if this.current_cast == REGROWTH then
+    local spellName = GetSpellRecField and GetSpellRecField(arg2, "name")
+    if spellName == REGROWTH then
       local now = pfUI.uf.now or GetTime()
       if this.regrowth_timer then
-        -- Bereits ein Regrowth aktiv, speichere für den nächsten
         this.regrowth_start_next = now
       else
         this.regrowth_start = now
       end
       this.regrowth_timer = now + 0.1
     end
-    
-    -- Cleanup
     this.current_cast = nil
     this.current_cast_target = nil
+
+  elseif event == "SPELL_FAILED_SELF" then
+    onCastFailed()
+
+  elseif event == "SPELL_DELAYED_SELF" then
+    -- arg1=casterGuid, arg2=delayMs
+    if libpredict.sender.healing then
+      libpredict:HealDelay(player, arg2)
+      libpredict.sender:SendHealCommMsg("Healdelay/" .. arg2 .. "/")
+    end
+
   end
 end)
 
@@ -1172,7 +1247,7 @@ _G.SlashCmdList.HOTDEBUG = function()
   end
   
   DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[FALLBACK]|r Legacy prediction system: ACTIVE")
-  DEFAULT_CHAT_FRAME:AddMessage("  Using UNIT_CASTEVENT + HealComm messages")
+  DEFAULT_CHAT_FRAME:AddMessage("  Using Hook-Methode + HealComm messages")
   
   -- Show active HoTs in tracking
   local hotCount = 0
