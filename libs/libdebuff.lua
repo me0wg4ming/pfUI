@@ -69,6 +69,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
             "NP_EnableSpellGoEvents",
             "NP_EnableAuraCastEvents",
             "NP_EnableAutoAttackEvents",
+            "NP_EnableSpellHealEvents", 
           }
           local enabledCount = 0
           local alreadyEnabledCount = 0
