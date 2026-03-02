@@ -150,8 +150,17 @@ local function resolveNameFromGuid(guid)
   return nil
 end
 
--- Register with libdebuff hooks
+-- Register with libpredict hooks
 local function cacheRaidNames()
+  -- Ensure GetUnitGUID exists to prevent runtime errors
+  if type(GetUnitGUID) ~= "function" then
+    if not libPredict_ErrorShown then
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libpredict] Libpredict tracking disabled! Please update Nampower to v3.0.0 or higher.|r")
+      libPredict_ErrorShown = true
+    end
+    return
+  end
+
   -- Cache all raid/party members while they are still reachable
   for i = 1, GetNumRaidMembers() do
     local unit = "raid" .. i
