@@ -209,6 +209,7 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
   end
   local target = pendingTarget or resolveNameFromGuid(targetGuid) or senttarget or spell_queue[3]
 
+
   libpredict.sender.current_cast = spellName
   libpredict.sender.current_cast_target = target
 
@@ -816,15 +817,23 @@ local function UpdateCache(spell, heal, crit)
   local heal = heal and tonumber(heal)
   if not spell or not heal then return end
 
-  if not cache[spell] or cache[spell][2] then
-    -- skills or equipment changed, save whatever is detected
-    cache[spell] = cache[spell] or {}
+  if not cache[spell] then
+    -- no cache yet: save whatever we get
+    cache[spell] = {}
     cache[spell][1] = crit and heal*2/3 or heal
     cache[spell][2] = crit
-  elseif not crit and cache[spell][1] < heal then
-    -- safe the best heal we can get
-    cache[spell][1] = heal
-    cache[spell][2] = nil
+  elseif cache[spell][2] == true then
+    -- flagged as stale (gear/skill change): always overwrite
+    cache[spell][1] = crit and heal*2/3 or heal
+    cache[spell][2] = crit
+  elseif crit then
+    -- crit: don't overwrite existing non-crit value
+  else
+    -- non-crit: save best value
+    if cache[spell][1] < heal then
+      cache[spell][1] = heal
+    end
+    cache[spell][2] = false
   end
 end
 
