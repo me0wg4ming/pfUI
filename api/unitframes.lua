@@ -466,6 +466,28 @@ function pfUI.uf:DetectBuff(name, id)
       if name == detect_name then return icon, 1 end
     end
 
+    -- try GetUnitField spellId -> libdebuff icon (Nampower, for custom spells)
+    if GetUnitField and GetUnitGUID and pfUI.libdebuff_GetSpellIcon then
+      local guid = GetUnitGUID(name)
+      if guid then
+        local auras = GetUnitField(guid, "aura")
+        if auras then
+          for _, spellId in pairs(auras) do
+            if type(spellId) == "number" and spellId > 0 then
+              local sname = GetSpellRecField and GetSpellRecField(spellId, "name")
+              if sname == detect_name then
+                local tex = pfUI.libdebuff_GetSpellIcon(spellId)
+                if tex and not string.find(tex, "QuestionMark") then
+                  pfUI_cache.buff_icons[tex] = detect_name
+                  return tex, 1
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
     -- return fallback image
     return "interface\\icons\\inv_misc_questionmark", 1
   end
