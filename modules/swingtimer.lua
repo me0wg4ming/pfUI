@@ -163,6 +163,11 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   CreateBackdrop(pfUI.swingtimer.ranged)
   CreateBackdropShadow(pfUI.swingtimer.ranged)
 
+  -- Slam spell IDs (all ranks) - resets swing timer from now, not chained
+  local slamSpellIDs = {
+    [1464] = true, [8820] = true, [11604] = true, [11605] = true,
+  }
+
   -- HS/Cleave queue state
   local hsQueued           = false
   local cleaveQueued       = false
@@ -277,7 +282,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     end
   end
 
-  local function StartSwing(isOffhand)
+  local function StartSwing(isOffhand, resetFromNow)
     local now = GetTime()
 
     -- always refresh speeds to catch haste buffs/debuffs
@@ -293,14 +298,16 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     end
 
     if isOffhand and swingState.offhand.speed > 0 then
-      -- Continue from previous nextSwing to avoid timer jumps
-      local base = (swingState.offhand.swinging and swingState.offhand.nextSwing > (now - 0.5)) and swingState.offhand.nextSwing or now
+      -- resetFromNow: hard reset (e.g. Slam) - always start from now
+      -- otherwise: chain from previous nextSwing to avoid timer jumps
+      local base = (not resetFromNow and swingState.offhand.swinging and swingState.offhand.nextSwing > (now - 0.5)) and swingState.offhand.nextSwing or now
       swingState.offhand.nextSwing = base + swingState.offhand.speed
       swingState.offhand.swinging = true
       if sw_showoh then pfUI.swingtimer.offhand:Show() end
     else
-      -- Continue from previous nextSwing to avoid timer jumps on HS/normal swing
-      local base = (swingState.mainhand.swinging and swingState.mainhand.nextSwing > (now - 0.5)) and swingState.mainhand.nextSwing or now
+      -- resetFromNow: hard reset (e.g. Slam) - always start from now
+      -- otherwise: chain from previous nextSwing to avoid timer jumps on HS/normal swing
+      local base = (not resetFromNow and swingState.mainhand.swinging and swingState.mainhand.nextSwing > (now - 0.5)) and swingState.mainhand.nextSwing or now
       swingState.mainhand.nextSwing = base + swingState.mainhand.speed
       swingState.mainhand.swinging = true
       pfUI.swingtimer.mainhand:Show()
@@ -507,6 +514,10 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   pfUI.libdebuff_spell_go_hooks["swingtimer"] = function(spellId)
     if RANGED_SPELLIDS[spellId] then
       StartRangedSwing()
+    elseif slamSpellIDs[spellId] then
+      -- Slam resets the swing timer hard from now (not chained from previous nextSwing)
+      hsQueued = false; cleaveQueued = false
+      StartSwing(false, true)
     elseif hsSpellIDs[spellId] then
       hsQueued = false; cleaveQueued = false
       StartSwing(false)
@@ -539,20 +550,33 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       StartSwing(isOffhand)
 
     elseif event == "AUTO_ATTACK_OTHER" then
-      if not swingState.mainhand.swinging then return end
+      -- arg1=attackerGuid, arg2=targetGuid, arg3=totalDamage, arg4=hitInfo, arg5=victimState
+      -- We want: someone attacked the player (targetGuid == playerGUID) and the player parried
       local targetGuid = arg2
       if not targetGuid or not playerGUID then return end
       if targetGuid ~= playerGUID then return end
       local victimState = arg5 or 0
+      -- VICTIMSTATE_PARRY = 3
+      -- Vanilla parry mechanic: resets swing timer to 60% of weapon speed,
+      -- but only if the remaining time is more than 40% of weapon speed (otherwise no change)
       if victimState == 3 then
         local now = GetTime()
+        local speed = swingState.mainhand.speed
         local remaining = swingState.mainhand.nextSwing - now
-        local reduction = swingState.mainhand.speed * 0.4
-        local minRemaining = swingState.mainhand.speed * 0.2
-        local newRemaining = remaining - reduction
-        if newRemaining < minRemaining then newRemaining = minRemaining end
-        if newRemaining < remaining then
-          swingState.mainhand.nextSwing = now + newRemaining
+        local parryReset = speed * 0.6
+        local threshold  = speed * 0.4
+        -- Only apply reset if it would actually reduce the remaining time
+        if remaining > parryReset then
+          swingState.mainhand.nextSwing = now + parryReset
+          swingState.mainhand.swinging = true
+          pfUI.swingtimer.mainhand:Show()
+          pfUI.swingtimer:Show()
+        elseif remaining <= 0 and threshold > 0 then
+          -- swing already fired but parry came in: reset to parryReset
+          swingState.mainhand.nextSwing = now + parryReset
+          swingState.mainhand.swinging = true
+          pfUI.swingtimer.mainhand:Show()
+          pfUI.swingtimer:Show()
         end
       end
 
