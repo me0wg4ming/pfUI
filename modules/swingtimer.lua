@@ -545,8 +545,25 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       local hitInfo = arg4 or 0
       local isOffhand = bit.band(hitInfo, HITINFO_LEFTSWING) ~= 0
       local noAction = bit.band(hitInfo, HITINFO_NOACTION) ~= 0
-      -- HITINFO_NOACTION: server did not advance the swing clock, ignore
+      -- HITINFO_NOACTION: server did not advance the swing clock (extra attack), ignore
       if noAction then return end
+
+      -- Fallback extra attack detection: some servers (e.g. Turtle WoW) do not set
+      -- HITINFO_NOACTION for extra attacks (Sword Specialization, Windfury, Hand of Justice).
+      -- An extra attack fires a second AUTO_ATTACK_SELF while the current swing timer is
+      -- still running with significant time remaining. In that case, the swing clock was
+      -- NOT reset by the server, so we must not reset our timer either.
+      local now = GetTime()
+      if not isOffhand and swingState.mainhand.swinging then
+        local remaining = swingState.mainhand.nextSwing - now
+        -- If more than 20% of swing speed remains, this is an extra attack, not a real swing
+        if remaining > swingState.mainhand.speed * 0.2 then return end
+      end
+      if isOffhand and swingState.offhand.swinging then
+        local remaining = swingState.offhand.nextSwing - now
+        if remaining > swingState.offhand.speed * 0.2 then return end
+      end
+
       StartSwing(isOffhand)
 
     elseif event == "AUTO_ATTACK_OTHER" then
