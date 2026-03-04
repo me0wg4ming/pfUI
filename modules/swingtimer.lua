@@ -581,8 +581,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     if event == "AUTO_ATTACK_SELF" then
       local hitInfo  = arg4 or 0
       local isOffhand = bit.band(hitInfo, HITINFO_LEFTSWING) ~= 0
-      local noAction  = bit.band(hitInfo, HITINFO_NOACTION) ~= 0
-      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ffff[AA] hi=%d OH=%s noAct=%s|r", hitInfo, tostring(isOffhand), tostring(noAction)))
+      local noAction  = bit.band(hitInfo, HITINFO_NOACTION) ~= 0, tostring(noAction)))
       if noAction then return end
 
       -- Extra attack detection: if timer still has >20% remaining for that hand,
@@ -591,19 +590,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       -- Exception: if timer is already at 0 (expired), always accept.
       if isOffhand then
         local pct = ohActive and (ohTimer / ohTimerMax) or 0
-        if ohActive and ohTimer > 0 and pct > 0.20 then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff4444[AA] OH extra-attack skip pct=%.0f%% t=%.3f|r", pct*100, ohTimer))
+        if ohActive and ohTimer > 0 and pct > 0.20 then)
           return
-        end
-        DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff88[AA] OH reset (was pct=%.0f%% t=%.3f)|r", pct*100, ohTimer))
+        end|r", pct*100, ohTimer))
         ResetOH()
       else
         local pct = mhActive and (mhTimer / mhTimerMax) or 0
-        if mhActive and mhTimer > 0 and pct > 0.20 then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff4444[AA] MH extra-attack skip pct=%.0f%% t=%.3f|r", pct*100, mhTimer))
+        if mhActive and mhTimer > 0 and pct > 0.20 then)
           return
-        end
-        DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff88[AA] MH reset (was pct=%.0f%% t=%.3f)|r", pct*100, mhTimer))
+        end|r", pct*100, mhTimer))
         ResetMH()
       end
 
@@ -624,10 +619,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
             local reduct = ohSpeed * 0.40
             local before = ohTimer
             ohTimer = ohTimer - reduct
-            if ohTimer < minimum then ohTimer = minimum end
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[PARRY] OH %.3fs->%.3f min=%.3f spd=%.3f pct=%.0f%%|r", before, ohTimer, minimum, ohSpeed, (ohTimer/ohTimerMax)*100))
-          else
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[PARRY] OH no-op already<=min %.3f|r", ohTimer))
+            if ohTimer < minimum then ohTimer = minimum end*100))
+          else)
           end
         elseif mhActive and mhSpeed > 0 then
           local minimum = mhSpeed * 0.20
@@ -635,13 +628,10 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
             local reduct = mhSpeed * 0.40
             local before = mhTimer
             mhTimer = mhTimer - reduct
-            if mhTimer < minimum then mhTimer = minimum end
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[PARRY] MH %.3f->%.3f min=%.3f spd=%.3f pct=%.0f%%|r", before, mhTimer, minimum, mhSpeed, (mhTimer/mhTimerMax)*100))
-          else
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[PARRY] MH no-op already<=min %.3f|r", mhTimer))
+            if mhTimer < minimum then mhTimer = minimum end*100))
+          else)
           end
-        else
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[PARRY] skip mhA=%s ohA=%s mhT=%.3f ohT=%.3f|r", tostring(mhActive), tostring(ohActive), mhTimer, ohTimer))
+        else, tostring(ohActive), mhTimer, ohTimer))
         end
       end
 
