@@ -13,7 +13,10 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
   local function CreateTargetIndicators()
     if not pfUI.uf or not pfUI.uf.target then return false end
 
-    -- Behind Indicator for all units (TOP)
+    local h = pfUI.uf.target:GetHeight() or 30
+    local slot = h / 3  -- divide frame into thirds
+
+    -- Behind Indicator for all units (MIDDLE)
     if C.unitframes.behind_indicator == "1" and not pfUI.uf.target.behindIndicator then
       local behindFrame = CreateFrame("Frame", "pfBehindIndicator", pfUI.uf.target)
       behindFrame:SetAllPoints(pfUI.uf.target)
@@ -21,7 +24,7 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
 
       behindFrame.text = behindFrame:CreateFontString(nil, "OVERLAY")
       behindFrame.text:SetFont(pfUI.font_default, 13, "OUTLINE")
-      behindFrame.text:SetPoint("RIGHT", behindFrame, "RIGHT", -1, 7)
+      behindFrame.text:SetPoint("RIGHT", behindFrame, "RIGHT", -1, 0)
       behindFrame.text:SetTextColor(0.3, 1, 0.3, 1)
       behindFrame.text:SetText("BEHIND")
       behindFrame.text:Hide()
@@ -55,7 +58,7 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
 
       losFrame.text = losFrame:CreateFontString(nil, "OVERLAY")
       losFrame.text:SetFont(pfUI.font_default, 13, "OUTLINE")
-      losFrame.text:SetPoint("RIGHT", losFrame, "RIGHT", -1, -7)
+      losFrame.text:SetPoint("RIGHT", losFrame, "RIGHT", -1, -slot)
       losFrame.text:SetTextColor(1, 0.3, 0.3, 1)
       losFrame.text:SetText("NO LOS")
       losFrame.text:Hide()
@@ -81,6 +84,130 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
       pfUI.uf.target.losIndicator = losFrame
     end
 
+    -- Distance Indicator
+    if C.unitframes.distance_indicator == "1" and not pfUI.uf.target.distanceIndicator then
+      if C.unitframes.distance_hook_portrait == "1" then
+        -- Hooked mode: text anchored below Behind/LOS on the target frame
+        local distFrame = CreateFrame("Frame", "pfDistanceIndicator", pfUI.uf.target)
+        distFrame:SetAllPoints(pfUI.uf.target)
+        distFrame:SetFrameLevel(pfUI.uf.target:GetFrameLevel() + 10)
+
+        distFrame.text = distFrame:CreateFontString(nil, "OVERLAY")
+        distFrame.text:SetFont(pfUI.font_default, 13, "OUTLINE")
+        distFrame.text:SetPoint("RIGHT", distFrame, "RIGHT", -1, slot)
+        distFrame.text:SetTextColor(1, 1, 1, 1)
+        distFrame.text:Hide()
+
+        local thresholds = {
+          {  5, 0.3, 0.5, 1.0 },  -- melee (blue)
+          {  8, 0.4, 0.7, 1.0 },  -- close (light blue)
+          { 20, 0.4, 0.9, 1.0 },  -- short range (sky blue)
+          { 30, 0.0, 1.0, 0.0 },  -- mid range (green)
+          { 35, 0.8, 1.0, 0.0 },  -- yellow-green
+          { 41, 1.0, 1.0, 0.0 },  -- yellow
+        }
+
+        local lastCheck = 0
+        distFrame:SetScript("OnUpdate", function()
+          if GetTime() - lastCheck < 0.1 then return end
+          lastCheck = GetTime()
+
+          if not UnitExists("target") then
+            this.text:Hide()
+            return
+          end
+
+          local success, distance = pcall(UnitXP, "distanceBetween", "player", "target")
+          if not success or not distance then
+            this.text:Hide()
+            return
+          end
+
+          local r, g, b = 1.0, 0.2, 0.2
+          for i = 1, table.getn(thresholds) do
+            if distance <= thresholds[i][1] then
+              r, g, b = thresholds[i][2], thresholds[i][3], thresholds[i][4]
+              break
+            end
+          end
+
+          this.text:SetTextColor(r, g, b, 1)
+          this.text:SetText(string.format("%.1f yd", distance))
+          this.text:Show()
+        end)
+
+        pfUI.uf.target.distanceIndicator = distFrame
+
+      else
+        -- Free frame mode: movable standalone frame, same as rangedisplay module
+        if not pfRangeDisplay then
+          local f = CreateFrame("Frame", "pfRangeDisplay", UIParent)
+          f:SetWidth(90)
+          f:SetHeight(20)
+          f:SetFrameStrata("MEDIUM")
+          f:SetPoint("CENTER", UIParent, "CENTER", 0, -100)
+          CreateBackdrop(f, nil, true)
+          CreateBackdropShadow(f)
+          UpdateMovable(f)
+
+          f.text = f:CreateFontString(nil, "OVERLAY")
+          f.text:SetFont(pfUI.font_default, C.global.font_size + 2, "OUTLINE")
+          f.text:SetPoint("CENTER", f, "CENTER")
+          f.text:SetTextColor(1, 1, 1, 1)
+          f.text:SetText("--")
+
+          local thresholds = {
+            {  5, 0.0, 0.4, 1.0 },
+            {  8, 0.2, 0.6, 1.0 },
+            { 20, 0.3, 0.8, 1.0 },
+            { 30, 0.0, 0.9, 0.0 },
+            { 35, 0.7, 0.9, 0.0 },
+            { 41, 1.0, 1.0, 0.0 },
+          }
+
+          local throttle = 0
+          local scanner = CreateFrame("Frame")
+          scanner:SetScript("OnUpdate", function()
+            throttle = throttle + arg1
+            if throttle < 0.05 then return end
+            throttle = 0
+
+            if not UnitExists("target") then
+              f.text:SetText("--")
+              f.text:SetTextColor(1, 1, 1, 1)
+              f:Hide()
+              return
+            end
+
+            f:Show()
+
+            local success, distance = pcall(UnitXP, "distanceBetween", "player", "target")
+            if not success or not distance then
+              f.text:SetText("--")
+              f.text:SetTextColor(1, 1, 1, 1)
+              return
+            end
+
+            local successL, inSight = pcall(UnitXP, "inSight", "player", "target")
+            local alpha = (successL and inSight == false) and 0.5 or 1.0
+            f.text:SetAlpha(alpha)
+
+            local r, g, b = 1.0, 0.2, 0.2
+            for i = 1, table.getn(thresholds) do
+              if distance <= thresholds[i][1] then
+                r, g, b = thresholds[i][2], thresholds[i][3], thresholds[i][4]
+                break
+              end
+            end
+
+            f.text:SetTextColor(r, g, b, 1)
+            f.text:SetText(string.format("%.1f yd", distance))
+          end)
+        end
+        pfUI.uf.target.distanceIndicator = pfRangeDisplay
+      end
+    end
+
     return true
   end
 
@@ -103,6 +230,9 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
         end
         if pfUI.uf.target.losIndicator then
           pfUI.uf.target.losIndicator:SetScript("OnUpdate", nil)
+        end
+        if pfUI.uf.target.distanceIndicator then
+          pfUI.uf.target.distanceIndicator:SetScript("OnUpdate", nil)
         end
       end
       return
