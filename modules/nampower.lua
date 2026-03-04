@@ -6,7 +6,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
   -- Only load if Nampower is available
   if not GetNampowerVersion then return end
 
-  -- Safe wrapper for SuperWoW's GetSpellNameAndRankForId (may not be available)
+  -- Safe wrapper for GetSpellNameAndRankForId (may not be available)
   local function SafeGetSpellNameAndRank(spellId)
     if not GetSpellNameAndRankForId then return nil, nil end
     local success, name, rank = pcall(GetSpellNameAndRankForId, spellId)
@@ -67,14 +67,11 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local spellId = arg2
 
       if eventCode == NORMAL_QUEUED or eventCode == NON_GCD_QUEUED or eventCode == ON_SWING_QUEUED then
-        -- Get spell texture from GetSpellRec (Nampower) or SpellInfo (SuperWoW fallback)
+        -- Get spell texture from GetSpellRec (Nampower)
         local texture
         if GetSpellRec then
           local rec = GetSpellRec(spellId)
           texture = rec and rec.spellIconID and GetSpellIconTexture(rec.spellIconID) or nil
-        elseif SpellInfo then
-          local _, _, tex = SpellInfo(spellId)
-          texture = tex
         end
 
         if texture then
@@ -112,8 +109,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
               local iconID = rec.spellIconID
               texture = iconID and GetSpellIconTexture(iconID) or nil
             end
-          elseif SpellInfo then
-            name, rank, texture = SpellInfo(spellId)
+
           end
           if not name then
             name, rank = SafeGetSpellNameAndRank(spellId)
@@ -591,7 +587,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
 
       -- Get base mana using Nampower's GetUnitField
       local baseMana, baseMaxMana
-      local _, guid = UnitExists(unit)
+      local guid = GetUnitGUID(unit)
 
       if guid then
         baseMana = GetUnitField(guid, "power1")

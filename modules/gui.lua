@@ -1,17 +1,6 @@
 pfUI:RegisterModule("gui", "vanilla:tbc", function ()
   local Reload, U, CreateConfig, CreateTabFrame, CreateArea, CreateGUIEntry, EntryUpdate
 
-  -- Initialize global hidden buffs lookup table (for libdebuff)
-  pfUI_HiddenBuffsLookup = {}
-  if pfUI_config and pfUI_config.buffs and pfUI_config.buffs.hidelist and pfUI_config.buffs.hidelist ~= "" then
-    for id in string.gfind(pfUI_config.buffs.hidelist, "([^#]+)") do
-      local spellId = tonumber(id)
-      if spellId then
-        pfUI_HiddenBuffsLookup[spellId] = true
-      end
-    end
-  end
-
   -- "searchDB" gets populated when CreateConfig is called. The table holds
   -- information about the title, its parent buttons and the frame itself:
   --   searchDB[tostring(frame)][-1] = frame
@@ -954,6 +943,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "8:" .. T["Slow"],
         "16:" .. T["Very Slow"],
       },
+      ["uf_rangecheck_mode"] = {
+        "vanilla:" .. T["Vanilla (Spellbook)"],
+        "unitxp:" .. T["UnitXP (Precise)"],
+      },
       ["uf_raidlayout"] = {
         "1x40:" .. "1x40",
         "2x20:" .. "2x20",
@@ -1042,6 +1035,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       ["uf_layout"] = {
         "default:" .. T["Default"],
         "tukui:TukUI"
+      },
+      ["raidmarker_grow"] = {
+        "down:Down",
+        "up:Up",
       },
       ["uf_color"] = {
         "0:" .. T["Class"],
@@ -1398,7 +1395,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       donate:SetHeight(20)
       donate:SetText(T["Donate"])
       donate:SetScript("OnClick", function()
-        pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI")
+        pfUI.chat.urlcopy.CopyText("https://buymeacoffee.com/w1ot8abps4")
       end)
       SkinButton(donate)
 
@@ -1968,6 +1965,35 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Swing Timer"], nil, nil, "header")
       CreateConfig(nil, T["Swing Timer Width"], C.unitframes, "swingtimerwidth")
       CreateConfig(nil, T["Swing Timer Height"], C.unitframes, "swingtimerheight")
+      CreateConfig(nil, T["Swing Timer Texture"], C.unitframes, "swingtimertexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture)
+      CreateConfig(nil, T["Swing Timer Font Size"], C.unitframes, "swingtimerfontsize")
+      CreateConfig(nil, T["Show Timer Text"], C.unitframes, "swingtimertext", "checkbox")
+      CreateConfig(nil, T["Show MH/OH Labels"], C.unitframes, "swingtimerlabel", "checkbox")
+      CreateConfig(nil, T["Show Offhand Bar"], C.unitframes, "swingtimeroffhand", "checkbox")
+      CreateConfig(nil, T["Show Ranged Bar"], C.unitframes, "swingtimerranged", "checkbox")
+      CreateConfig(nil, T["Mainhand Bar Color"], C.unitframes, "swingtimermhcolor", "color")
+      CreateConfig(nil, T["Offhand Bar Color"], C.unitframes, "swingtimerohcolor", "color")
+      CreateConfig(nil, T["Ranged Bar Color"], C.unitframes, "swingtimerrangedcolor", "color")
+      CreateConfig(nil, T["Ranged Warn Color (Hunter)"], C.unitframes, "swingtimerrangedwarncolor", "color")
+      CreateConfig(nil, T["Show HS/Cleave Queue Color (Warrior)"], C.unitframes, "swingtimerhsqueue", "checkbox")
+
+      CreateConfig(nil, "Mark Tracking", nil, nil, "header")
+      CreateConfig(nil, "Raid Marker Width", C.unitframes, "raidmarkerwidth")
+      CreateConfig(nil, "Raid Marker Height", C.unitframes, "raidmarkerheight")
+      CreateConfig(nil, "Raid Marker Grow", C.unitframes, "raidmarkergrow", "dropdown", pfUI.gui.dropdowns.raidmarker_grow)
+      CreateConfig(nil, "Raid Marker Texture", C.unitframes, "raidmarkertexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture)
+      CreateConfig(nil, "Raid Marker Font Size", C.unitframes, "raidmarkerfontsize")
+      CreateConfig(nil, "Show Name", C.unitframes, "raidmarkershowname", "checkbox")
+      CreateConfig(nil, "Show Percent HP", C.unitframes, "raidmarkershowpct", "checkbox")
+      CreateConfig(nil, "Show Portrait", C.unitframes, "raidmarkershowportrait", "checkbox")
+      CreateConfig(nil, "Star Color", C.unitframes, "raidmarkercolor_star", "color")
+      CreateConfig(nil, "Circle Color", C.unitframes, "raidmarkercolor_circle", "color")
+      CreateConfig(nil, "Diamond Color", C.unitframes, "raidmarkercolor_diamond", "color")
+      CreateConfig(nil, "Triangle Color", C.unitframes, "raidmarkercolor_triangle", "color")
+      CreateConfig(nil, "Moon Color", C.unitframes, "raidmarkercolor_moon", "color")
+      CreateConfig(nil, "Square Color", C.unitframes, "raidmarkercolor_square", "color")
+      CreateConfig(nil, "Cross Color", C.unitframes, "raidmarkercolor_cross", "color")
+      CreateConfig(nil, "Skull Color", C.unitframes, "raidmarkercolor_skull", "color")
 
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
@@ -1976,6 +2002,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
       CreateConfig(U[c], T["Group Options"], nil, nil, "header")
       CreateConfig(nil, T["Enable 40y-Range Check"], C.unitframes, "rangecheck", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Range Check Mode"], C.unitframes, "rangecheck_mode", "dropdown", pfUI.gui.dropdowns.uf_rangecheck_mode, nil, nil, nil, "vanilla")
+      CreateConfig(nil, T["UnitXP Range Threshold (yards)"], C.unitframes, "rangecheck_distance", nil, nil, nil, nil, nil, "vanilla")
       CreateConfig(nil, T["Range Check Interval"], C.unitframes, "rangechecki", "dropdown", pfUI.gui.dropdowns.uf_rangecheckinterval, nil, nil, nil, "vanilla")
       CreateConfig(nil, T["Use Raid Frames To Display Group Members"], C.unitframes, "raidforgroup", "checkbox")
       CreateConfig(nil, T["Always Show Self In Raid Frames"], C.unitframes, "selfinraid", "checkbox")
@@ -2020,6 +2048,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["UnitXP Settings"], nil, nil, "header")
       CreateConfig(nil, T["Show Line of Sight Indicator"], C.unitframes, "los_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Show Behind Indicator"], C.unitframes, "behind_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Show Distance of Target"], C.unitframes, "distance_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Hook Distance to Portrait Frame"], C.unitframes, "distance_hook_portrait", "checkbox", nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Enable OS Notifications"], C.unitframes, "unitxp_notify", "checkbox", nil, nil, nil, nil, "vanilla" )
     end)
 
@@ -2242,6 +2272,19 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Rage Color"], C.unitframes[c], "ragecolor", "color")
         CreateConfig(U[c], T["Energy Color"], C.unitframes[c], "energycolor", "color")
         CreateConfig(U[c], T["Focus Color"], C.unitframes[c], "focuscolor", "color")
+
+        if c == "player" then
+          CreateConfig(U[c], T["Player SP/Haste Display"], nil, nil, "header")
+          CreateConfig(U[c], T["Haste Display"], C.unitframes[c], "display_haste", "dropdown", {
+            "0:"..T["None"],
+            "1:"..T["Haste (cast speed increase)"],
+            "2:"..T["Effective Haste (Haste * cast time reduction)"], -- Only affects mages/warlocks I believe
+          })
+          CreateConfig(U[c], T["Haste Display Color"], C.unitframes[c], "display_haste_color", "color")
+          CreateConfig(U[c], T["Display Spell Power"], C.unitframes[c], "display_spellpower", "checkbox")
+          CreateConfig(U[c], T["Use Custom Spell Power Color (unchecked = biggest school color)"], C.unitframes[c], "display_sp_color_override", "checkbox")
+          CreateConfig(U[c], T["Spell Power Color"], C.unitframes[c], "display_sp_color", "color")
+        end
       end)
     end
 
@@ -2369,257 +2412,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Time Threshold"], C.buffbar.tdebuff, "threshold")
       CreateConfig(nil, T["Whitelist"], C.buffbar.tdebuff, "whitelist", "list")
       CreateConfig(nil, T["Blacklist"], C.buffbar.tdebuff, "blacklist", "list")
-    end)
-
-    CreateGUIEntry(T["Buffs"], T["Hidden Buffs"], function()
-      CreateConfig(nil, T["Hidden Buffs"], nil, nil, "header")
-      
-      local spacer1 = CreateConfig(nil, " ", nil, nil, "header")
-      spacer1:SetHeight(10)
-      
-      -- Instructions
-      local info1 = CreateConfig(nil, "Click [+] to add SpellID, click [X] to remove", nil, nil, "header")
-      info1:SetHeight(20)
-      info1.caption:SetTextColor(.8, .8, .8, 1)
-      info1.caption:SetFont(GameFontNormal:GetFont(), 11)
-      
-      local spacer2 = CreateConfig(nil, " ", nil, nil, "header")
-      spacer2:SetHeight(5)
-      
-      -- We need to get the parent frame that CreateConfig uses
-      local dummy = CreateConfig(nil, "", nil, nil, "header")
-      dummy:SetHeight(1)
-      local parent = dummy:GetParent()
-      
-      -- Scrollable list frame (create FIRST so we can reference updateHiddenList)
-      local listFrame = CreateFrame("Frame", nil, parent)
-      listFrame:SetWidth(410)
-      listFrame:SetHeight(280)
-      listFrame:SetFrameStrata("DIALOG")
-      listFrame:SetFrameLevel(parent:GetFrameLevel() + 10)
-      -- Position will be set AFTER addButton is created
-      listFrame:SetBackdrop({
-        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 }
-      })
-      listFrame:SetBackdropColor(0.1, 0.1, 0.1, 1)
-      listFrame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-      
-      -- Scroll frame
-      listFrame.scroll = CreateFrame("ScrollFrame", "pfUI_HiddenBuffsScroll", listFrame, "UIPanelScrollFrameTemplate")
-      listFrame.scroll:SetPoint("TOPLEFT", 5, -5)
-      listFrame.scroll:SetPoint("BOTTOMRIGHT", -25, 5)
-      
-      listFrame.content = CreateFrame("Frame", nil, listFrame.scroll)
-      listFrame.content:SetWidth(380)
-      listFrame.content:SetHeight(1)
-      listFrame.scroll:SetScrollChild(listFrame.content)
-      
-      -- Update function (define BEFORE add button so it's available)
-      listFrame.updateHiddenList = function()
-        -- Clear existing
-        for i = 1, 100 do
-          if listFrame.content[i] then
-            listFrame.content[i]:Hide()
-          end
-        end
-        
-        local yOffset = 10
-        local index = 0
-        
-        if pfUI_config.buffs.hidelist and pfUI_config.buffs.hidelist ~= "" then
-          for id in string.gfind(pfUI_config.buffs.hidelist, "([^#]+)") do
-            local spellId = tonumber(id)
-            if spellId then
-              index = index + 1
-              
-              -- Create row as Button
-              local row = listFrame.content[index]
-              if not row then
-                row = CreateFrame("Button", nil, listFrame.content)
-                row:SetWidth(380)
-                row:SetHeight(36)
-                listFrame.content[index] = row
-                
-                -- Icon
-                row.icon = row:CreateTexture(nil, "ARTWORK")
-                row.icon:SetWidth(32)
-                row.icon:SetHeight(32)
-                row.icon:SetPoint("LEFT", 2, 0)
-                row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                
-                -- Text
-                row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                row.text:SetPoint("LEFT", 38, 0)
-                row.text:SetJustifyH("LEFT")
-                row.text:SetWidth(340)
-                
-                -- Hover highlight
-                row.highlight = row:CreateTexture(nil, "BACKGROUND")
-                row.highlight:SetAllPoints(row)
-                row.highlight:SetTexture(1, 1, 1, 0.1)
-                row.highlight:Hide()
-                
-                row:SetScript("OnEnter", function()
-                  this.highlight:Show()
-                end)
-                
-                row:SetScript("OnLeave", function()
-                  this.highlight:Hide()
-                end)
-              end
-              
-              row:SetPoint("TOPLEFT", 10, -yOffset)
-              row.spellId = spellId
-              
-              -- Update icon
-              local texture = nil
-              if GetSpellRecField and GetSpellIconTexture then
-                local iconId = GetSpellRecField(spellId, "spellIconID")
-                if iconId then
-                  texture = GetSpellIconTexture(iconId)
-                  if texture and not string.find(texture, "\\") then
-                    texture = "Interface\\Icons\\" .. texture
-                  end
-                end
-              end
-              row.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-              
-              -- Update text with [X] at the end
-              local name = "Unknown"
-              local rank = ""
-              if GetSpellRecField then
-                name = GetSpellRecField(spellId, "name") or "Unknown"
-                if name == "" then name = "Unknown" end
-                rank = GetSpellRecField(spellId, "rank") or ""
-              end
-              
-              local displayText = name
-              if rank ~= "" then
-                displayText = displayText .. " |cff888888(" .. rank .. ")|r"
-              end
-              displayText = displayText .. " |cffaaaaaa- " .. spellId .. "|r"
-              displayText = displayText .. " |cffff0000[X]|r"
-              
-              row.text:SetText(displayText)
-              
-              -- OnClick removes the item
-              row:SetScript("OnClick", function()
-                local removeId = this.spellId
-                
-                local newList = {}
-                for id in string.gfind(pfUI_config.buffs.hidelist, "([^#]+)") do
-                  if tonumber(id) ~= removeId then
-                    table.insert(newList, id)
-                  end
-                end
-                pfUI_config.buffs.hidelist = table.concat(newList, "#")
-                
-                pfUI.gui.settingChanged = true
-                DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00Changes take effect after /reload|r")
-                listFrame.updateHiddenList()
-                
-                -- Update BuffAnalyzer if it's open
-                if pfUI.gui.updateBuffAnalyzer then
-                  pfUI.gui.updateBuffAnalyzer()
-                end
-              end)
-              
-              row:Show()
-              yOffset = yOffset + 38
-            end
-          end
-        end
-        
-        -- Update content height for scrolling
-        local contentHeight = index * 38 + 20
-        if contentHeight < 280 then contentHeight = 280 end
-        listFrame.content:SetHeight(contentHeight)
-        
-        -- Update scroll frame
-        listFrame.scroll:UpdateScrollChildRect()
-        listFrame.scroll:SetVerticalScroll(0)
-        
-        -- Note: Hidelist changes take effect after /reload
-      end
-      
-      -- Make it globally accessible for BuffAnalyzer
-      pfUI.gui.updateHiddenBuffsList = listFrame.updateHiddenList
-      
-      -- Add button (create AFTER updateHiddenList is defined)
-      local addButton = CreateFrame("Button", nil, parent)
-      addButton:SetWidth(60)
-      addButton:SetHeight(25)
-      addButton:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -55)
-      addButton:SetText("[+] Add")
-      SkinButton(addButton)
-      
-      -- Buff Analyzer button
-      local analyzerButton = CreateFrame("Button", nil, parent)
-      analyzerButton:SetWidth(130)
-      analyzerButton:SetHeight(25)
-      analyzerButton:SetPoint("LEFT", addButton, "RIGHT", 5, 0)
-      analyzerButton:SetText("Show Target Buffs")
-      SkinButton(analyzerButton)
-      analyzerButton:SetScript("OnClick", function()
-        if not UnitExists("target") then
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000You currently have no target!|r")
-          return
-        end
-        
-        if pfUI.gui.updateBuffAnalyzer then
-          -- Toggle BuffAnalyzer
-          _G.SlashCmdList["PFUIBUFFANALYZER"]()
-        else
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000BuffAnalyzer not loaded!|r")
-        end
-      end)
-      
-      -- NOW set listFrame position relative to addButton
-      listFrame:SetPoint("TOPLEFT", addButton, "BOTTOMLEFT", 0, -35)
-      
-      addButton:SetScript("OnClick", function()
-        CreateQuestionDialog(T["Enter SpellID to hide:"], function()
-          local spellId = tonumber(this:GetParent().input:GetText())
-          if not spellId then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffff0000Invalid SpellID!|r")
-            return
-          end
-          
-          -- Check duplicates
-          local current = pfUI_config.buffs.hidelist or ""
-          for id in string.gfind(current, "([^#]+)") do
-            if tonumber(id) == spellId then
-              DEFAULT_CHAT_FRAME:AddMessage("|cffff0000Already in list!|r")
-              return
-            end
-          end
-          
-          -- Add
-          if current ~= "" then
-            pfUI_config.buffs.hidelist = current .. "#" .. spellId
-          else
-            pfUI_config.buffs.hidelist = tostring(spellId)
-          end
-          
-          DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00Added to hidelist:|r " .. spellId)
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00Changes take effect after /reload|r")
-          
-          pfUI.gui.settingChanged = true
-          listFrame.updateHiddenList()
-          
-          local name = "Unknown"
-          if GetSpellRecField then
-            name = GetSpellRecField(spellId, "name") or "Unknown"
-          end
-          DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00Added:|r " .. name .. " (" .. spellId .. ")")
-        end, false, true)
-      end)
-      
-      -- Initial update
-      listFrame.updateHiddenList()
     end)
 
     CreateGUIEntry(T["Actionbar"], T["General"], function()
@@ -2949,6 +2741,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
       CreateConfig(nil, T["Debuffs"], nil, nil, "header")
       CreateConfig(U["nameplates"], T["Enable Debuffs"], C.nameplates, "showdebuffs", "checkbox")
+      CreateConfig(U["nameplates"], T["Show Debuffs on Hostile"], C.nameplates, "showdebuffs_hostile", "checkbox")
+      CreateConfig(U["nameplates"], T["Show Debuffs on Friendly"], C.nameplates, "showdebuffs_friendly", "checkbox")
       CreateConfig(U["nameplates"], T["Debuff Position"], C.nameplates.debuffs, "position", "dropdown", pfUI.gui.dropdowns.debuffposition)
       CreateConfig(U["nameplates"], T["Debuff Icon Offset"], C.nameplates, "debuffoffset")
       CreateConfig(U["nameplates"], T["Debuff Icon Size"], C.nameplates, "debuffsize")
@@ -3066,322 +2860,4 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       end
     end)
   end
-end)
-
--- BuffAnalyzer Module
-pfUI:RegisterModule("buffanalyzer", "vanilla:tbc", function()
-  local frame = CreateFrame("Frame", "pfUIBuffAnalyzer", UIParent)
-  frame:Hide()
-  frame:SetPoint("CENTER", 0, 0)
-  frame:SetWidth(340)
-  frame:SetHeight(420)
-  frame:SetMovable(true)
-  frame:EnableMouse(true)
-  frame:RegisterForDrag("LeftButton")
-  frame:SetScript("OnDragStart", function() frame:StartMoving() end)
-  frame:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
-  frame:SetFrameStrata("DIALOG")
-  
-  CreateBackdrop(frame, nil, true, 0.9)
-  CreateBackdropShadow(frame)
-  table.insert(UISpecialFrames, "pfUIBuffAnalyzer")
-  
-  -- Title
-  frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  frame.title:SetPoint("TOP", 0, -8)
-  frame.title:SetText("Buff Analyzer")
-  
-  -- Close button
-  frame.close = CreateFrame("Button", nil, frame)
-  frame.close:SetWidth(20)
-  frame.close:SetHeight(20)
-  frame.close:SetPoint("TOPRIGHT", -8, -8)
-  frame.close:SetNormalTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up")
-  frame.close:SetPushedTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Down")
-  frame.close:SetScript("OnClick", function() frame:Hide() end)
-  
-  -- Scroll frame for buffs
-  frame.scroll = pfUI.api.CreateScrollFrame("pfUIBuffAnalyzerScroll", frame)
-  frame.scroll:SetPoint("TOPLEFT", 10, -35)
-  frame.scroll:SetPoint("BOTTOMRIGHT", -10, 10)
-  
-  frame.scroll.backdrop = CreateFrame("Frame", nil, frame.scroll)
-  frame.scroll.backdrop:SetFrameLevel(1)
-  frame.scroll.backdrop:SetPoint("TOPLEFT", frame.scroll, "TOPLEFT", -5, 5)
-  frame.scroll.backdrop:SetPoint("BOTTOMRIGHT", frame.scroll, "BOTTOMRIGHT", 5, -5)
-  pfUI.api.CreateBackdrop(frame.scroll.backdrop, nil, true)
-  
-  frame.content = CreateFrame("Frame", nil, frame.scroll)
-  frame.content:SetWidth(420)
-  frame.content:SetHeight(1)
-  frame.scroll:SetScrollChild(frame.content)
-  
-  -- Buff row storage
-  frame.buffRows = {}
-  
-  -- Function to create a buff row
-  local function CreateBuffRow(index)
-    local row = CreateFrame("Button", nil, frame.content)
-    row:SetWidth(155)
-    row:SetHeight(24)
-    row:SetPoint("TOPLEFT", 5, -(index-1) * 26)
-    
-    -- Hover highlight
-    row.highlight = row:CreateTexture(nil, "BACKGROUND")
-    row.highlight:SetAllPoints(row)
-    row.highlight:SetTexture(1, 1, 1, 0.1)
-    row.highlight:Hide()
-    
-    row:SetScript("OnEnter", function()
-      this.highlight:Show()
-      if this.spellId and GetSpellRecField then
-        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-        GameTooltip:ClearLines()
-        
-        local name = GetSpellRecField(this.spellId, "name") or "Unknown"
-        local rank = GetSpellRecField(this.spellId, "rank") or ""
-        
-        if rank ~= "" then
-          GameTooltip:SetText(name .. " (" .. rank .. ")", 1, 1, 1)
-        else
-          GameTooltip:SetText(name, 1, 1, 1)
-        end
-        
-        GameTooltip:AddLine("SpellID: " .. this.spellId, 0.8, 0.8, 0.8)
-        GameTooltip:AddLine(" ", 1, 1, 1)
-        GameTooltip:AddLine("Click to add to Hidden Buffs", 0, 1, 0)
-        GameTooltip:Show()
-      end
-    end)
-    
-    row:SetScript("OnLeave", function()
-      this.highlight:Hide()
-      GameTooltip:Hide()
-    end)
-    
-    -- Icon
-    row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetWidth(22)
-    row.icon:SetHeight(22)
-    row.icon:SetPoint("LEFT", 2, 0)
-    row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    
-    -- Icon background
-    row.iconBg = row:CreateTexture(nil, "BACKGROUND")
-    row.iconBg:SetWidth(26)
-    row.iconBg:SetHeight(26)
-    row.iconBg:SetPoint("LEFT", 0, 0)
-    row.iconBg:SetTexture(0, 0, 0, 1)
-    
-    -- Text
-    row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    row.text:SetPoint("LEFT", 30, 0)
-    row.text:SetJustifyH("LEFT")
-    row.text:SetWidth(120)
-    
-    -- OnClick: Add to hidden buffs
-    row:SetScript("OnClick", function()
-      if not this.spellId then return end
-      
-      -- Add to pfUI_config.buffs.hidelist
-      local currentList = pfUI_config.buffs.hidelist or ""
-      local alreadyHidden = false
-      
-      if currentList ~= "" then
-        for id in string.gfind(currentList, "([^#]+)") do
-          if tonumber(id) == this.spellId then
-            alreadyHidden = true
-            break
-          end
-        end
-      end
-      
-      if not alreadyHidden then
-        if currentList == "" then
-          pfUI_config.buffs.hidelist = tostring(this.spellId)
-        else
-          pfUI_config.buffs.hidelist = currentList .. "#" .. this.spellId
-        end
-        
-        pfUI.gui.settingChanged = true
-        
-        local name = "Unknown"
-        if GetSpellRecField then
-          name = GetSpellRecField(this.spellId, "name") or "Unknown"
-        end
-        
-        DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00Added to Hidden Buffs:|r " .. name .. " (SpellID: " .. this.spellId .. ")")
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00Changes take effect after /reload|r")
-        
-        -- Update Hidden Buffs GUI if it's open
-        if pfUI.gui and pfUI.gui.updateHiddenBuffsList then
-          pfUI.gui.updateHiddenBuffsList()
-        end
-        
-        -- Auto-update this BuffAnalyzer frame
-        frame.Update()
-      else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800Already in Hidden Buffs list!|r")
-      end
-    end)
-    
-    row:Hide()
-    return row
-  end
-  
-  -- Create 32 buff rows
-  for i = 1, 32 do
-    frame.buffRows[i] = CreateBuffRow(i)
-  end
-  
-  -- Update function
-  frame.Update = function()
-    if not UnitExists("target") then
-      frame:Hide()
-      return
-    end
-    
-    -- Check if in range (Nampower check)
-    local inRange = UnitIsVisible and UnitIsVisible("target")
-    if not inRange then
-      frame.title:SetText("Buff Analyzer |cffff0000(OUT OF RANGE)|r")
-      for i = 1, 32 do
-        frame.buffRows[i]:Hide()
-      end
-      frame:Show()
-      return
-    end
-    
-    frame.title:SetText("Buff Analyzer |cff00ff00(Target: " .. UnitName("target") .. ")|r")
-    frame:Show()
-    
-    -- Get GUID
-    local _, guid = UnitExists("target")
-    if not guid or not GetUnitField then
-      frame.title:SetText("Buff Analyzer |cffff0000(Nampower Required!)|r")
-      return
-    end
-    
-    -- Get aura data
-    local auras = GetUnitField(guid, "aura")
-    if not auras then
-      for i = 1, 32 do
-        frame.buffRows[i]:Hide()
-      end
-      return
-    end
-    
-    local auraApps = GetUnitField(guid, "auraApplications")
-    
-    -- Hide all rows first
-    for i = 1, 32 do
-      frame.buffRows[i]:Hide()
-    end
-    
-    local displayCount = 0
-    
-    for i = 1, 32 do
-      local spellId = auras[i]
-      
-      if spellId and spellId > 0 then
-        -- Check if this buff is in the hidden list
-        local isHidden = false
-        if pfUI_config.buffs.hidelist and pfUI_config.buffs.hidelist ~= "" then
-          for id in string.gfind(pfUI_config.buffs.hidelist, "([^#]+)") do
-            if tonumber(id) == spellId then
-              isHidden = true
-              break
-            end
-          end
-        end
-        
-        -- Only show if not hidden
-        if not isHidden then
-          displayCount = displayCount + 1
-          local row = frame.buffRows[displayCount]
-          
-          row.spellId = spellId
-          
-          -- Get stacks
-          local stacks = 1
-          if auraApps and auraApps[i] then
-            stacks = auraApps[i] + 1
-          end
-          
-          -- Get spell info
-          local name = "Unknown"
-          local texture = nil
-          
-          if GetSpellRecField then
-            name = GetSpellRecField(spellId, "name")
-            if name == "" then name = "Unknown" end
-            
-            if GetSpellIconTexture then
-              local iconId = GetSpellRecField(spellId, "spellIconID")
-              if iconId and iconId > 0 then
-                texture = GetSpellIconTexture(iconId)
-                if texture and not string.find(texture, "\\") then
-                  texture = "Interface\\Icons\\" .. texture
-              end
-            end
-          end
-        end
-        
-        row.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-        
-        -- Format text
-        local infoText = string.format(
-          "|cffffffff%s|r %s\n|cffaaaaaa#%d | SpellID: %d|r",
-          name,
-          stacks > 1 and "|cffaaaaaa(x" .. stacks .. ")|r" or "",
-          i,
-          spellId
-        )
-        
-        row.text:SetText(infoText)
-        row:Show()
-        
-        -- Two column layout
-        local column = mod((displayCount - 1), 2)
-        local rowIndex = math.floor((displayCount - 1) / 2)
-        
-        local xOffset = column == 0 and 5 or 165
-        local yOffset = -rowIndex * 26
-        
-        row:SetPoint("TOPLEFT", xOffset, yOffset)
-        end
-      end
-    end
-    
-    -- Adjust content height (half as many rows due to 2 columns)
-    local totalRows = math.ceil(displayCount / 2)
-    frame.content:SetHeight(math.max(totalRows * 26, 380))
-    frame.scroll:UpdateScrollState()
-  end
-  
-  -- Make Update function globally accessible so Hidden Buffs GUI can call it
-  pfUI.gui.updateBuffAnalyzer = frame.Update
-  
-  -- Register events
-  frame:RegisterEvent("PLAYER_TARGET_CHANGED")
-  frame:RegisterEvent("UNIT_AURA")
-  frame:SetScript("OnEvent", function()
-    if event == "PLAYER_TARGET_CHANGED" or (event == "UNIT_AURA" and arg1 == "target") then
-      if frame:IsShown() then
-        frame.Update()
-      end
-    end
-  end)
-  
-  -- Slash command
-  _G.SLASH_PFUIBUFFANALYZER1 = "/buffanalyzer"
-  _G.SlashCmdList["PFUIBUFFANALYZER"] = function(msg)
-    if frame:IsShown() then
-      frame:Hide()
-    else
-      frame.Update()
-    end
-  end
-  
-  DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpf|cffffffffUI|r: BuffAnalyzer loaded - use |cffffcc00/buffanalyzer|r")
 end)

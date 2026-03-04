@@ -69,6 +69,8 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
 
   local explores = {}
   local explorecaches = {}
+  local alreadyknown = {}
+  local BASE_WORLDMAP_OVERLAYS = nil
 
   local exploreEnter = function()
     WorldMapTooltip:ClearLines()
@@ -96,6 +98,11 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
   end
 
   local function pfWorldMapFrame_Update()
+    -- clear stale texture references to prevent memory leak / Error 132
+    for k in pairs(explorecaches) do
+      explorecaches[k] = nil
+    end
+
     -- create metatable if not yet created
     this.overlayData = this.overlayData or setmetatable(pfMapOverlayData, {__index = function(t,k)
       local v = {}
@@ -111,7 +118,8 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
     local prefix = string.format("Interface\\WorldMap\\%s\\",mapFileName)
     local numOverlays = GetNumMapOverlays()
 
-    local alreadyknown = {}
+    -- reuse upvalue table to avoid GC pressure
+    for k in pairs(alreadyknown) do alreadyknown[k] = nil end
     for i=1, numOverlays do
       local textureName, textureWidth, textureHeight, offsetX, offsetY, mapPointX, mapPointY = GetMapOverlayInfo(i)
       local overlayHash = create_hash(textureName, textureWidth, textureHeight, offsetX, offsetY, mapPointX, mapPointY)

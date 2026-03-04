@@ -121,14 +121,14 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
         local frame = pfUI.uf.raid[i]
         if frame and frame.id and frame.id > 0 then
           local unit = "raid" .. frame.id
-          local _, newGuid = UnitExists(unit)
+          local newGuid = GetUnitGUID(unit)
           local oldGuid = tracker.frameToGuid[frame]
           
           if newGuid ~= oldGuid then
             -- GUID changed = different player = need full update
             tracker.frameToGuid[frame] = newGuid
             frame.update_full = true
-            frame.update_aura = true
+            frame.update_aura = true  -- Force aura refresh!
           end
         end
       end
