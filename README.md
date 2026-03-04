@@ -1,6 +1,6 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-8.0.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-8.1.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-Optional-yellow.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Required-purple.svg)](https://gitea.com/avitasia/nampower)
@@ -1669,7 +1669,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 7.7.0
-**Release Date:** February 25, 2026  
+**Version:** 8.1.0
+**Release Date:** March 04, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable
