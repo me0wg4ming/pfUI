@@ -27,8 +27,6 @@ Two new options under Unit Frames → General → UnitXP Settings:
 Show Distance of Target — Displays live distance to target with color-coded thresholds (blue = melee, green = mid range, yellow = 35–41y, red = out of range)
 Hook Distance to Portrait Frame — When enabled, shows the distance text directly on the target frame alongside the existing Behind and LOS indicators, proportionally spaced based on frame height. When disabled, shows as a free-floating movable frame
 
-<img width="588" height="323" alt="grafik" src="https://github.com/user-attachments/assets/62796696-d117-481b-bd88-4e1e301c6287" />
-
 🎯 Precise Range Check via UnitXP (api.lua, librange.lua, gui.lua, config.lua)
 New options under Unit Frames → General → Group Options:
 
@@ -36,6 +34,8 @@ Range Check Mode dropdown — Vanilla (Spellbook) keeps existing behavior; UnitX
 UnitXP Range Threshold (yards) — Configurable yard value for the UnitXP mode (default: 40). Works for all classes, no spellbook scan required
 When UnitXP mode is active, the librange scan loop is fully disabled — no TargetUnit cycling, no combat interruption, no class restriction
 Fixed UnitInRange referencing librange as an undefined local instead of pfUI.api.librange
+
+<img width="588" height="323" alt="grafik" src="https://github.com/user-attachments/assets/62796696-d117-481b-bd88-4e1e301c6287" />
 
 🔧 Share Module Fix (share.lua)
 
