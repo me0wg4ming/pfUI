@@ -58,7 +58,7 @@ Fixed import failures for configs containing double quotes (e.g. clickcast macro
 
 ---
 
-## 🎯 What's New in Version 7.8.0 (February 29, 2026)
+## 🎯 What's New in Version 7.8.0 (February 28, 2026)
 
 ### 🔗 libdebuff External Hook System (libs/libdebuff.lua)
 
