@@ -2161,6 +2161,21 @@ end
         foundAuraSlot = displayToAura[guid][displaySlot]
       end
 
+      -- Check if debuff is still present (stack change, not full removal)
+      -- If the spell is still in aura slots, this was a stack decrement - keep timer data
+      local isStillPresent = false
+      if GetUnitField then
+        local auras = GetUnitField(guid, "aura")
+        if auras then
+          for checkSlot = 33, 48 do
+            if auras[checkSlot] and auras[checkSlot] == spellId then
+              isStillPresent = true
+              break
+            end
+          end
+        end
+      end
+
       local wasOurs = false
       local removedCasterGuid = nil
 
@@ -2172,22 +2187,24 @@ end
           removedCasterGuid = ownership.casterGuid
         end
         
-        -- Clear both mappings (with nil-checks)
-        if slotOwnership[guid] then
-          slotOwnership[guid][foundAuraSlot] = nil
-        end
-        if displayToAura[guid] then
-          displayToAura[guid][displaySlot] = nil
+        -- Clear both mappings (with nil-checks) - but NOT if still present (stack change)
+        if not isStillPresent then
+          if slotOwnership[guid] then
+            slotOwnership[guid][foundAuraSlot] = nil
+          end
+          if displayToAura[guid] then
+            displayToAura[guid][displaySlot] = nil
+          end
         end
         
         if debugStats.enabled and IsCurrentTarget(guid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d [arg6] %s wasOurs=%s caster=%s", 
-            GetDebugTimestamp(), foundAuraSlot, spellName, tostring(wasOurs), DebugGuid(removedCasterGuid)))
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d [arg6] %s wasOurs=%s caster=%s stillPresent=%s", 
+            GetDebugTimestamp(), foundAuraSlot, spellName, tostring(wasOurs), DebugGuid(removedCasterGuid), tostring(isStillPresent)))
         end
       end
       
-      -- Remove from ownDebuffs if it was ours
-      if wasOurs and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+      -- Remove from ownDebuffs if it was ours (but NOT if still present = stack change)
+      if not isStillPresent and wasOurs and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
         local age = GetTime() - ownDebuffs[guid][spellName].startTime
         -- Only delete if not recently renewed
         if age > 1 then
@@ -2195,8 +2212,8 @@ end
         end
       end
       
-      -- Remove from allAuraCasts
-      if removedCasterGuid and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
+      -- Remove from allAuraCasts (but NOT if still present = stack change)
+      if not isStillPresent and removedCasterGuid and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
         if allAuraCasts[guid][spellName][removedCasterGuid] then
           local auraData = allAuraCasts[guid][spellName][removedCasterGuid]
           local age = GetTime() - auraData.startTime
