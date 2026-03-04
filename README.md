@@ -14,7 +14,7 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ---
 
-🎯 What's New in Version 8.1.0
+## 🎯 What's New in Version 8.1.0
 🗡️ Swing Timer Bug Fixes (swingtimer.lua)
 
 Extra attack detection — Sword Specialization, Windfury, Hand of Justice and other extra attacks no longer double the swing timer. Added fallback detection for servers that don't set HITINFO_NOACTION correctly: if AUTO_ATTACK_SELF fires while more than 20% of the current swing remains, it's treated as an extra attack and ignored
