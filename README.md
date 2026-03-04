@@ -14,7 +14,7 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ---
 
-## 🎯 What's New in Version 8.1.0
+## 🎯 What's New in Version 8.1.0 (March 03, 2026)
 🗡️ Swing Timer Bug Fixes (swingtimer.lua)
 
 Extra attack detection — Sword Specialization, Windfury, Hand of Justice and other extra attacks no longer double the swing timer. Added fallback detection for servers that don't set HITINFO_NOACTION correctly: if AUTO_ATTACK_SELF fires while more than 20% of the current swing remains, it's treated as an extra attack and ignored
@@ -43,7 +43,7 @@ Fixed import failures for configs containing double quotes (e.g. clickcast macro
 
 ---
 
-## 🎯 What's New in Version 8.0.0
+## 🎯 What's New in Version 8.0.0 (March 02, 2026)
 
 * **Nampower 3.0.0+ now required** — minimum version bumped from 2.41.0
 * **SuperWoW dependency fully removed** — all SuperWoW-specific code paths eliminated:
@@ -58,7 +58,7 @@ Fixed import failures for configs containing double quotes (e.g. clickcast macro
 
 ---
 
-## 🎯 What's New in Version 7.8.0
+## 🎯 What's New in Version 7.8.0 (February 29, 2026)
 
 ### 🔗 libdebuff External Hook System (libs/libdebuff.lua)
 
