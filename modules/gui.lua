@@ -1948,6 +1948,67 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       end, true)
     end)
 
+    CreateGUIEntry(T["Throttling"], T["Swing Timer"], function()
+      local swingCustom
+
+      CreateConfig(function()
+        if swingCustom and swingCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("swingtimer")
+          if not isCustom then
+            swingCustom.input:EnableMouse(false)
+            swingCustom.input:EnableKeyboard(false)
+            swingCustom.input:ClearFocus()
+            swingCustom.input:SetTextColor(.5,.5,.5,1)
+            swingCustom.input:SetText(tostring(pfUI.throttle:GetFps("swingtimer")))
+          else
+            swingCustom.input:EnableMouse(true)
+            swingCustom.input:EnableKeyboard(true)
+            swingCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.swingtimer_custom then
+              swingCustom.input:SetText(_G.pfUI_throttle.swingtimer_custom)
+            end
+          end
+        end
+      end, T["Swing Timer Update Rate"], _G.pfUI_throttle, "swingtimer", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+
+      swingCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "swingtimer_custom")
+
+      local isCustom = pfUI.throttle:IsCustom("swingtimer")
+      if not isCustom then
+        swingCustom.input:EnableMouse(false)
+        swingCustom.input:EnableKeyboard(false)
+        swingCustom.input:SetTextColor(.5,.5,.5,1)
+        swingCustom.input:SetText(tostring(pfUI.throttle:GetFps("swingtimer")))
+      else
+        swingCustom.input:EnableMouse(true)
+        swingCustom.input:EnableKeyboard(true)
+        swingCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.swingtimer_custom then
+          swingCustom.input:SetText(_G.pfUI_throttle.swingtimer_custom)
+        end
+      end
+
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(10)
+
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("swingtimer")
+        _G.pfUI_throttle.swingtimer_custom = "50"
+        Reload()
+      end, true)
+    end)
+
     CreateGUIEntry(T["Unit Frames"], T["General"], function()
       CreateConfig(nil, T["Disable pfUI Unit Frames"], C.unitframes, "disable", "checkbox")
       CreateConfig(nil, T["Healthbar Animation Speed"], C.unitframes, "animation_speed", "dropdown", pfUI.gui.dropdowns.uf_animationspeed)
