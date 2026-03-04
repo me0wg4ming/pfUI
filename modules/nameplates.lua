@@ -389,11 +389,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     plate.debuffs[index].icon:SetAllPoints(plate.debuffs[index])
 
     plate.debuffs[index].stacks = plate.debuffs[index]:CreateFontString(nil, "OVERLAY")
-    plate.debuffs[index].stacks:SetPoint("BOTTOMRIGHT", plate.debuffs[index], 2, -2)
-    plate.debuffs[index].stacks:SetJustifyH("LEFT")
-    plate.debuffs[index].stacks:SetShadowColor(0, 0, 0)
-    plate.debuffs[index].stacks:SetShadowOffset(0.8, -0.8)
-    plate.debuffs[index].stacks:SetTextColor(1,1,.5)
+    plate.debuffs[index].stacks:SetAllPoints(plate.debuffs[index])
+    plate.debuffs[index].stacks:SetJustifyH("RIGHT")
+    plate.debuffs[index].stacks:SetJustifyV("BOTTOM")
+    plate.debuffs[index].stacks:SetTextColor(1,1,0)
 
     -- PERF: Use lightweight fake cooldown frame when animation disabled
     -- The Model-based CooldownFrameTemplate causes major lag with many nameplates
@@ -435,7 +434,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       aligna, alignb, offs, space = "BOTTOMLEFT", "TOPLEFT", debuffoffset, 1
     end
 
-    nameplate.debuffs[i].stacks:SetFont(font, font_size, "OUTLINE")
+    nameplate.debuffs[i].stacks:SetFont(font, font_size, font_style)
     nameplate.debuffs[i]:ClearAllPoints()
     if i == 1 then
       nameplate.debuffs[i]:SetPoint(aligna, nameplate.health, alignb, 0, offs)
