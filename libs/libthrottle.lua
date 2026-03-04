@@ -36,6 +36,7 @@ libthrottle.defaults = {
   nameplates_mass      = "custom",
   tooltip_cursor       = "custom",
   chat_tab             = "custom",
+  swingtimer           = "custom",
 }
 
 -- Convert FPS to throttle delay in seconds
@@ -161,6 +162,7 @@ libthrottle:SetScript("OnEvent", function()
     if not _G.pfUI_throttle.nameplates_mass_custom then _G.pfUI_throttle.nameplates_mass_custom = "7" end
     if not _G.pfUI_throttle.tooltip_cursor_custom then _G.pfUI_throttle.tooltip_cursor_custom = "10" end
     if not _G.pfUI_throttle.chat_tab_custom then _G.pfUI_throttle.chat_tab_custom = "10" end
+    if not _G.pfUI_throttle.swingtimer_custom then _G.pfUI_throttle.swingtimer_custom = "50" end
     
     this:UnregisterEvent("PLAYER_ENTERING_WORLD")
   end
