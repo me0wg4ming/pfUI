@@ -30,6 +30,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   -- Whether auto-attack is currently toggled on
   local autoAttackActive = false
+  -- Tracks combat state for hide-on-expiry logic
+  local inCombat = false
 
   -- Tracks spellId from SPELL_START_SELF (cast-time spell in progress)
   -- Used in SPELL_GO to detect cast-time resets vs instants
@@ -380,12 +382,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     local delta = swingThrottle
     swingThrottle = 0
 
-    -- Delayed out-of-combat reset
-    if pfUI.swingtimer.regenResetAt and GetTime() >= pfUI.swingtimer.regenResetAt then
-      pfUI.swingtimer.regenResetAt = nil
-      ResetAll()
-      return
-    end
+    -- (out-of-combat hide handled naturally when timers expire)
 
     local anyActive = false
 
@@ -404,8 +401,10 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
           pfUI.swingtimer.mhGraceAt = GetTime() + GRACE
         elseif GetTime() >= pfUI.swingtimer.mhGraceAt then
           pfUI.swingtimer.mhGraceAt = nil
-          mhActive = false
-          pfUI.swingtimer.mainhand:Hide()
+          if not inCombat or not autoAttackActive then
+            mhActive = false
+            pfUI.swingtimer.mainhand:Hide()
+          end
         end
       end
     end
@@ -417,8 +416,10 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
           pfUI.swingtimer.ohGraceAt = GetTime() + GRACE
         elseif GetTime() >= pfUI.swingtimer.ohGraceAt then
           pfUI.swingtimer.ohGraceAt = nil
-          ohActive = false
-          pfUI.swingtimer.offhand:Hide()
+          if not inCombat or not autoAttackActive then
+            ohActive = false
+            pfUI.swingtimer.offhand:Hide()
+          end
         end
       end
     end
@@ -696,11 +697,11 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       RebuildQueueSlotCache()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
-      pfUI.swingtimer.regenResetAt = nil
+      inCombat = true
       UpdateWeaponSpeeds()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-      pfUI.swingtimer.regenResetAt = GetTime() + 5.0
+      inCombat = false
       hsQueued     = false
       cleaveQueued = false
 
