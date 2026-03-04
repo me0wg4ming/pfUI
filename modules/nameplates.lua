@@ -1271,16 +1271,20 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     end
     
     -- PERF: Intelligent throttling based on target/castbar status and plate count
-    local target = state and state.hasTarget and frame:GetAlpha() >= 0.99 or nil
+    -- Use GUID comparison as primary target detection: instant, immune to alpha transitions,
+    -- and immediately correct on de-target (unlike istarget which updates one tick later)
+    local targetGuid = state and state.targetGuid
+    local target = (targetGuid and nameplate.cachedGuid and targetGuid == nameplate.cachedGuid) or
+                   (state and state.hasTarget and frame:GetAlpha() >= 0.99) or nil
     local isCasting = nameplate.castbar and nameplate.castbar:IsShown()
     
     local throttle
     if target or isCasting then
-      throttle = pfUI.throttle:Get("nameplates_target")  -- Default: Fast (20 FPS)
+      throttle = pfUI.throttle:Get("nameplates_target")  -- Default: 50 FPS
     elseif visiblePlateCount > 20 then
-      throttle = pfUI.throttle:Get("nameplates_mass")    -- Default: Slow (5 FPS) for mass pulls
+      throttle = pfUI.throttle:Get("nameplates_mass")    -- Default: 7 FPS for mass pulls
     else
-      throttle = pfUI.throttle:Get("nameplates")         -- Default: Normal (10 FPS)
+      throttle = pfUI.throttle:Get("nameplates")         -- Default: 10 FPS
     end
     
     -- Check for pending event updates (these bypass throttle for immediate response)
