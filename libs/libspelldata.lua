@@ -124,6 +124,8 @@ local forcedDurations = {
   ["Consecration"]              = { duration = 8,  isAoEChannel = true },
   ["Blizzard"]                  = { duration = 8,  isAoEChannel = true },
   ["Rain of Fire"]              = { duration = 8,  isAoEChannel = true },
+  ["Frost Trap Aura"]           = { duration = 30,  isAoEChannel = true },
+  ["Explosive Trap Effect"]     = { duration = 20,  isAoEChannel = true },
   ["Flamestrike"]               = { duration = 8,  isAoEChannel = true },
   ["Garrote"]                   = { duration = 8,  isAoEChannel = false },
 
