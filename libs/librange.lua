@@ -189,7 +189,8 @@ librange:SetScript("OnUpdate", function()
         return UnitXP("distanceBetween", "player", unit)
       end)
       if unitxp_success and unitxp_distance then
-        unitdata[unit] = unitxp_distance < 45 and 1 or 0
+        local threshold = (tonumber(C.unitframes.rangecheck_distance) or 40) + 5
+        unitdata[unit] = unitxp_distance < threshold and 1 or 0
         this.id = this.id + 1
         return
       end

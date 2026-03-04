@@ -141,9 +141,22 @@ function pfUI.api.UnitInRange(unit)
     return nil
   elseif CheckInteractDistance(unit, 4) then
     return 1
-  else
-    return librange:UnitInSpellRange(unit)
   end
+
+  -- UnitXP precise mode: skip librange entirely, use direct distance check
+  if C.unitframes.rangecheck_mode == "unitxp" and _G.UnitXP then
+    local threshold = tonumber(C.unitframes.rangecheck_distance) or 40
+    local success, distance = pcall(_G.UnitXP, "distanceBetween", "player", unit)
+    if success and distance then
+      return distance <= threshold and 1 or nil
+    end
+    -- fallthrough to librange if UnitXP fails
+  end
+
+  if pfUI.api.librange then
+    return pfUI.api.librange:UnitInSpellRange(unit)
+  end
+  return nil
 end
 
 -- [ RunOOC ]
