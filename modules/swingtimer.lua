@@ -171,6 +171,13 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   pfUI.swingtimer.offhand.label:SetTextColor(0.8, 0.8, 0.8, 1)
   pfUI.swingtimer.offhand.label:SetText(sw_showlabel and "OH" or "")
 
+  pfUI.swingtimer.offhand.speed = pfUI.swingtimer.offhand:CreateFontString("Status", "DIALOG", "GameFontNormal")
+  pfUI.swingtimer.offhand.speed:SetPoint("LEFT", pfUI.swingtimer.offhand, "RIGHT", 4, 0)
+  pfUI.swingtimer.offhand.speed:SetFont(pfUI.font_default, sw_fontsize, "OUTLINE")
+  pfUI.swingtimer.offhand.speed:SetTextColor(0.8, 0.8, 0.8, 1)
+  pfUI.swingtimer.offhand.speed:SetText("")
+  if not sw_showspeed then pfUI.swingtimer.offhand.speed:Hide() end
+
   CreateBackdrop(pfUI.swingtimer.offhand)
   CreateBackdropShadow(pfUI.swingtimer.offhand)
 
@@ -217,6 +224,13 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   pfUI.swingtimer.ranged.label:SetFont(pfUI.font_default, sw_fontsize, "OUTLINE")
   pfUI.swingtimer.ranged.label:SetTextColor(0.8, 0.8, 0.8, 1)
   pfUI.swingtimer.ranged.label:SetText(sw_showlabel and "Ra" or "")
+
+  pfUI.swingtimer.ranged.speed = pfUI.swingtimer.ranged:CreateFontString("Status", "DIALOG", "GameFontNormal")
+  pfUI.swingtimer.ranged.speed:SetPoint("LEFT", pfUI.swingtimer.ranged, "RIGHT", 4, 0)
+  pfUI.swingtimer.ranged.speed:SetFont(pfUI.font_default, sw_fontsize, "OUTLINE")
+  pfUI.swingtimer.ranged.speed:SetTextColor(0.8, 0.8, 0.8, 1)
+  pfUI.swingtimer.ranged.speed:SetText("")
+  if not sw_showspeed then pfUI.swingtimer.ranged.speed:Hide() end
 
   CreateBackdrop(pfUI.swingtimer.ranged)
   CreateBackdropShadow(pfUI.swingtimer.ranged)
@@ -449,6 +463,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       if sw_showtext then
         pfUI.swingtimer.offhand.text:SetText(string.format("%.1f", math.floor(ohTimer * 10) / 10))
       end
+      if sw_showspeed and ohSpeed > 0 then
+        pfUI.swingtimer.offhand.speed:SetText(string.format("%.2f", ohSpeed))
+      end
       anyActive = true
     elseif not sw_showoh then
       pfUI.swingtimer.offhand:Hide()
@@ -503,6 +520,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
         if sw_showtext then
           pfUI.swingtimer.ranged.text:SetText(string.format("%.1f", math.floor(remaining * 10) / 10))
         end
+      end
+      if sw_showspeed and raSpeed > 0 then
+        pfUI.swingtimer.ranged.speed:SetText(string.format("%.2f", raSpeed))
       end
       anyActive = true
     elseif not sw_showranged then
