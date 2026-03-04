@@ -14,6 +14,33 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ---
 
+🎯 What's New in Version 8.1.0
+🗡️ Swing Timer Bug Fixes (swingtimer.lua)
+
+Extra attack detection — Sword Specialization, Windfury, Hand of Justice and other extra attacks no longer double the swing timer. Added fallback detection for servers that don't set HITINFO_NOACTION correctly: if AUTO_ATTACK_SELF fires while more than 20% of the current swing remains, it's treated as an extra attack and ignored
+Parry reset — Now uses correct Vanilla mechanic: resets timer to exactly 60% of weapon speed instead of incorrectly subtracting 40% from remaining time
+Slam — Now hard-resets the swing timer from now instead of chaining from the previous nextSwing, which caused inflated swing times (e.g. 3.76s showing as 4.3s)
+
+📏 UnitXP Distance Display (unitxp.lua)
+Two new options under Unit Frames → General → UnitXP Settings:
+
+Show Distance of Target — Displays live distance to target with color-coded thresholds (blue = melee, green = mid range, yellow = 35–41y, red = out of range)
+Hook Distance to Portrait Frame — When enabled, shows the distance text directly on the target frame alongside the existing Behind and LOS indicators, proportionally spaced based on frame height. When disabled, shows as a free-floating movable frame
+
+🎯 Precise Range Check via UnitXP (api.lua, librange.lua, gui.lua, config.lua)
+New options under Unit Frames → General → Group Options:
+
+Range Check Mode dropdown — Vanilla (Spellbook) keeps existing behavior; UnitXP (Precise) bypasses librange entirely and queries UnitXP("distanceBetween") directly
+UnitXP Range Threshold (yards) — Configurable yard value for the UnitXP mode (default: 40). Works for all classes, no spellbook scan required
+When UnitXP mode is active, the librange scan loop is fully disabled — no TargetUnit cycling, no combat interruption, no class restriction
+Fixed UnitInRange referencing librange as an undefined local instead of pfUI.api.librange
+
+🔧 Share Module Fix (share.lua)
+
+Fixed import failures for configs containing double quotes (e.g. clickcast macros with CastSpellByName("Nature's Swiftness")). The serialize() function now correctly escapes " in addition to \
+
+---
+
 ## 🎯 What's New in Version 8.0.0
 
 * **Nampower 3.0.0+ now required** — minimum version bumped from 2.41.0
