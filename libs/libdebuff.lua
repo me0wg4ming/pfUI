@@ -586,8 +586,27 @@ local function CleanupUnit(guid)
     pendingCasts[guid] = nil
     cleaned = true
   end
-  
-  
+
+  if displayToAura[guid] then
+    displayToAura[guid] = nil
+  end
+
+  if slotMapCache[guid] then
+    slotMapCache[guid] = nil
+  end
+
+  if recentHits[guid] then
+    recentHits[guid] = nil
+  end
+
+  if pendingApplicators[guid] then
+    pendingApplicators[guid] = nil
+  end
+
+  if spilloverLogCache[guid] then
+    spilloverLogCache[guid] = nil
+  end
+
   if debugStats.enabled and cleaned and IsCurrentTarget(guid) then
     DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[CLEANUP]|r GUID %s", DebugGuid(guid)))
   end
@@ -653,6 +672,8 @@ local function CleanupOutOfRangeUnits()
   for guid in pairs(allAuraCasts) do allGuids[guid] = true end
   for guid in pairs(objectsByGuid) do allGuids[guid] = true end
   for guid in pairs(pendingCasts) do allGuids[guid] = true end
+  for guid in pairs(displayToAura) do allGuids[guid] = true end
+  for guid in pairs(recentHits) do allGuids[guid] = true end
   
   for guid in pairs(allGuids) do
     local exists = UnitExists and UnitExists(guid)
@@ -1639,9 +1660,13 @@ end
       end
 
     elseif event == "UNIT_DIED" then
+      local diedGuid = arg1
+      if diedGuid then
+        CleanupUnit(diedGuid)
+      end
       if pfUI.libdebuff_unit_died_hooks then
         for _, fn in pairs(pfUI.libdebuff_unit_died_hooks) do
-          fn(arg1)
+          fn(diedGuid)
         end
       end
 
