@@ -607,6 +607,10 @@ local function CleanupUnit(guid)
     spilloverLogCache[guid] = nil
   end
 
+  if recentCasts[guid] then
+    recentCasts[guid] = nil
+  end
+
   if debugStats.enabled and cleaned and IsCurrentTarget(guid) then
     DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[CLEANUP]|r GUID %s", DebugGuid(guid)))
   end
@@ -674,6 +678,7 @@ local function CleanupOutOfRangeUnits()
   for guid in pairs(pendingCasts) do allGuids[guid] = true end
   for guid in pairs(displayToAura) do allGuids[guid] = true end
   for guid in pairs(recentHits) do allGuids[guid] = true end
+  for guid in pairs(recentCasts) do allGuids[guid] = true end
   
   for guid in pairs(allGuids) do
     local exists = UnitExists and UnitExists(guid)
