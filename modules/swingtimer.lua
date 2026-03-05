@@ -645,12 +645,18 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       if raMarkerX > sw_width - 2 then raMarkerX = sw_width - 2 end
       if raMarkerX ~= S.lastRaMarkerX then
         S.lastRaMarkerX = raMarkerX
-        pfUI.swingtimer.ranged.marker:SetPoint("LEFT", pfUI.swingtimer.ranged, "LEFT", raMarkerX - 1, 0)
-        pfUI.swingtimer.ranged.markerGlowL:SetPoint("RIGHT", pfUI.swingtimer.ranged.marker, "LEFT", 0, 0)
-        pfUI.swingtimer.ranged.markerGlowR:SetPoint("LEFT", pfUI.swingtimer.ranged.marker, "RIGHT", 0, 0)
-        pfUI.swingtimer.ranged.marker:Show()
-        pfUI.swingtimer.ranged.markerGlowL:Show()
-        pfUI.swingtimer.ranged.markerGlowR:Show()
+        if not isHunter then
+          pfUI.swingtimer.ranged.marker:SetPoint("LEFT", pfUI.swingtimer.ranged, "LEFT", raMarkerX - 1, 0)
+          pfUI.swingtimer.ranged.marker:Show()
+          pfUI.swingtimer.ranged.markerGlowL:SetPoint("RIGHT", pfUI.swingtimer.ranged.marker, "LEFT", 0, 0)
+          pfUI.swingtimer.ranged.markerGlowR:SetPoint("LEFT", pfUI.swingtimer.ranged.marker, "RIGHT", 0, 0)
+          pfUI.swingtimer.ranged.markerGlowL:Show()
+          pfUI.swingtimer.ranged.markerGlowR:Show()
+        else
+          pfUI.swingtimer.ranged.marker:Hide()
+          pfUI.swingtimer.ranged.markerGlowL:Hide()
+          pfUI.swingtimer.ranged.markerGlowR:Hide()
+        end
       end
       anyActive = true
     elseif not sw_showranged then
