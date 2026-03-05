@@ -180,6 +180,14 @@ local function BuffOnEnter()
   elseif this.np_spellName then
     GameTooltip:AddLine(this.np_spellName, 1, 1, 1)
     GameTooltip:Show()
+  else
+    -- Fallback: out of range, use Blizzard tooltip (no spellId available)
+    local unitstr = parent.label .. (parent.id or "")
+    if parent.label == "player" then
+      GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID + this.id, "HELPFUL"))
+    else
+      GameTooltip:SetUnitBuff(unitstr, this.id)
+    end
   end
 
   -- Shift: show unbuffed raid/party members
@@ -1568,6 +1576,18 @@ function pfUI.uf.OnUpdate()
         pfUI.uf:RefreshIndicators(this)
       end
 
+      -- Re-trigger aura refresh when unit comes back into range (GetUnitField starts returning data again)
+      if this.label ~= "player" and GetUnitGUID and GetUnitField then
+        local guid = GetUnitGUID(unitstr)
+        local inRange = guid and GetUnitField(guid, "aura") ~= nil
+        if inRange ~= this.lastInRange then
+          this.lastInRange = inRange
+          if inRange then
+            this.update_aura = true
+          end
+        end
+      end
+
       if this.config and this.config.glowaggro == "1" and pfUI.api.UnitHasAggro(unitstr) > 0 then
         this.glow:SetBackdropBorderColor(1,.2,0)
         this.glow:Show()
@@ -2316,7 +2336,10 @@ function pfUI.uf:RefreshUnit(unit, component)
         if not unit.buffs[i] then break end
         unit.buffs[i]:Hide()
       end
-      usedIterBuffs = true
+      -- Only mark as used if we actually got data (frameIdx=0 means out of range)
+      if frameIdx > 0 then
+        usedIterBuffs = true
+      end
     end
 
     if not usedIterBuffs then
@@ -2482,6 +2505,7 @@ function pfUI.uf:RefreshUnit(unit, component)
     end
 
     -- IterDebuffs: fill debuff frames directly from stable aura slots (no scanner, no RebuildDebuffSlots)
+    local usedIterDebuffs = false
     if selfdebuff ~= "1" and unit.label ~= "player" and libdebuff and libdebuff.IterDebuffs then
       local frameIdx = 0
       libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, dt, dur, tl, caster, isOurs)
@@ -2518,6 +2542,27 @@ function pfUI.uf:RefreshUnit(unit, component)
       for i = frameIdx + 1, tonumber(unit.config.debufflimit) or 16 do
         if not unit.debuffs[i] then break end
         unit.debuffs[i]:Hide()
+      end
+      if frameIdx > 0 then
+        usedIterDebuffs = true
+      end
+    end
+
+    -- Fallback to Blizzard UnitDebuff when out of range (IterDebuffs returned nothing)
+    if selfdebuff ~= "1" and unit.label ~= "player" and not usedIterDebuffs then
+      for i=1, tonumber(unit.config.debufflimit) or 16 do
+        if not unit.debuffs[i] then break end
+        local tex, stacks, dtype = UnitDebuff(unitstr, i)
+        unit.debuffs[i].texture:SetTexture(tex)
+        local r,g,b = DebuffTypeColor.none.r,DebuffTypeColor.none.g,DebuffTypeColor.none.b
+        if dtype and DebuffTypeColor[dtype] then r,g,b = DebuffTypeColor[dtype].r,DebuffTypeColor[dtype].g,DebuffTypeColor[dtype].b end
+        unit.debuffs[i].backdrop:SetBackdropBorderColor(r,g,b,1)
+        if tex then
+          unit.debuffs[i]:Show()
+          if (stacks or 0) > 1 then unit.debuffs[i].stacks:SetText(stacks) else unit.debuffs[i].stacks:SetText("") end
+        else
+          unit.debuffs[i]:Hide()
+        end
       end
     end
   end
