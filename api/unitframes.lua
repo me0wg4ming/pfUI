@@ -62,7 +62,12 @@ local function BuffOnUpdate()
         if timeleft > 0 then
           CooldownFrame_SetTimer(this.cd, this.libdebuff_start, this.libdebuff_dur, 1)
         else
+          -- Expired: hide the frame
           CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+          if this.libdebuff_spellId and pfUI.libdebuff_overflow_buffs then
+            pfUI.libdebuff_overflow_buffs[this.libdebuff_spellId] = nil
+          end
+          this:Hide()
         end
       else
         CooldownFrame_SetTimer(this.cd, 0, 0, 0)
@@ -218,13 +223,34 @@ local function BuffOnLeave()
   GameTooltip:Hide()
 end
 
+local function pfUI_NotifyBuffCancel()
+  -- Refresh buff.lua bar if active
+  if pfUI.buff and pfUI.buff:GetScript("OnEvent") then
+    pfUI.buff:GetScript("OnEvent")()
+  end
+  -- Refresh player unitframe aura
+  local pfPlayer = pfUI.uf and pfUI.uf.player
+  if pfPlayer then
+    pfPlayer.update_aura = true
+  end
+end
+
 local function BuffOnClick()
-  if this:GetParent().label == "player" then
+  local parent = this:GetParent()
+  if parent.label == "player" then
     if this.np_spellId and CancelPlayerAuraSpellId then
       CancelPlayerAuraSpellId(this.np_spellId, 1)
       if this.np_auraSlot == -1 and pfUI.libdebuff_overflow_buffs then
         pfUI.libdebuff_overflow_buffs[this.np_spellId] = nil
       end
+      this:Hide()
+      pfUI_NotifyBuffCancel()
+    elseif this.libdebuff_spellId and CancelPlayerAuraSpellId then
+      CancelPlayerAuraSpellId(this.libdebuff_spellId, 1)
+      this:Hide()
+      pfUI_NotifyBuffCancel()
+    else
+      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
     end
   end
 end
@@ -1035,7 +1061,7 @@ function pfUI.uf:UpdateConfig()
   f.happinessIcon:Hide()
 
   if f.config.buffs == "off" then
-    for i=1, 32 do
+    for i=1, 48 do
       if f.buffs and f.buffs[i] then
         f.buffs[i]:Hide()
         f.buffs[i] = nil
@@ -1045,7 +1071,7 @@ function pfUI.uf:UpdateConfig()
   else
     f.buffs = f.buffs or {}
 
-    for i=1, 32 do
+    for i=1, 48 do
       if i > tonumber(f.config.bufflimit) then break end
 
       local perrow = f.config.buffperrow
@@ -2241,7 +2267,6 @@ function pfUI.uf:RefreshUnit(unit, component)
         if not frame then return end
         frame.texture:SetTexture(tex)
         -- Store np_ fields matching buff.lua pattern for tooltip/cancel
-        local prevSpellId = frame.np_spellId
         frame.np_spellId   = spellId
         frame.np_auraSlot  = auraSlot
         frame.np_spellName = spellName
@@ -2259,10 +2284,7 @@ function pfUI.uf:RefreshUnit(unit, component)
           frame.libdebuff_dur = nil
         end
         if tex then
-          -- Anti-flicker: only Show() when the buff on this frame actually changed
-          if prevSpellId ~= spellId then
-            frame:Show()
-          end
+          frame:Show()
           if (st or 0) > 1 then frame.stacks:SetText(st) else frame.stacks:SetText("") end
           -- Timer: set immediately to avoid flicker waiting for BuffOnUpdate
           if frame.cd then
@@ -2290,7 +2312,7 @@ function pfUI.uf:RefreshUnit(unit, component)
         end
       end)
       -- Hide remaining frames that are no longer needed
-      for i = frameIdx + 1, unit.config.bufflimit do
+      for i = frameIdx + 1, tonumber(unit.config.bufflimit) or 32 do
         if not unit.buffs[i] then break end
         unit.buffs[i]:Hide()
       end
@@ -2334,7 +2356,7 @@ function pfUI.uf:RefreshUnit(unit, component)
         end
       end
 
-      for i=1, unit.config.bufflimit do
+      for i=1, tonumber(unit.config.bufflimit) or 32 do
         if not unit.buffs[i] then break end
 
         if unit.label == "player" then
@@ -2403,7 +2425,7 @@ function pfUI.uf:RefreshUnit(unit, component)
       reposition = true
     end
 
-    for i=1, unit.config.debufflimit do
+    for i=1, tonumber(unit.config.debufflimit) or 16 do
       if not unit.debuffs[i] then break end
 
       local row = floor((i-1) / unit.config.debuffperrow)
@@ -2455,8 +2477,7 @@ function pfUI.uf:RefreshUnit(unit, component)
           unit.debuffs[i]:Hide()
         end
       else
-        -- Hide remaining frames (IterDebuffs loop below handles the actual display)
-        unit.debuffs[i]:Hide()
+        -- IterDebuffs handles display, skip individual hide here
       end
     end
 
@@ -2478,7 +2499,6 @@ function pfUI.uf:RefreshUnit(unit, component)
         frame.libdebuff_dur = dur
         frame.libdebuff_start = (dur and tl and tl >= 0) and (GetTime() + tl - dur) or nil
         -- Store np_ fields matching buff.lua pattern for tooltip/cancel
-        local prevSpellId = frame.np_spellId
         frame.np_spellId   = spellId
         frame.np_auraSlot  = auraSlot
         frame.np_spellName = spellName
@@ -2486,10 +2506,7 @@ function pfUI.uf:RefreshUnit(unit, component)
         -- Legacy aliases
         frame.libdebuff_auraSlot = auraSlot
         frame.libdebuff_spellName = spellName
-        -- Anti-flicker: only Show() when the debuff on this frame actually changed
-        if prevSpellId ~= spellId then
-          frame:Show()
-        end
+        frame:Show()
         if frame.libdebuff_start then
           CooldownFrame_SetTimer(frame.cd, frame.libdebuff_start, dur, 1)
         else
@@ -2497,6 +2514,11 @@ function pfUI.uf:RefreshUnit(unit, component)
         end
         if (st or 0) > 1 then frame.stacks:SetText(st) else frame.stacks:SetText("") end
       end)
+      -- Hide remaining frames that IterDebuffs didn't fill
+      for i = frameIdx + 1, tonumber(unit.config.debufflimit) or 16 do
+        if not unit.debuffs[i] then break end
+        unit.debuffs[i]:Hide()
+      end
     end
   end
 

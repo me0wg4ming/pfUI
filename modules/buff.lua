@@ -206,9 +206,14 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
         -- Remove from overflow tracking if it was an overflow buff
         if this.np_auraSlot == -1 and pfUI.libdebuff_overflow_buffs then
           pfUI.libdebuff_overflow_buffs[this.np_spellId] = nil
-          -- Refresh display
+          -- Refresh buff.lua display
           if pfUI.buff and pfUI.buff:GetScript("OnEvent") then
             pfUI.buff:GetScript("OnEvent")()
+          end
+          -- Refresh player unitframe
+          local pfPlayer = pfUI.uf and pfUI.uf.player
+          if pfPlayer then
+            pfPlayer.update_aura = true
           end
         end
       end
