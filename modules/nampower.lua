@@ -577,6 +577,15 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         return
       end
 
+      -- For non-player units, only show if the target is a Druid
+      if unit ~= "player" then
+        local _, unitClass = UnitClass(unit)
+        if unitClass ~= "DRUID" then
+          bar:Hide()
+          return
+        end
+      end
+
       local powerType = UnitPowerType(unit)
 
       -- Only show when NOT using mana (i.e., in Bear/Cat form)
