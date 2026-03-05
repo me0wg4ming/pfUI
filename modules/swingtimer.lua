@@ -518,17 +518,27 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     if S.mhActive then
       local progress = 1 - (S.mhTimer / S.mhTimerMax)
       pfUI.swingtimer.mainhand:SetValue(progress)
-      local mhMarkerX = progress * sw_width
-      if mhMarkerX < 1 then mhMarkerX = 1 end
-      if mhMarkerX > sw_width - 2 then mhMarkerX = sw_width - 2 end
-      if mhMarkerX ~= S.lastMhMarkerX then
-        S.lastMhMarkerX = mhMarkerX
-        pfUI.swingtimer.mainhand.marker:SetPoint("LEFT", pfUI.swingtimer.mainhand, "LEFT", mhMarkerX - 1, 0)
-        pfUI.swingtimer.mainhand.markerGlowL:SetPoint("RIGHT", pfUI.swingtimer.mainhand.marker, "LEFT", 0, 0)
-        pfUI.swingtimer.mainhand.markerGlowR:SetPoint("LEFT", pfUI.swingtimer.mainhand.marker, "RIGHT", 0, 0)
-        pfUI.swingtimer.mainhand.marker:Show()
-        pfUI.swingtimer.mainhand.markerGlowL:Show()
-        pfUI.swingtimer.mainhand.markerGlowR:Show()
+      if S.mhTimer <= 0 then
+        -- Timer expired: hide marker (no gap at right edge)
+        if S.lastMhMarkerX ~= -1 then
+          S.lastMhMarkerX = -1
+          pfUI.swingtimer.mainhand.marker:Hide()
+          pfUI.swingtimer.mainhand.markerGlowL:Hide()
+          pfUI.swingtimer.mainhand.markerGlowR:Hide()
+        end
+      else
+        local mhMarkerX = progress * sw_width
+        if mhMarkerX < 1 then mhMarkerX = 1 end
+        if mhMarkerX > sw_width - 2 then mhMarkerX = sw_width - 2 end
+        if mhMarkerX ~= S.lastMhMarkerX then
+          S.lastMhMarkerX = mhMarkerX
+          pfUI.swingtimer.mainhand.marker:SetPoint("LEFT", pfUI.swingtimer.mainhand, "LEFT", mhMarkerX - 1, 0)
+          pfUI.swingtimer.mainhand.markerGlowL:SetPoint("RIGHT", pfUI.swingtimer.mainhand.marker, "LEFT", 0, 0)
+          pfUI.swingtimer.mainhand.markerGlowR:SetPoint("LEFT", pfUI.swingtimer.mainhand.marker, "RIGHT", 0, 0)
+          pfUI.swingtimer.mainhand.marker:Show()
+          pfUI.swingtimer.mainhand.markerGlowL:Show()
+          pfUI.swingtimer.mainhand.markerGlowR:Show()
+        end
       end
       pfUI.swingtimer.mainhand:SetStatusBarColor(curR, curG, curB, mhA)
       if sw_showtext then
@@ -544,17 +554,26 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     if sw_showoh and S.ohActive then
       local progress = 1 - (S.ohTimer / S.ohTimerMax)
       pfUI.swingtimer.offhand:SetValue(progress)
-      local ohMarkerX = progress * sw_width
-      if ohMarkerX < 1 then ohMarkerX = 1 end
-      if ohMarkerX > sw_width - 2 then ohMarkerX = sw_width - 2 end
-      if ohMarkerX ~= S.lastOhMarkerX then
-        S.lastOhMarkerX = ohMarkerX
-        pfUI.swingtimer.offhand.marker:SetPoint("LEFT", pfUI.swingtimer.offhand, "LEFT", ohMarkerX - 1, 0)
-        pfUI.swingtimer.offhand.markerGlowL:SetPoint("RIGHT", pfUI.swingtimer.offhand.marker, "LEFT", 0, 0)
-        pfUI.swingtimer.offhand.markerGlowR:SetPoint("LEFT", pfUI.swingtimer.offhand.marker, "RIGHT", 0, 0)
-        pfUI.swingtimer.offhand.marker:Show()
-        pfUI.swingtimer.offhand.markerGlowL:Show()
-        pfUI.swingtimer.offhand.markerGlowR:Show()
+      if S.ohTimer <= 0 then
+        if S.lastOhMarkerX ~= -1 then
+          S.lastOhMarkerX = -1
+          pfUI.swingtimer.offhand.marker:Hide()
+          pfUI.swingtimer.offhand.markerGlowL:Hide()
+          pfUI.swingtimer.offhand.markerGlowR:Hide()
+        end
+      else
+        local ohMarkerX = progress * sw_width
+        if ohMarkerX < 1 then ohMarkerX = 1 end
+        if ohMarkerX > sw_width - 2 then ohMarkerX = sw_width - 2 end
+        if ohMarkerX ~= S.lastOhMarkerX then
+          S.lastOhMarkerX = ohMarkerX
+          pfUI.swingtimer.offhand.marker:SetPoint("LEFT", pfUI.swingtimer.offhand, "LEFT", ohMarkerX - 1, 0)
+          pfUI.swingtimer.offhand.markerGlowL:SetPoint("RIGHT", pfUI.swingtimer.offhand.marker, "LEFT", 0, 0)
+          pfUI.swingtimer.offhand.markerGlowR:SetPoint("LEFT", pfUI.swingtimer.offhand.marker, "RIGHT", 0, 0)
+          pfUI.swingtimer.offhand.marker:Show()
+          pfUI.swingtimer.offhand.markerGlowL:Show()
+          pfUI.swingtimer.offhand.markerGlowR:Show()
+        end
       end
       if sw_showtext then
         pfUI.swingtimer.offhand.text:SetText(string.format("%.1f", math.floor(S.ohTimer * 10) / 10))
@@ -659,14 +678,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   -- SPELL_GO hook via libdebuff
   pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
   pfUI.libdebuff_spell_go_hooks["swingtimer"] = function(spellId)
-    local _rec = GetSpellRec(spellId)
-    if _rec and _rec.interruptFlags and _rec.interruptFlags > 0 then
-      if S.mhActive and S.mhTimer > 0 then
-        S.mhFrozenAt = S.mhTimer
-      end
-    end
     if RANGED_SPELLIDS[spellId] then
       ResetRanged()
+      return
     elseif slamSpellIDs[spellId] then
       -- Slam delays auto-attack but does NOT reset the swing timer. Ignore.
       S.pendingCastSpellId = nil
@@ -678,11 +692,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       S.hsQueued = false; S.cleaveQueued = false
       ResetMH()
     else
-      -- Only reset for cast-time spells (signaled by SPELL_START_SELF)
-      if S.mhActive and S.mhSpeed > 0 and S.pendingCastSpellId == spellId then
-        UpdateWeaponSpeeds()
-        S.mhTimerMax = S.mhSpeed
-        S.mhTimer    = S.mhSpeed
+      -- Any spell with interruptFlags > 0 resets the swing timer
+      -- (Moonfire, Faerie Fire, Wrath, Starfire etc. - NOT Insect Swarm which has flags=0)
+      local _rec = GetSpellRec(spellId)
+      if _rec and _rec.interruptFlags and _rec.interruptFlags > 0 then
+        if S.mhActive and S.mhSpeed > 0 then
+          UpdateWeaponSpeeds()
+          S.mhTimerMax = S.mhSpeed
+          S.mhTimer    = S.mhSpeed
+        end
       end
     end
     S.pendingCastSpellId = nil

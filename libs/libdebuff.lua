@@ -1273,6 +1273,14 @@ if hasNampower then
         end
       end
       
+      -- Fire registered SPELL_GO_SELF hooks BEFORE miss guard
+      -- (Swingtimer needs to see ALL casts, even misses, for swing reset)
+      if event == "SPELL_GO_SELF" and pfUI.libdebuff_spell_go_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_go_hooks) do
+          fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+        end
+      end
+
       if numMissed > 0 or numHit == 0 then return end
 
       local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
@@ -1314,13 +1322,6 @@ if hasNampower then
             checkTime = GetTime() + 0.05
           }
           carnageCheckFrame:Show()
-        end
-      end
-
-      -- Fire registered SPELL_GO_SELF hooks (only for own casts)
-      if event == "SPELL_GO_SELF" and pfUI.libdebuff_spell_go_hooks then
-        for _, fn in pairs(pfUI.libdebuff_spell_go_hooks) do
-          fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
         end
       end
 
