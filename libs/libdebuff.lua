@@ -131,16 +131,18 @@ local pendingCasts = pfUI.libdebuff_pending
 
 -- pendingAoE: [spellName] = {[casterGuid] = {time}}
 -- AoE spells (Hurricane, Consecration) have no targetGuid in SPELL_GO
-local pendingAoE = {}
+pfUI.libdebuff_pending_aoe = pfUI.libdebuff_pending_aoe or {}
+local pendingAoE = pfUI.libdebuff_pending_aoe
 
 -- pendingApplicators: [targetGuid] = {spell, time}
 -- Tracks when player casts spells that apply passive proc debuffs
-local pendingApplicators = {}
+pfUI.libdebuff_pending_applicators = pfUI.libdebuff_pending_applicators or {}
+local pendingApplicators = pfUI.libdebuff_pending_applicators
 
 -- Hit tracking: Track successful spell hits for applicator refresh validation
 -- [targetGuid][spellName] = timestamp
-local recentHits = {}
-local HIT_TRACKING_WINDOW = 0.1  -- 100ms
+pfUI.libdebuff_recent_hits = pfUI.libdebuff_recent_hits or {}
+local recentHits = pfUI.libdebuff_recent_hits
 
 -- Cached melee-refreshable spells from libspelldata (populated on first use)
 local meleeRefreshSpells = nil
@@ -209,7 +211,15 @@ pfUI.libdebuff_unit_died_hooks = pfUI.libdebuff_unit_died_hooks or {}
 
 -- Callbacks fired after SPELL_CAST_EVENT is processed: fn(success, spellId, castType, targetGuid)
 pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
-local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
+-- Overflow buffs: buffs that exist server-side but have no client aura slot
+-- because all 32 buff slots are occupied. Tracked via AURA_CAST_ON_SELF.
+-- [spellId] = { startTime, duration, texture, spellName }
+pfUI.libdebuff_overflow_buffs = pfUI.libdebuff_overflow_buffs or {}
+local overflowBuffs = pfUI.libdebuff_overflow_buffs
+
+-- Dedup cache for [SPILLOVER] debug output: guid -> auraSlot -> spellId
+-- Only logs when a new spell appears in a slot, not every IterDebuffs call
+local spilloverLogCache = {}
 
 -- Captured combo points from SPELL_CAST_EVENT (before client consumes them)
 -- SPELL_CAST_EVENT fires BEFORE UnitAura updates, so GetComboPoints() still works
@@ -300,6 +310,8 @@ pfUI.libdebuff_debugstats = pfUI.libdebuff_debugstats or {
   getunitfield_calls = 0,
 }
 local debugStats = pfUI.libdebuff_debugstats
+-- Dedup table for [SPILLOVER] debug output: guid -> auraSlot -> caster
+local spilloverLogged = {}
 
 local function DebugGuid(guid)
   if not guid then return "nil" end
@@ -379,8 +391,8 @@ end
 
 -- Cache for GetDebuffSlotMap to reduce GetUnitField calls
 -- [guid] = {map, timestamp}
-local slotMapCache = {}
-local SLOT_MAP_CACHE_DURATION = 0.05  -- 50ms cache (1-2 frames)
+pfUI.libdebuff_slotmapcache = pfUI.libdebuff_slotmapcache or {}
+local slotMapCache = pfUI.libdebuff_slotmapcache
 
 -- Dispel type mapping: SpellRec.dispel index -> Blizzard DebuffTypeColor key
 local dispelTypeMap = {
@@ -423,7 +435,7 @@ local function GetDebuffSlotMap(guidOrUnit)
   -- Check cache first (use GUID as key)
   local now = GetTime()
   local cached = slotMapCache[guid]
-  if cached and cached.map and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
+  if cached and cached.map and (now - cached.timestamp) < 0.05 then
     return cached.map
   end
   
@@ -532,8 +544,9 @@ end
 local lastRangeCheck = 0
 
 -- Recycled buffers for cleanup (avoids table creation per call)
-local _cleanupBuf1 = {}
-local _cleanupBuf2 = {}
+pfUI.libdebuff_cleanupbuf = pfUI.libdebuff_cleanupbuf or { {}, {} }
+local _cleanupBuf1 = pfUI.libdebuff_cleanupbuf[1]
+local _cleanupBuf2 = pfUI.libdebuff_cleanupbuf[2]
 
 local function CleanupUnit(guid)
   if not guid then return false end
@@ -553,6 +566,10 @@ local function CleanupUnit(guid)
   if slotOwnership[guid] then
     slotOwnership[guid] = nil
     cleaned = true
+  end
+
+  if spilloverLogged[guid] then
+    spilloverLogged[guid] = nil
   end
   
   if allAuraCasts[guid] then
@@ -816,39 +833,87 @@ libdebuff.objects = {}
 -- IterDebuffs: iterate all debuffs on a unit by stable aura slot.
 -- Callback fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
 -- Returns number of debuffs found.
+-- Helper: Extract 4-bit aura flag for a specific slot (1-48)
+-- auraFlags is an array of 6 UINT32 values, each holding 8 slots × 4 bits
+-- auraFlags[1] = slots 1-8, [2] = 9-16, [3] = 17-24, [4] = 25-32, [5] = 33-40, [6] = 41-48
+local function GetAuraFlag(auraFlags, slot)
+  if not auraFlags then return nil end
+  local arrayIndex = math.ceil(slot / 8)
+  local bitOffset = math.mod(slot - 1, 8) * 4
+  local flags = auraFlags[arrayIndex]
+  if not flags then return nil end
+  return bit.band(bit.rshift(flags, bitOffset), 15)  -- extract 4-bit nibble
+end
+
+-- Check if an aura slot is a debuff via bit 3 (0x8) of its auraFlag
+local function IsDebuffByFlag(auraFlags, slot)
+  local flag = GetAuraFlag(auraFlags, slot)
+  if not flag then return false end
+  return bit.band(flag, 8) ~= 0
+end
+
 function libdebuff:IterDebuffs(unit, fn)
   if not fn or not GetUnitGUID or not GetUnitField then return 0 end
 
   local guid = GetUnitGUID(unit)
-  if not guid or guid == "" or guid == "0x0000000000000000" then return 0 end
+  if not guid or guid == "" or guid == "0x0000000000000000" then
+    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO GUID for: "..(unit or "nil").."|r")
+    return 0
+  end
 
   local auras = GetUnitField(guid, "aura")
-  if not auras then return 0 end
+  if not auras then
+    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO AURAS for: "..guid.."|r")
+    return 0
+  end
   local auraApps = GetUnitField(guid, "auraApplications")
 
   local myGuid = GetPlayerGUID()
   local now = GetTime()
   local count = 0
+  local debuffSlotCount = 0
+  local buffSlotCount = 0
 
+  -- Count occupied slots for spillover detection
+  for auraSlot = 33, 48 do
+    if auras[auraSlot] and auras[auraSlot] ~= 0 then
+      debuffSlotCount = debuffSlotCount + 1
+    end
+  end
+  for auraSlot = 1, 32 do
+    if auras[auraSlot] and auras[auraSlot] ~= 0 then
+      buffSlotCount = buffSlotCount + 1
+    end
+  end
+
+  -- Fetch auraFlags if spillover possible in either direction
+  local auraFlags = nil
+  if debuffSlotCount >= 16 or buffSlotCount >= 32 then
+    auraFlags = GetUnitField(guid, "auraFlags")
+  end
+
+  -- ============================================================
+  -- PASS 1: Normal debuff slots (33-48)
+  -- ============================================================
   for auraSlot = 33, 48 do
     local spellId = auras[auraSlot]
     if spellId and spellId ~= 0 then
+      -- If buff-spillover possible, check auraFlags: skip if NOT a debuff (bit 3 = 0)
+      if auraFlags and not IsDebuffByFlag(auraFlags, auraSlot) then
+        -- Buff spillover into debuff slot — skip for debuff display
+      else
       local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
       if not isHidden then
-        -- Texture (cached)
         local texture = libdebuff:GetSpellIcon(spellId)
         if texture then
-          -- Spell name
           local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
           if not spellName or spellName == "" then
             spellName = GetSpellNameAndRank and GetSpellNameAndRank(spellId) or "Unknown"
           end
 
-          -- Stacks
           local rawStacks = auraApps and auraApps[auraSlot]
           local stacks = rawStacks and (rawStacks + 1) or 1
 
-          -- Dispel type
           local dtype = nil
           if GetSpellRecField then
             local dispelId = GetSpellRecField(spellId, "dispel")
@@ -857,7 +922,7 @@ function libdebuff:IterDebuffs(unit, fn)
             end
           end
 
-          -- Timer: check slotOwnership for caster, then look up timer data
+          -- Timer lookup: slotOwnership first, then fallback
           local duration, timeleft, caster, isOurs = nil, -1, nil, false
           local ownership = slotOwnership[guid] and slotOwnership[guid][auraSlot]
           if ownership then
@@ -888,9 +953,7 @@ function libdebuff:IterDebuffs(unit, fn)
             end
           end
 
-          -- Fallback timer: only when ownership is completely unknown (no slotOwnership entry).
-          -- If ownership IS known but has no timer (e.g. other druid's Rip = no AURA_CAST),
-          -- do NOT fall back to our own timer -- that would show wrong data.
+          -- Fallback timer: only when ownership is completely unknown
           if not duration and not ownership then
             if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
               local d = ownDebuffs[guid][spellName]
@@ -922,14 +985,232 @@ function libdebuff:IterDebuffs(unit, fn)
           fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
         end
       end
+      end -- else (not buff-spillover)
     end
+  end
+
+  -- ============================================================
+  -- PASS 2: Spillover debuffs in buff slots (1-32)
+  -- Only scan if all 16 debuff slots are occupied
+  -- ============================================================
+  if debuffSlotCount >= 16 and auraFlags then
+      for auraSlot = 1, 32 do
+        local spellId = auras[auraSlot]
+        if spellId and spellId ~= 0 then
+          -- Check auraFlags bit 3: is this a debuff in a buff slot?
+          if IsDebuffByFlag(auraFlags, auraSlot) then
+            local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
+            if not isHidden then
+              local texture = libdebuff:GetSpellIcon(spellId)
+              if texture then
+                local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+                if not spellName or spellName == "" then
+                  spellName = GetSpellNameAndRank and GetSpellNameAndRank(spellId) or "Unknown"
+                end
+
+                local rawStacks = auraApps and auraApps[auraSlot]
+                local stacks = rawStacks and (rawStacks + 1) or 1
+
+                local dtype = nil
+                if GetSpellRecField then
+                  local dispelId = GetSpellRecField(spellId, "dispel")
+                  if dispelId and dispelId > 0 then
+                    dtype = dispelTypeMap[dispelId]
+                  end
+                end
+
+                -- Timer lookup for spillover: same logic as normal debuffs
+                -- Spillover debuffs won't have slotOwnership (those track 33-48),
+                -- so we go straight to ownDebuffs/allAuraCasts fallback
+                local duration, timeleft, caster, isOurs = nil, -1, nil, false
+
+                if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+                  local d = ownDebuffs[guid][spellName]
+                  local remaining = (d.startTime + d.duration) - now
+                  if remaining > -1 then
+                    duration = d.duration
+                    timeleft = remaining > 0 and remaining or 0
+                    caster = "player"
+                    isOurs = true
+                  end
+                end
+                if not duration and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
+                  for cGuid, d in pairs(allAuraCasts[guid][spellName]) do
+                    if d.duration and d.duration > 0 then
+                      local remaining = (d.startTime + d.duration) - now
+                      if remaining > -1 then
+                        duration = d.duration
+                        timeleft = remaining > 0 and remaining or 0
+                        isOurs = (cGuid == myGuid)
+                        caster = isOurs and "player" or "other"
+                        break
+                      end
+                    end
+                  end
+                end
+
+                count = count + 1
+
+                if debugStats.enabled and IsCurrentTarget(guid) then
+                  spilloverLogged[guid] = spilloverLogged[guid] or {}
+                  if spilloverLogged[guid][auraSlot] ~= spellId then
+                    spilloverLogged[guid][auraSlot] = spellId
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff6600[SPILLOVER]|r display=%d aura=%d %s caster=%s isOurs=%s",
+                      GetDebugTimestamp(), count, auraSlot, spellName, caster or "nil", tostring(isOurs)))
+                  end
+                end
+                fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
+              end
+            end
+          end
+        end
+      end
   end
 
   return count
 end
 
--- UnitDebuff: displaySlot-based API kept for compatibility.
--- Internally uses IterDebuffs and returns the Nth result.
+-- ============================================================================
+-- IterBuffs: Iterate over real buffs only (filters spillover debuffs)
+-- Callback: fn(auraSlot, spellId, spellName, texture, stacks, timeleft, duration)
+-- For player: timer from GetPlayerAuraDuration
+-- For others: no native buff timer (timeleft = nil)
+-- Also detects buff-spillover into debuff slots (33-48) when 32 buff slots are full
+-- ============================================================================
+function libdebuff:IterBuffs(unit, fn)
+  if not fn or not GetUnitGUID or not GetUnitField then return 0 end
+
+  local guid = GetUnitGUID(unit)
+  if not guid or guid == "" or guid == "0x0000000000000000" then return 0 end
+
+  local auras = GetUnitField(guid, "aura")
+  if not auras then return 0 end
+  local auraApps = GetUnitField(guid, "auraApplications")
+
+  local isPlayer = (unit == "player")
+  local hasPlayerAuraDuration = isPlayer and GetPlayerAuraDuration
+
+  -- Count occupied slots to detect spillover
+  local debuffSlotCount = 0
+  local buffSlotCount = 0
+  for auraSlot = 33, 48 do
+    if auras[auraSlot] and auras[auraSlot] ~= 0 then
+      debuffSlotCount = debuffSlotCount + 1
+    end
+  end
+  for auraSlot = 1, 32 do
+    if auras[auraSlot] and auras[auraSlot] ~= 0 then
+      buffSlotCount = buffSlotCount + 1
+    end
+  end
+
+  -- Only fetch auraFlags if spillover is possible in either direction
+  local auraFlags = nil
+  if debuffSlotCount >= 16 or buffSlotCount >= 32 then
+    auraFlags = GetUnitField(guid, "auraFlags")
+  end
+
+  local count = 0
+
+  -- PASS 1: Normal buff slots (1-32)
+  for auraSlot = 1, 32 do
+    local spellId = auras[auraSlot]
+    if spellId and spellId ~= 0 then
+      -- If debuff spillover possible, check auraFlags to skip debuffs in buff slots
+      if auraFlags and IsDebuffByFlag(auraFlags, auraSlot) then
+        -- Spillover debuff — skip for buff display
+      else
+        local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
+        if not isHidden then
+          local texture = libdebuff:GetSpellIcon(spellId)
+          if texture then
+            local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+            if not spellName or spellName == "" then
+              spellName = GetSpellNameAndRank and GetSpellNameAndRank(spellId) or "Unknown"
+            end
+
+            local rawStacks = auraApps and auraApps[auraSlot]
+            local stacks = rawStacks and (rawStacks + 1) or 1
+
+            -- Timer: player only via GetPlayerAuraDuration (0-based)
+            local timeleft, duration = nil, nil
+            if hasPlayerAuraDuration then
+              local durSpellId, remainingMs = GetPlayerAuraDuration(auraSlot - 1)
+              -- Verify spellId match to avoid desync
+              if durSpellId == spellId and remainingMs and remainingMs > 0 then
+                timeleft = remainingMs / 1000
+              end
+            end
+
+            count = count + 1
+            fn(auraSlot, spellId, spellName, texture, stacks, timeleft, duration)
+          end
+        end
+      end
+    end
+  end
+
+  -- PASS 2: Buff-spillover into debuff slots (33-48)
+  -- Only when all 32 buff slots are occupied
+  if buffSlotCount >= 32 and auraFlags then
+    for auraSlot = 33, 48 do
+      local spellId = auras[auraSlot]
+      if spellId and spellId ~= 0 then
+        -- Check auraFlags: bit 3 NOT set = buff in debuff slot
+        if not IsDebuffByFlag(auraFlags, auraSlot) then
+          local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
+          if not isHidden then
+            local texture = libdebuff:GetSpellIcon(spellId)
+            if texture then
+              local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+              if not spellName or spellName == "" then
+                spellName = GetSpellNameAndRank and GetSpellNameAndRank(spellId) or "Unknown"
+              end
+
+              local rawStacks = auraApps and auraApps[auraSlot]
+              local stacks = rawStacks and (rawStacks + 1) or 1
+
+              local timeleft, duration = nil, nil
+              if hasPlayerAuraDuration then
+                local durSpellId, remainingMs = GetPlayerAuraDuration(auraSlot - 1)
+                if durSpellId == spellId and remainingMs and remainingMs > 0 then
+                  timeleft = remainingMs / 1000
+                end
+              end
+
+              count = count + 1
+              fn(auraSlot, spellId, spellName, texture, stacks, timeleft, duration)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  -- ============================================================
+  -- PASS 3: Overflow buffs (no client aura slot, tracked by AURA_CAST)
+  -- Only for player unit
+  -- ============================================================
+  if isPlayer and next(overflowBuffs) then
+    local now = GetTime()
+    for sid, data in pairs(overflowBuffs) do
+      local remaining = (data.startTime + data.duration) - now
+      if remaining > 0 then
+        local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[sid]
+        if not isHidden and data.texture then
+          count = count + 1
+          -- auraSlot = -1 signals overflow (no real aura slot)
+          fn(-1, sid, data.spellName or "Unknown", data.texture, 1, remaining, data.duration)
+        end
+      else
+        -- Expired, clean up
+        overflowBuffs[sid] = nil
+      end
+    end
+  end
+
+  return count
+end
 -- unitframes.lua should migrate to IterDebuffs directly for best performance.
 function libdebuff:UnitDebuff(unit, displaySlot)
   if not GetUnitGUID then return nil end
@@ -1183,6 +1464,8 @@ end
       
     elseif event == "PLAYER_ENTERING_WORLD" then
       GetPlayerGUID()
+      -- Clear overflow buffs (death, instance change, login)
+      for k in pairs(overflowBuffs) do overflowBuffs[k] = nil end
       
     elseif event == "PLAYER_TALENT_UPDATE" then
       -- Talent changes handled dynamically (no cached talent checks needed)
@@ -1584,7 +1867,7 @@ end
       local now = GetTime()
       local lastCastTime = recentCasts[targetGuid][spellName][casterGuid]
       
-      if lastCastTime and (now - lastCastTime) < AURA_CAST_DEDUPE_WINDOW then
+      if lastCastTime and (now - lastCastTime) < 0.1 then
         return  -- Duplicate event, ignore
       end
       
@@ -1601,6 +1884,117 @@ end
       local startTime = GetTime()
       local myGuid = GetPlayerGUID()
       local isOurs = (myGuid and casterGuid == myGuid)
+      
+      -- ================================================================
+      -- OVERFLOW BUFF DETECTION (player only, AURA_CAST_ON_SELF)
+      -- When buff slots are full, new buffs have no client aura slot.
+      -- Track them separately so IterBuffs can display them.
+      -- ================================================================
+      if event == "AURA_CAST_ON_SELF" and duration > 0 then
+        if debugStats.enabled then
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[OVF DBG]|r %s capStatus=%s dur=%.1f", 
+            spellName, tostring(auraCapStatus), duration))
+        end
+        
+        if auraCapStatus then
+          local buffCapped = bit.band(auraCapStatus, 1) ~= 0
+          if debugStats.enabled then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[OVF DBG]|r buffCapped=%s", tostring(buffCapped)))
+          end
+        
+          if buffCapped and GetPlayerAuraDuration then
+            -- Check if this spell is a debuff (in slots 32-47)
+            local isDebuff = false
+            for slot = 32, 47 do
+              local sid = GetPlayerAuraDuration(slot)
+              if sid and sid == spellId then
+                isDebuff = true
+                break
+              end
+            end
+          
+            if not isDebuff then
+              -- Check if this buff already has a visible slot (0-31)
+              local inVisibleSlot = false
+              for slot = 0, 31 do
+                local sid = GetPlayerAuraDuration(slot)
+                if sid and sid == spellId then
+                  inVisibleSlot = true
+                  break
+                end
+              end
+              
+              if debugStats.enabled then
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[OVF DBG]|r isDebuff=%s inVisible=%s", 
+                  tostring(isDebuff), tostring(inVisibleSlot)))
+              end
+            
+              if not inVisibleSlot then
+                -- Overflow buff: no client aura slot
+                local texture = libdebuff:GetSpellIcon(spellId)
+                overflowBuffs[spellId] = {
+                  startTime = startTime,
+                  duration = duration,
+                  texture = texture,
+                  spellName = spellName,
+                  spellId = spellId
+                }
+                if debugStats.enabled then
+                  DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ccff[OVERFLOW BUFF TRACKED]|r %s (ID:%d) dur=%.1fs tex=%s", 
+                    spellName, spellId, duration, tostring(texture)))
+                end
+                -- Notify buff frames to refresh (no PLAYER_AURAS_CHANGED fires for overflow)
+                if pfUI.buff and pfUI.buff:GetScript("OnEvent") then
+                  pfUI.buff:GetScript("OnEvent")()
+                end
+                -- Also notify player unitframe
+                if pfPlayer then
+                  pfPlayer.update_aura = true
+                end
+              end
+            else
+              if debugStats.enabled then
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[OVF DBG]|r %s is a debuff, skip", spellName))
+              end
+            end
+          elseif not auraCapStatus then
+            if debugStats.enabled then
+              DEFAULT_CHAT_FRAME:AddMessage("|cffaaaaaa[OVF DBG]|r auraCapStatus is nil")
+            end
+          end
+        else
+          if debugStats.enabled then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffaaaaaa[OVF DBG]|r no auraCapStatus")
+          end
+        end
+        
+        -- Cleanup: if no longer buff-capped, check if overflow buffs got real slots
+        if not buffCapped and next(overflowBuffs) and GetPlayerAuraDuration then
+          for sid in pairs(overflowBuffs) do
+            local gotSlot = false
+            for slot = 0, 31 do
+              local checkId = GetPlayerAuraDuration(slot)
+              if checkId and checkId == sid then
+                gotSlot = true
+                break
+              end
+            end
+            if gotSlot then
+              overflowBuffs[sid] = nil
+            end
+          end
+        end
+      end
+      
+      -- Cleanup expired overflow buffs
+      if next(overflowBuffs) then
+        local now = GetTime()
+        for sid, data in pairs(overflowBuffs) do
+          if (data.startTime + data.duration) < now then
+            overflowBuffs[sid] = nil
+          end
+        end
+      end
       
       if debugStats.enabled and isOurs then
         debugStats.aura_cast = debugStats.aura_cast + 1
@@ -1764,7 +2158,7 @@ end
         local now = GetTime()
         local hasRecentHit = false
         if recentHits[targetGuid] and recentHits[targetGuid][spellName] then
-          if (now - recentHits[targetGuid][spellName]) < HIT_TRACKING_WINDOW then
+          if (now - recentHits[targetGuid][spellName]) < 0.1 then
             hasRecentHit = true
           end
         end

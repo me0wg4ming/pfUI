@@ -6,25 +6,30 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   TemporaryEnchantFrame:UnregisterAllEvents()
 
   local br, bg, bb, ba = GetStringColor(pfUI_config.appearance.border.color)
+  local libdebuff = pfUI.api.libdebuff
+  local libtipscan = pfUI.api.libtipscan
+  local scanner = libtipscan and libtipscan:GetScanner("buff")
 
+  -- ============================================================================
+  -- RefreshBuffButton: Display using Nampower aura data stored on button
+  -- ============================================================================
   local function RefreshBuffButton(buff)
     if buff.btype == "HELPFUL" then
       if C.buffs.separateweapons == "1" then
-        buff.id = buff.gid - (buff.weapon ~= nill and buff.gid or 0)
+        buff.id = buff.gid - (buff.weapon ~= nil and buff.gid or 0)
       else
         buff.id = buff.gid - pfUI.buff.wepbuffs.count
       end
     else
       buff.id = buff.gid
     end
-    buff.bid = GetPlayerBuff(PLAYER_BUFF_START_ID+buff.id, buff.btype)
 
     if not buff.backdrop then
       CreateBackdrop(buff)
       CreateBackdropShadow(buff)
     end
 
-    --detect weapon buffs
+    -- Weapon buffs: still use Blizzard API (not in GetUnitField aura slots)
     if buff.btype == "HELPFUL" and ((C.buffs.separateweapons == "0" and buff.gid <= pfUI.buff.wepbuffs.count) or (pfUI.buff.wepbuffs.count > 0 and buff.weapon ~= nil)) then
         local mh, mhtime, mhcharge, oh, ohtime, ohcharge = GetWeaponEnchantInfo()
         if pfUI.buff.wepbuffs.count == 2 then
@@ -46,7 +51,6 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
           end
         end
 
-      -- Set Weapon Texture and Border
       if buff.mode == "MAINHAND" then
         buff.texture:SetTexture(GetInventoryItemTexture("player", 16))
         buff.backdrop:SetBackdropBorderColor(GetItemQualityColor(GetInventoryItemQuality("player", 16) or 1))
@@ -54,13 +58,14 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
         buff.texture:SetTexture(GetInventoryItemTexture("player", 17))
         buff.backdrop:SetBackdropBorderColor(GetItemQualityColor(GetInventoryItemQuality("player", 17) or 1))
       end
-    elseif GetPlayerBuffTexture(buff.bid) and (( buff.btype == "HARMFUL" and C.buffs.debuffs == "1" ) or ( buff.btype == "HELPFUL" and C.buffs.buffs == "1" )) then
-      -- Set Buff Texture and Border
+
+    elseif buff.np_texture then
+      -- Nampower aura data (set by IterBuffs/IterDebuffs in OnEvent)
       buff.mode = buff.btype
-      buff.texture:SetTexture(GetPlayerBuffTexture(buff.bid))
+      buff.texture:SetTexture(buff.np_texture)
 
       if buff.btype == "HARMFUL" then
-        local dtype = GetPlayerBuffDispelType(buff.bid)
+        local dtype = buff.np_dtype
         if dtype == "Magic" then
           buff.backdrop:SetBackdropBorderColor(0,1,1,1)
         elseif dtype == "Poison" then
@@ -76,60 +81,16 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
         buff.backdrop:SetBackdropBorderColor(br,bg,bb,ba)
       end
     else
-      -- Fallback: try UnitBuff/UnitDebuff API which may be more reliable in some cases
-      local fallbackTexture, fallbackStacks, fallbackDispelType, fallbackSpellId
-      local maxSlots = buff.btype == "HELPFUL" and 32 or 16
-
-      if buff.id >= 1 and buff.id <= maxSlots then
-        if buff.btype == "HELPFUL" and C.buffs.buffs == "1" then
-          for i = 1, maxSlots do
-            local tex, stacks, dtype, spellId = UnitBuff("player", i)
-            if tex and i == buff.id then
-              fallbackTexture, fallbackStacks, fallbackDispelType, fallbackSpellId = tex, stacks, dtype, spellId
-              break
-            end
-            if not tex then break end
-          end
-        elseif buff.btype == "HARMFUL" and C.buffs.debuffs == "1" then
-          for i = 1, maxSlots do
-            local tex, stacks, dtype, spellId = UnitDebuff("player", i)
-            if tex and i == buff.id then
-              fallbackTexture, fallbackStacks, fallbackDispelType, fallbackSpellId = tex, stacks, dtype, spellId
-              break
-            end
-            if not tex then break end
-          end
-        end
-      end
-
-      if fallbackTexture then
-        buff.mode = buff.btype
-        buff.fallbackSpellId = fallbackSpellId
-        buff.texture:SetTexture(fallbackTexture)
-        if buff.btype == "HARMFUL" then
-          if fallbackDispelType == "Magic" then
-            buff.backdrop:SetBackdropBorderColor(0,1,1,1)
-          elseif fallbackDispelType == "Poison" then
-            buff.backdrop:SetBackdropBorderColor(0,1,0,1)
-          elseif fallbackDispelType == "Curse" then
-            buff.backdrop:SetBackdropBorderColor(1,0,1,1)
-          elseif fallbackDispelType == "Disease" then
-            buff.backdrop:SetBackdropBorderColor(1,1,0,1)
-          else
-            buff.backdrop:SetBackdropBorderColor(1,0,0,1)
-          end
-        else
-          buff.backdrop:SetBackdropBorderColor(br,bg,bb,ba)
-        end
-      else
-        buff:Hide()
-        return
-      end
+      buff:Hide()
+      return
     end
 
     buff:Show()
   end
 
+  -- ============================================================================
+  -- CreateBuffButton: Frame creation with Nampower tooltip and cancel
+  -- ============================================================================
   local function CreateBuffButton(i, btype, weapon)
     local buttonName, buttonParent
     if btype == "HELPFUL" then
@@ -166,37 +127,53 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     buff.btype = btype
     buff.gid = i
 
-    -- PERF: OnUpdate moved to consolidated parent frame handler (see pfUI.buff:SetScript("OnUpdate"))
-    -- Individual buff frames no longer have their own OnUpdate
-
+    -- Tooltip
     buff:SetScript("OnEnter", function()
       GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
-      if this.mode == this.btype then
-        GameTooltip:SetPlayerBuff(this.bid)
+      if this.mode == "MAINHAND" then
+        GameTooltip:SetInventoryItem("player", 16)
+      elseif this.mode == "OFFHAND" then
+        GameTooltip:SetInventoryItem("player", 17)
+      elseif this.np_spellId and pfUI.api.libtooltip and pfUI.api.libtooltip.SetSpellByID then
+        -- Nampower only: build tooltip from SpellRec data
+        local remaining = 0
+        if this.np_auraSlot and this.np_auraSlot == -1 then
+          -- Overflow buff
+          if this.np_startTime and this.np_duration then
+            remaining = (this.np_startTime + this.np_duration) - GetTime()
+          end
+        elseif this.np_auraSlot and GetPlayerAuraDuration then
+          local durSpellId, remainingMs = GetPlayerAuraDuration(this.np_auraSlot - 1)
+          if durSpellId == this.np_spellId and remainingMs and remainingMs > 0 then
+            remaining = remainingMs / 1000
+          end
+        end
+        pfUI.api.libtooltip:SetSpellByID(GameTooltip, this.np_spellId, remaining, this.np_dtype, this.btype)
+      elseif this.np_spellName then
+        GameTooltip:AddLine(this.np_spellName, 1, 1, 1)
+        GameTooltip:Show()
 
-        if IsShiftKeyDown() then
-          local texture = GetPlayerBuffTexture(this.bid)
-
+        -- Shift: show unbuffed raid/party members
+        if IsShiftKeyDown() and this.np_texture then
           local playerlist = ""
           local first = true
 
           if UnitInRaid("player") then
-            for i=1,40 do
-              local unitstr = "raid" .. i
-              if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
+            for ri=1,40 do
+              local unitstr = "raid" .. ri
+              if not UnitHasBuff(unitstr, this.np_texture) and UnitName(unitstr) then
                 playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
                 first = nil
               end
             end
           else
-            if not UnitHasBuff("player", texture) then
+            if not UnitHasBuff("player", this.np_texture) then
               playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor("player") .. UnitName("player") .. "|r"
               first = nil
             end
-
-            for i=1,4 do
-              local unitstr = "party" .. i
-              if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
+            for pi=1,4 do
+              local unitstr = "party" .. pi
+              if not UnitHasBuff(unitstr, this.np_texture) and UnitName(unitstr) then
                 playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
                 first = nil
               end
@@ -210,10 +187,6 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
             GameTooltip:Show()
           end
         end
-      elseif this.mode == "MAINHAND" then
-        GameTooltip:SetInventoryItem("player", 16)
-      elseif this.mode == "OFFHAND" then
-        GameTooltip:SetInventoryItem("player", 17)
       end
     end)
 
@@ -221,13 +194,23 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       GameTooltip:Hide()
     end)
 
+    -- Cancel
     buff:SetScript("OnClick", function()
       if CancelItemTempEnchantment and this.mode and this.mode == "MAINHAND" then
         CancelItemTempEnchantment(1)
       elseif CancelItemTempEnchantment and this.mode and this.mode == "OFFHAND" then
         CancelItemTempEnchantment(2)
-      else
-        CancelPlayerBuff(this.bid)
+      elseif this.np_spellId and CancelPlayerAuraSpellId then
+        -- ignoreMissing=1 required for overflow buffs (no client aura slot)
+        CancelPlayerAuraSpellId(this.np_spellId, 1)
+        -- Remove from overflow tracking if it was an overflow buff
+        if this.np_auraSlot == -1 and pfUI.libdebuff_overflow_buffs then
+          pfUI.libdebuff_overflow_buffs[this.np_spellId] = nil
+          -- Refresh display
+          if pfUI.buff and pfUI.buff:GetScript("OnEvent") then
+            pfUI.buff:GetScript("OnEvent")()
+          end
+        end
       end
     end)
 
@@ -236,19 +219,9 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     return buff
   end
 
-  local function GetNumBuffs()
-    local mh, mhtime, mhcharge, oh, ohtime, ohcharge = GetWeaponEnchantInfo()
-    local offset = (mh and 1 or 0) + (oh and 1 or 0)
-
-    for i=1,32 do
-      local bid, untilCancelled = GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HELPFUL")
-      if bid < 0 then
-        return i - 1 + offset
-      end
-    end
-    return 0 + offset
-  end
-
+  -- ============================================================================
+  -- Main frame, events
+  -- ============================================================================
   pfUI.buff = CreateFrame("Frame", "pfGlobalBuffFrame", UIParent)
   pfUI.buff:RegisterEvent("PLAYER_AURAS_CHANGED")
   pfUI.buff:RegisterEvent("UNIT_INVENTORY_CHANGED")
@@ -261,14 +234,70 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       pfUI.buff.wepbuffs.count = 0
     end
 
-    for i=1,32 do
-      RefreshBuffButton(pfUI.buff.buffs.buttons[i])
+    -- Clear Nampower data on all buttons
+    for i=1,48 do
+      local btn = pfUI.buff.buffs.buttons[i]
+      btn.np_texture = nil
+      btn.np_spellName = nil
+      btn.np_spellId = nil
+      btn.np_auraSlot = nil
+      btn.np_dtype = nil
+      btn.np_startTime = nil
+      btn.np_duration = nil
+    end
+    for i=1,16 do
+      local btn = pfUI.buff.debuffs.buttons[i]
+      btn.np_texture = nil
+      btn.np_spellName = nil
+      btn.np_spellId = nil
+      btn.np_auraSlot = nil
+      btn.np_dtype = nil
     end
 
+    -- Fill buff buttons from IterBuffs
+    if libdebuff and libdebuff.IterBuffs then
+      local buffIdx = pfUI.buff.wepbuffs.count
+      libdebuff:IterBuffs("player", function(auraSlot, spellId, spellName, tex, stacks, timeleft, duration)
+        buffIdx = buffIdx + 1
+        local btn = pfUI.buff.buffs.buttons[buffIdx]
+        if not btn then return end
+        btn.np_texture = tex
+        btn.np_spellName = spellName
+        btn.np_spellId = spellId
+        btn.np_auraSlot = auraSlot
+        -- Overflow buffs: store timer data for OnUpdate
+        if auraSlot == -1 and timeleft and duration then
+          btn.np_startTime = GetTime() + timeleft - duration
+          btn.np_duration = duration
+        else
+          btn.np_startTime = nil
+          btn.np_duration = nil
+        end
+      end)
+    end
+
+    -- Fill debuff buttons from IterDebuffs
+    if libdebuff and libdebuff.IterDebuffs then
+      local debuffIdx = 0
+      libdebuff:IterDebuffs("player", function(auraSlot, spellId, spellName, tex, stacks, dtype, duration, timeleft, caster, isOurs)
+        debuffIdx = debuffIdx + 1
+        local btn = pfUI.buff.debuffs.buttons[debuffIdx]
+        if not btn then return end
+        btn.np_texture = tex
+        btn.np_spellName = spellName
+        btn.np_spellId = spellId
+        btn.np_auraSlot = auraSlot
+        btn.np_dtype = dtype
+      end)
+    end
+
+    -- Refresh display
+    for i=1,48 do
+      RefreshBuffButton(pfUI.buff.buffs.buttons[i])
+    end
     for i=1,16 do
       RefreshBuffButton(pfUI.buff.debuffs.buttons[i])
     end
-
     if C.buffs.separateweapons == "1" then
       for i=1,2 do
         RefreshBuffButton(pfUI.buff.wepbuffs.buttons[i])
@@ -276,51 +305,79 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     end
   end)
 
-  -- PERF: Consolidated OnUpdate handler for all buff timers
-  -- This replaces 50 individual OnUpdate handlers with a single one
+  -- ============================================================================
+  -- Consolidated OnUpdate: timers via GetPlayerAuraDuration
+  -- ============================================================================
   pfUI.buff:SetScript("OnUpdate", function()
     local now = GetTime()
     if not this.nextUpdate then this.nextUpdate = now + 0.1 end
     if this.nextUpdate > now then return end
     this.nextUpdate = now + 0.1
 
-    -- Cache weapon enchant info once per update cycle
     local mh, mhtime, mhcharge, oh, ohtime, ohcharge = GetWeaponEnchantInfo()
+    local playerGuid = GetUnitGUID and GetUnitGUID("player")
+    local auraApps = playerGuid and GetUnitField and GetUnitField(playerGuid, "auraApplications")
 
-    -- Update all visible buff buttons
+    -- Buff timers
     local buttons = pfUI.buff.buffs.buttons
-    for i = 1, 32 do
+    for i = 1, 48 do
       local buff = buttons[i]
       if buff:IsShown() then
         local timeleft, stacks = 0, 0
-        if buff.mode == buff.btype then
-          timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
-          stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
-        elseif buff.mode == "MAINHAND" then
+        if buff.mode == "MAINHAND" then
           timeleft = mhtime and mhtime / 1000 or 0
           stacks = mhcharge or 0
         elseif buff.mode == "OFFHAND" then
           timeleft = ohtime and ohtime / 1000 or 0
           stacks = ohcharge or 0
+        elseif buff.np_auraSlot and buff.np_auraSlot == -1 then
+          -- Overflow buff: use stored timestamp + duration
+          if buff.np_startTime and buff.np_duration then
+            timeleft = (buff.np_startTime + buff.np_duration) - now
+            if timeleft <= 0 then
+              timeleft = 0
+              -- Expired: remove from overflow tracking and hide
+              if buff.np_spellId and pfUI.libdebuff_overflow_buffs then
+                pfUI.libdebuff_overflow_buffs[buff.np_spellId] = nil
+              end
+              buff:Hide()
+            end
+          end
+        elseif buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration then
+          local durSpellId, remainingMs = GetPlayerAuraDuration(buff.np_auraSlot - 1)
+          if durSpellId == buff.np_spellId and remainingMs and remainingMs > 0 then
+            timeleft = remainingMs / 1000
+          end
+          if auraApps and auraApps[buff.np_auraSlot] then
+            stacks = auraApps[buff.np_auraSlot] + 1
+          end
         end
         buff.timer:SetText(timeleft > 0 and GetColoredTimeString(timeleft) or "")
         buff.stacks:SetText(stacks > 1 and stacks or "")
       end
     end
 
-    -- Update all visible debuff buttons
+    -- Debuff timers
     buttons = pfUI.buff.debuffs.buttons
     for i = 1, 16 do
       local buff = buttons[i]
       if buff:IsShown() then
-        local timeleft = GetPlayerBuffTimeLeft(buff.bid, buff.btype)
-        local stacks = GetPlayerBuffApplications(buff.bid, buff.btype)
+        local timeleft, stacks = 0, 0
+        if buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration then
+          local durSpellId, remainingMs = GetPlayerAuraDuration(buff.np_auraSlot - 1)
+          if durSpellId == buff.np_spellId and remainingMs and remainingMs > 0 then
+            timeleft = remainingMs / 1000
+          end
+          if auraApps and auraApps[buff.np_auraSlot] then
+            stacks = auraApps[buff.np_auraSlot] + 1
+          end
+        end
         buff.timer:SetText(timeleft > 0 and GetColoredTimeString(timeleft) or "")
         buff.stacks:SetText(stacks > 1 and stacks or "")
       end
     end
 
-    -- Update weapon buff buttons if separate
+    -- Weapon buff timers
     if C.buffs.separateweapons == "1" then
       buttons = pfUI.buff.wepbuffs.buttons
       for i = 1, 2 do
@@ -341,7 +398,9 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     end
   end)
 
+  -- ============================================================================
   -- Weapon Buffs
+  -- ============================================================================
   pfUI.buff.wepbuffs = CreateFrame("Frame", "pfWepBuffFrame", UIParent)
   pfUI.buff.wepbuffs.count = 0
   pfUI.buff.wepbuffs.buttons = {}
@@ -352,7 +411,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   -- Buff Frame
   pfUI.buff.buffs = CreateFrame("Frame", "pfBuffFrame", UIParent)
   pfUI.buff.buffs.buttons = {}
-  for i=1,32 do
+  for i=1,48 do
     pfUI.buff.buffs.buttons[i] = CreateBuffButton(i, "HELPFUL")
   end
 
@@ -363,7 +422,9 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     pfUI.buff.debuffs.buttons[i] = CreateBuffButton(i, "HARMFUL")
   end
 
-  -- config loading
+  -- ============================================================================
+  -- Config loading (unchanged)
+  -- ============================================================================
   function pfUI.buff:UpdateConfigBuffButton(buff)
     local fontsize = C.buffs.fontsize == "-1" and C.global.font_size or C.buffs.fontsize
     local rowcount, relFrame, offsetX, offsetY
@@ -408,7 +469,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     local fontsize = C.buffs.fontsize == "-1" and C.global.font_size or C.buffs.fontsize
 
     pfUI.buff.buffs:SetWidth(tonumber(C.buffs.buffrowsize) * (tonumber(C.buffs.size)+2*tonumber(C.buffs.spacing)))
-    pfUI.buff.buffs:SetHeight(ceil(32/tonumber(C.buffs.buffrowsize)) * ((C.buffs.textinside == "1" and 0 or (fontsize*1.5))+tonumber(C.buffs.size)+2*tonumber(C.buffs.spacing)))
+    pfUI.buff.buffs:SetHeight(ceil(48/tonumber(C.buffs.buffrowsize)) * ((C.buffs.textinside == "1" and 0 or (fontsize*1.5))+tonumber(C.buffs.size)+2*tonumber(C.buffs.spacing)))
     pfUI.buff.buffs:SetPoint("TOPRIGHT", pfUI.minimap or UIParent, "TOPLEFT", -4*tonumber(C.buffs.spacing), 0)
     UpdateMovable(pfUI.buff.buffs)
 
@@ -429,7 +490,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       RemoveMovable(pfUI.buff.wepbuffs)
     end
 
-    for i=1,32 do
+    for i=1,48 do
       pfUI.buff:UpdateConfigBuffButton(pfUI.buff.buffs.buttons[i])
     end
 

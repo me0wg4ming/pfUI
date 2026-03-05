@@ -1,5 +1,6 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
+local superwow_active = HasSuperWoW()
 
 pfUI.uf = CreateFrame("Frame", nil, UIParent)
 pfUI.uf:SetScript("OnUpdate", function()
@@ -100,10 +101,12 @@ local function BuffOnEnter()
   if not parent.label then return end
 
   GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
-  if parent.label == "player" then
-    GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
-  else
-    GameTooltip:SetUnitBuff(parent.label .. parent.id, this.id)
+  local unitstr = parent.label == "player" and "player" or (parent.label .. parent.id)
+
+  -- Nampower tooltip
+  local lt = pfUI.api.libtooltip
+  if lt and lt.SetUnitBuffTooltip then
+    lt:SetUnitBuffTooltip(GameTooltip, unitstr, this.id)
   end
 
   if IsShiftKeyDown() then
@@ -224,10 +227,13 @@ local function DebuffOnEnter()
   if not this:GetParent().label then return end
 
   GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
-  if this:GetParent().label == "player" then
-    GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
-  else
-    GameTooltip:SetUnitDebuff(this:GetParent().label .. this:GetParent().id, this.id)
+  local parent = this:GetParent()
+  local unitstr = parent.label == "player" and "player" or (parent.label .. parent.id)
+
+  -- Nampower tooltip
+  local lt = pfUI.api.libtooltip
+  if lt and lt.SetUnitDebuffTooltip then
+    lt:SetUnitDebuffTooltip(GameTooltip, unitstr, this.id)
   end
 end
 
@@ -2143,12 +2149,51 @@ function pfUI.uf:RefreshUnit(unit, component)
   if unit.buffs and ( component == "all" or component == "aura" ) then
     local texture, stacks
 
+    -- Pre-build spillover filter: which Blizzard buff indices are actually debuffs?
+    local spilloverFilter = nil
+    if unit.label ~= "player" and GetUnitField and GetUnitGUID then
+      local guid = GetUnitGUID(unitstr)
+      if guid then
+        local auras = GetUnitField(guid, "aura")
+        if auras then
+          local debuffCount = 0
+          for s = 33, 48 do
+            if auras[s] and auras[s] ~= 0 then debuffCount = debuffCount + 1 end
+          end
+          if debuffCount >= 16 then
+            local auraFlags = GetUnitField(guid, "auraFlags")
+            if auraFlags then
+              spilloverFilter = {}
+              local visIdx = 0
+              for s = 1, 32 do
+                if auras[s] and auras[s] ~= 0 then
+                  local isHidden = IsAuraHidden and IsAuraHidden(auras[s])
+                  if not isHidden then
+                    visIdx = visIdx + 1
+                    local fi = math.floor((s - 1) / 8) + 1
+                    local bi = math.mod(s - 1, 8) * 4
+                    local isDebuff = bit.band(bit.rshift(auraFlags[fi], bi), 8) ~= 0
+                    if isDebuff then
+                      spilloverFilter[visIdx] = true
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
     for i=1, unit.config.bufflimit do
       if not unit.buffs[i] then break end
 
       if unit.label == "player" then
         stacks = GetPlayerBuffApplications(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
         texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
+      elseif spilloverFilter and spilloverFilter[i] then
+        -- This buff slot is actually a spillover debuff, skip it
+        texture = nil
       else
         texture, stacks = pfUI.uf:DetectBuff(unitstr, i)
       end
@@ -2800,16 +2845,20 @@ function pfUI.uf:ClickAction(button)
       -- run click cast action
       local is_macro = string.find(this.clickactions[modstring], "^%/(.+)")
 
-      local tswitch = UnitIsUnit(unitstr, "target")
-      TargetUnit(unitstr)
-
-      if is_macro then
-        RunMacroText(this.clickactions[modstring])
+      if superwow_active and not is_macro then
+        CastSpellByName(this.clickactions[modstring], unitstr)
       else
-        CastSpellByName(this.clickactions[modstring])
-      end
+        local tswitch = UnitIsUnit(unitstr, "target")
+        TargetUnit(unitstr)
 
-      if not tswitch then TargetLastTarget() end
+        if is_macro then
+          RunMacroText(this.clickactions[modstring])
+        else
+          CastSpellByName(this.clickactions[modstring])
+        end
+
+        if not tswitch then TargetLastTarget() end
+      end
 
       return
     end
