@@ -857,13 +857,23 @@ function libdebuff:IterDebuffs(unit, fn)
 
   local guid = GetUnitGUID(unit)
   if not guid or guid == "" or guid == "0x0000000000000000" then
-    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO GUID for: "..(unit or "nil").."|r")
+    if debugStats.enabled then
+      local cacheKey = "noguid_" .. (unit or "nil")
+      if not spilloverLogCache[cacheKey] then
+        spilloverLogCache[cacheKey] = true
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO GUID for: "..(unit or "nil").."|r")
+      end
+    end
     return 0
   end
+  -- clear no-guid cache once we have a valid guid
+  spilloverLogCache["noguid_" .. (unit or "nil")] = nil
 
   local auras = GetUnitField(guid, "aura")
   if not auras then
-    DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO AURAS for: "..guid.."|r")
+    if debugStats.enabled then
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO AURAS for: "..guid.."|r")
+    end
     return 0
   end
   local auraApps = GetUnitField(guid, "auraApplications")
