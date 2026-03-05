@@ -1,6 +1,5 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
-local superwow_active = HasSuperWoW()
 
 pfUI.uf = CreateFrame("Frame", nil, UIParent)
 pfUI.uf:SetScript("OnUpdate", function()
@@ -52,19 +51,52 @@ end
 
 local maxdurations = {}
 local function BuffOnUpdate()
-  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
+  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end
+
+  -- Nampower path: use stored auraSlot + spellId
+  if this.libdebuff_auraSlot and this.libdebuff_spellId and GetPlayerAuraDuration then
+    if this.libdebuff_auraSlot == -1 then
+      -- Overflow buff: use stored start/duration from IterBuffs callback
+      if this.libdebuff_dur and this.libdebuff_start then
+        local timeleft = (this.libdebuff_start + this.libdebuff_dur) - GetTime()
+        if timeleft > 0 then
+          CooldownFrame_SetTimer(this.cd, this.libdebuff_start, this.libdebuff_dur, 1)
+        else
+          CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+        end
+      else
+        CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+      end
+    else
+      local durSpellId, remainingMs = GetPlayerAuraDuration(this.libdebuff_auraSlot - 1)
+      if durSpellId == this.libdebuff_spellId and remainingMs and remainingMs > 0 then
+        local timeleft = remainingMs / 1000
+        local key = this.libdebuff_spellName or tostring(this.libdebuff_spellId)
+        if not maxdurations[key] then
+          maxdurations[key] = timeleft
+        elseif maxdurations[key] < timeleft then
+          maxdurations[key] = timeleft
+        end
+        local start = GetTime() + timeleft - maxdurations[key]
+        CooldownFrame_SetTimer(this.cd, start, maxdurations[key], 1)
+      else
+        CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+      end
+    end
+    return
+  end
+
+  -- Legacy fallback
   local bid = GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL")
   local timeleft = GetPlayerBuffTimeLeft(bid)
   local texture = GetPlayerBuffTexture(bid)
   local start = 0
 
-  -- slot is empty (buff expired or doesn't exist), clear timer and bail
   if not texture then
     CooldownFrame_SetTimer(this.cd, 0, 0, 0)
     return
   end
 
-  -- Get buff name for unique key (two buffs could share same texture)
   local name = ""
   if libtipscan then
     scanner = scanner or libtipscan:GetScanner("unitframes")
@@ -88,6 +120,29 @@ local function BuffOnUpdate()
 end
 
 local function TargetBuffOnUpdate()
+  if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
+
+  -- Nampower path: use stored auraSlot + spellId for timer
+  if this.libdebuff_auraSlot and this.libdebuff_spellId then
+    local parent = this:GetParent()
+    local isPlayer = parent and parent.label == "player"
+
+    if isPlayer and GetPlayerAuraDuration then
+      local durSpellId, remainingMs = GetPlayerAuraDuration(this.libdebuff_auraSlot - 1)
+      if durSpellId == this.libdebuff_spellId and remainingMs and remainingMs > 0 then
+        local tl = remainingMs / 1000
+        CooldownFrame_SetTimer(this.cd, GetTime() - 0.01, tl + 0.01, 1)
+      else
+        CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+      end
+    else
+      -- Non-player: no native buff timer available
+      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    end
+    return
+  end
+
+  -- Legacy: Blizzard UnitBuff for target
   local name, rank, icon, count, duration, timeleft = _G.UnitBuff("target", this.id)
   if duration and timeleft then
     CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - duration, duration, 1)
@@ -100,13 +155,56 @@ local function BuffOnEnter()
   local parent = this:GetParent()
   if not parent.label then return end
 
+  local unitstr = parent.label .. (parent.id or "")
   GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
-  local unitstr = parent.label == "player" and "player" or (parent.label .. parent.id)
 
-  -- Nampower tooltip
   local lt = pfUI.api.libtooltip
-  if lt and lt.SetUnitBuffTooltip then
-    lt:SetUnitBuffTooltip(GameTooltip, unitstr, this.id)
+  if lt and this.libdebuff_spellId then
+    lt:SetSpellByID(GameTooltip, this.libdebuff_spellId)
+  elseif parent.label == "player" then
+    GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
+  else
+    GameTooltip:SetUnitBuff(unitstr, this.id)
+  end
+
+  if IsShiftKeyDown() then
+    local texture = parent.label == "player" and GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL")) or UnitBuff(parent.label .. parent.id, this.id)
+
+    -- slot is empty, nothing to compare against
+    if not texture then return end
+
+    local playerlist = ""
+    local first = true
+
+    if UnitInRaid("player") then
+      for i=1,40 do
+        local unitstr = "raid" .. i
+        if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
+          playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
+          first = nil
+        end
+      end
+    else
+      if not UnitHasBuff("player", texture) then
+        playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor("player") .. UnitName("player") .. "|r"
+        first = nil
+      end
+
+      for i=1,4 do
+        local unitstr = "party" .. i
+        if not UnitHasBuff(unitstr, texture) and UnitName(unitstr) then
+          playerlist = playerlist .. ( not first and ", " or "") .. GetUnitColor(unitstr) .. UnitName(unitstr) .. "|r"
+          first = nil
+        end
+      end
+    end
+
+    if strlen(playerlist) > 0 then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddLine(T["Unbuffed"] .. ":", .3, 1, .8)
+      GameTooltip:AddLine(playerlist,1,1,1,1)
+      GameTooltip:Show()
+    end
   end
 
   if IsShiftKeyDown() then
@@ -156,7 +254,11 @@ end
 
 local function BuffOnClick()
   if this:GetParent().label == "player" then
-    CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
+    if this.libdebuff_spellId and CancelPlayerAuraSpellId then
+      CancelPlayerAuraSpellId(this.libdebuff_spellId)
+    else
+      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
+    end
   end
 end
 
@@ -224,16 +326,19 @@ local function DebuffOnUpdate()
 end
 
 local function DebuffOnEnter()
-  if not this:GetParent().label then return end
-
-  GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
   local parent = this:GetParent()
-  local unitstr = parent.label == "player" and "player" or (parent.label .. parent.id)
+  if not parent.label then return end
 
-  -- Nampower tooltip
+  local unitstr = parent.label .. (parent.id or "")
+  GameTooltip:SetOwner(this, "ANCHOR_BOTTOMRIGHT")
+
   local lt = pfUI.api.libtooltip
-  if lt and lt.SetUnitDebuffTooltip then
-    lt:SetUnitDebuffTooltip(GameTooltip, unitstr, this.id)
+  if lt and this.libdebuff_spellId then
+    lt:SetSpellByID(GameTooltip, this.libdebuff_spellId)
+  elseif parent.label == "player" then
+    GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
+  else
+    GameTooltip:SetUnitDebuff(unitstr, this.id)
   end
 end
 
@@ -243,7 +348,11 @@ end
 
 local function DebuffOnClick()
   if this:GetParent().label == "player" then
-    CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
+    if this.libdebuff_spellId and CancelPlayerAuraSpellId then
+      CancelPlayerAuraSpellId(this.libdebuff_spellId)
+    else
+      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL"))
+    end
   end
 end
 
@@ -2149,67 +2258,88 @@ function pfUI.uf:RefreshUnit(unit, component)
   if unit.buffs and ( component == "all" or component == "aura" ) then
     local texture, stacks
 
-    -- Pre-build spillover filter: which Blizzard buff indices are actually debuffs?
-    local spilloverFilter = nil
-    if unit.label ~= "player" and GetUnitField and GetUnitGUID then
-      local guid = GetUnitGUID(unitstr)
-      if guid then
-        local auras = GetUnitField(guid, "aura")
-        if auras then
-          local debuffCount = 0
-          for s = 33, 48 do
-            if auras[s] and auras[s] ~= 0 then debuffCount = debuffCount + 1 end
-          end
-          if debuffCount >= 16 then
-            local auraFlags = GetUnitField(guid, "auraFlags")
-            if auraFlags then
-              spilloverFilter = {}
-              local visIdx = 0
-              for s = 1, 32 do
-                if auras[s] and auras[s] ~= 0 then
-                  local isHidden = IsAuraHidden and IsAuraHidden(auras[s])
-                  if not isHidden then
-                    visIdx = visIdx + 1
-                    local fi = math.floor((s - 1) / 8) + 1
-                    local bi = math.mod(s - 1, 8) * 4
-                    local isDebuff = bit.band(bit.rshift(auraFlags[fi], bi), 8) ~= 0
-                    if isDebuff then
-                      spilloverFilter[visIdx] = true
-                    end
-                  end
+    -- Use IterBuffs for all units with Nampower: filters spillover, handles buff-spillover into debuff slots
+    local usedIterBuffs = false
+    if libdebuff and libdebuff.IterBuffs then
+      -- Fill from IterBuffs (includes timer for player via GetPlayerAuraDuration)
+      -- Update frames in-place first, then hide leftovers to avoid flicker
+      local frameIdx = 0
+      libdebuff:IterBuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, tl, dur)
+        frameIdx = frameIdx + 1
+        local frame = unit.buffs[frameIdx]
+        if not frame then return end
+        frame.texture:SetTexture(tex)
+        frame.libdebuff_auraSlot = auraSlot
+        frame.libdebuff_spellName = spellName
+        frame.libdebuff_spellId = spellId
+        -- For overflow buffs (auraSlot=-1): store start+duration for timer
+        if auraSlot == -1 and tl and dur then
+          frame.libdebuff_start = GetTime() + tl - dur
+          frame.libdebuff_dur = dur
+        else
+          frame.libdebuff_start = nil
+          frame.libdebuff_dur = nil
+        end
+        if tex then
+          frame:Show()
+          if (st or 0) > 1 then frame.stacks:SetText(st) else frame.stacks:SetText("") end
+          -- Timer: set immediately to avoid flicker waiting for BuffOnUpdate
+          if frame.cd then
+            if auraSlot == -1 and tl and dur then
+              -- Overflow buff: use stored start/duration
+              CooldownFrame_SetTimer(frame.cd, GetTime() + tl - dur, dur, 1)
+            elseif auraSlot and auraSlot > 0 and GetPlayerAuraDuration then
+              local durSpellId, remainingMs = GetPlayerAuraDuration(auraSlot - 1)
+              if durSpellId == spellId and remainingMs and remainingMs > 0 then
+                local timeleft = remainingMs / 1000
+                local key = spellName or tostring(spellId)
+                if not maxdurations[key] or maxdurations[key] < timeleft then
+                  maxdurations[key] = timeleft
                 end
+                CooldownFrame_SetTimer(frame.cd, GetTime() + timeleft - maxdurations[key], maxdurations[key], 1)
+              else
+                CooldownFrame_SetTimer(frame.cd, 0, 0, 0)
               end
+            else
+              CooldownFrame_SetTimer(frame.cd, 0, 0, 0)
             end
           end
+        else
+          frame:Hide()
         end
+      end)
+      -- Hide remaining frames that are no longer needed
+      for i = frameIdx + 1, unit.config.bufflimit do
+        if not unit.buffs[i] then break end
+        unit.buffs[i]:Hide()
       end
+      usedIterBuffs = true
     end
 
-    for i=1, unit.config.bufflimit do
-      if not unit.buffs[i] then break end
+    if not usedIterBuffs then
+      for i=1, unit.config.bufflimit do
+        if not unit.buffs[i] then break end
 
-      if unit.label == "player" then
-        stacks = GetPlayerBuffApplications(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
-        texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
-      elseif spilloverFilter and spilloverFilter[i] then
-        -- This buff slot is actually a spillover debuff, skip it
-        texture = nil
-      else
-        texture, stacks = pfUI.uf:DetectBuff(unitstr, i)
-      end
-
-      unit.buffs[i].texture:SetTexture(texture)
-
-      if texture then
-        unit.buffs[i]:Show()
-
-        if stacks > 1 then
-          unit.buffs[i].stacks:SetText(stacks)
+        if unit.label == "player" then
+          stacks = GetPlayerBuffApplications(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
+          texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
         else
-          unit.buffs[i].stacks:SetText("")
+          texture, stacks = pfUI.uf:DetectBuff(unitstr, i)
         end
-      else
-        unit.buffs[i]:Hide()
+
+        unit.buffs[i].texture:SetTexture(texture)
+
+        if texture then
+          unit.buffs[i]:Show()
+
+          if stacks > 1 then
+            unit.buffs[i].stacks:SetText(stacks)
+          else
+            unit.buffs[i].stacks:SetText("")
+          end
+        else
+          unit.buffs[i]:Hide()
+        end
       end
     end
   end
@@ -2323,6 +2453,9 @@ function pfUI.uf:RefreshUnit(unit, component)
         -- Store timer data on frame so TargetDebuffOnUpdate can use it
         frame.libdebuff_dur = dur
         frame.libdebuff_start = (dur and tl and tl >= 0) and (GetTime() + tl - dur) or nil
+        -- Store aura slot and spell name for tooltip (spillover debuffs need SetUnitBuff)
+        frame.libdebuff_auraSlot = auraSlot
+        frame.libdebuff_spellName = spellName
         frame:Show()
         if frame.libdebuff_start then
           CooldownFrame_SetTimer(frame.cd, frame.libdebuff_start, dur, 1)
@@ -2845,20 +2978,16 @@ function pfUI.uf:ClickAction(button)
       -- run click cast action
       local is_macro = string.find(this.clickactions[modstring], "^%/(.+)")
 
-      if superwow_active and not is_macro then
-        CastSpellByName(this.clickactions[modstring], unitstr)
+      local tswitch = UnitIsUnit(unitstr, "target")
+      TargetUnit(unitstr)
+
+      if is_macro then
+        RunMacroText(this.clickactions[modstring])
       else
-        local tswitch = UnitIsUnit(unitstr, "target")
-        TargetUnit(unitstr)
-
-        if is_macro then
-          RunMacroText(this.clickactions[modstring])
-        else
-          CastSpellByName(this.clickactions[modstring])
-        end
-
-        if not tswitch then TargetLastTarget() end
+        CastSpellByName(this.clickactions[modstring])
       end
+
+      if not tswitch then TargetLastTarget() end
 
       return
     end
