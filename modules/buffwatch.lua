@@ -358,7 +358,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
           -- Dispel type: from Nampower SpellRec or Blizzard UnitDebuff fallback
           local dt = dtype
           if not dt and spellId and GetSpellRecField then
-            dt = GetSpellRecField(spellId, "dispelType")
+            dt = GetSpellRecField(spellId, "dispel")
           end
           if not dt then
             local _, _, blizzDtype = UnitDebuff(unit, slot)
