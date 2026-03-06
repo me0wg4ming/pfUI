@@ -1081,7 +1081,7 @@ function pfUI.uf:UpdateConfig()
       local row = floor((i-1) / perrow)
 
       f.buffs[i] = f.buffs[i] or CreateFrame("Button", "pfUI" .. f.fname .. "Buff" .. i, f)
-      f.buffs[i].texture = f.buffs[i].texture or f.buffs[i]:CreateTexture()
+      f.buffs[i].texture = f.buffs[i].texture or f.buffs[i]:CreateTexture(nil, "BACKGROUND")
       f.buffs[i].texture:SetTexCoord(.08, .92, .08, .92)
       f.buffs[i].texture:SetAllPoints()
       f.buffs[i].stacks = f.buffs[i].stacks or f.buffs[i]:CreateFontString(nil, "OVERLAY", f.buffs[i])
@@ -1193,7 +1193,7 @@ function pfUI.uf:UpdateConfig()
       if i > tonumber(f.config.debufflimit) then break end
 
       f.debuffs[i] = f.debuffs[i] or CreateFrame("Button", "pfUI" .. f.fname .. "Debuff" .. i, f)
-      f.debuffs[i].texture = f.debuffs[i].texture or f.debuffs[i]:CreateTexture()
+      f.debuffs[i].texture = f.debuffs[i].texture or f.debuffs[i]:CreateTexture(nil, "BACKGROUND")
       f.debuffs[i].texture:SetTexCoord(.08, .92, .08, .92)
       f.debuffs[i].texture:SetAllPoints()
       f.debuffs[i].stacks = f.debuffs[i].stacks or f.debuffs[i]:CreateFontString(nil, "OVERLAY", f.debuffs[i])
