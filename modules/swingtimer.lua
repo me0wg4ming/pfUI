@@ -742,7 +742,13 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       local hitInfo  = arg4 or 0
       local isOffhand = bit.band(hitInfo, HITINFO_LEFTSWING) ~= 0
       local noAction  = bit.band(hitInfo, HITINFO_NOACTION) ~= 0
-      if noAction then return end
+      -- NOACTION means server did not advance swing clock (dodge/parry/miss).
+      -- Only skip if the timer is already running - if it's not active yet
+      -- (first swing ever), we still want to start it so the bar appears.
+      if noAction then
+        if isOffhand and S.ohActive then return end
+        if not isOffhand and S.mhActive then return end
+      end
 
       -- Extra attack detection: if timer still has >20% remaining for that hand,
       -- the server did NOT reset the swing clock -> this is an extra attack, skip.
