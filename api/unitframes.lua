@@ -54,7 +54,8 @@ local function BuffOnUpdate()
   if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end
 
   -- Nampower path: use stored auraSlot + spellId
-  if this.libdebuff_auraSlot and this.libdebuff_spellId and GetPlayerAuraDuration then
+  if this.libdebuff_auraSlot and this.libdebuff_spellId and GetPlayerAuraDuration
+      and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.libdebuff_spellId]) then
     if this.libdebuff_auraSlot == -1 then
       -- Overflow buff: use stored start/duration from IterBuffs callback
       if this.libdebuff_dur and this.libdebuff_start then
@@ -132,7 +133,8 @@ local function TargetBuffOnUpdate()
     local parent = this:GetParent()
     local isPlayer = parent and parent.label == "player"
 
-    if isPlayer and GetPlayerAuraDuration then
+    if isPlayer and GetPlayerAuraDuration
+      and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.libdebuff_spellId]) then
       local durSpellId, remainingMs = GetPlayerAuraDuration(this.libdebuff_auraSlot - 1)
       if durSpellId == this.libdebuff_spellId and remainingMs and remainingMs > 0 then
         local tl = remainingMs / 1000
@@ -170,7 +172,8 @@ local function BuffOnEnter()
       if this.np_startTime and this.np_duration then
         remaining = (this.np_startTime + this.np_duration) - GetTime()
       end
-    elseif this.np_auraSlot and GetPlayerAuraDuration then
+    elseif this.np_auraSlot and GetPlayerAuraDuration
+      and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.np_spellId]) then
       local durSpellId, remainingMs = GetPlayerAuraDuration(this.np_auraSlot - 1)
       if durSpellId == this.np_spellId and remainingMs and remainingMs > 0 then
         remaining = remainingMs / 1000
@@ -2311,7 +2314,8 @@ function pfUI.uf:RefreshUnit(unit, component)
             if auraSlot == -1 and tl and dur then
               -- Overflow buff: use stored start/duration
               CooldownFrame_SetTimer(frame.cd, GetTime() + tl - dur, dur, 1)
-            elseif auraSlot and auraSlot > 0 and GetPlayerAuraDuration then
+            elseif auraSlot and auraSlot > 0 and GetPlayerAuraDuration
+              and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[spellId]) then
               local durSpellId, remainingMs = GetPlayerAuraDuration(auraSlot - 1)
               if durSpellId == spellId and remainingMs and remainingMs > 0 then
                 local timeleft = remainingMs / 1000

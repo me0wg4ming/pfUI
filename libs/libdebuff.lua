@@ -217,6 +217,12 @@ pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
 pfUI.libdebuff_overflow_buffs = pfUI.libdebuff_overflow_buffs or {}
 local overflowBuffs = pfUI.libdebuff_overflow_buffs
 
+-- Forced no-timer SpellIDs (server reports wrong duration, hardcoded fix)
+pfUI.libdebuff_forced_no_timer = pfUI.libdebuff_forced_no_timer or {
+  [30200] = true,  -- Scythe of the Unborn (item equip buff, server stores wrong duration)
+}
+local forcedNoTimer = pfUI.libdebuff_forced_no_timer
+
 -- Dedup cache for [SPILLOVER] debug output: guid -> auraSlot -> spellId
 -- Only logs when a new spell appears in a slot, not every IterDebuffs call
 local spilloverLogCache = {}
@@ -1170,7 +1176,7 @@ function libdebuff:IterBuffs(unit, fn)
 
             -- Timer: player only via GetPlayerAuraDuration (0-based)
             local timeleft, duration = nil, nil
-            if hasPlayerAuraDuration then
+            if hasPlayerAuraDuration and not forcedNoTimer[spellId] then
               local durSpellId, remainingMs = GetPlayerAuraDuration(auraSlot - 1)
               -- Verify spellId match to avoid desync
               if durSpellId == spellId and remainingMs and remainingMs > 0 then
@@ -1207,7 +1213,7 @@ function libdebuff:IterBuffs(unit, fn)
               local stacks = rawStacks and (rawStacks + 1) or 1
 
               local timeleft, duration = nil, nil
-              if hasPlayerAuraDuration then
+              if hasPlayerAuraDuration and not forcedNoTimer[spellId] then
                 local durSpellId, remainingMs = GetPlayerAuraDuration(auraSlot - 1)
                 if durSpellId == spellId and remainingMs and remainingMs > 0 then
                   timeleft = remainingMs / 1000

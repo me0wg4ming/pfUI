@@ -142,7 +142,8 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
           if this.np_startTime and this.np_duration then
             remaining = (this.np_startTime + this.np_duration) - GetTime()
           end
-        elseif this.np_auraSlot and GetPlayerAuraDuration then
+        elseif this.np_auraSlot and GetPlayerAuraDuration
+            and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.np_spellId]) then
           local durSpellId, remainingMs = GetPlayerAuraDuration(this.np_auraSlot - 1)
           if durSpellId == this.np_spellId and remainingMs and remainingMs > 0 then
             remaining = remainingMs / 1000
@@ -348,7 +349,8 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
               buff:Hide()
             end
           end
-        elseif buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration then
+        elseif buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration
+            and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[buff.np_spellId]) then
           local durSpellId, remainingMs = GetPlayerAuraDuration(buff.np_auraSlot - 1)
           if durSpellId == buff.np_spellId and remainingMs and remainingMs > 0 then
             timeleft = remainingMs / 1000
@@ -368,7 +370,8 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       local buff = buttons[i]
       if buff:IsShown() then
         local timeleft, stacks = 0, 0
-        if buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration then
+        if buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration
+            and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[buff.np_spellId]) then
           local durSpellId, remainingMs = GetPlayerAuraDuration(buff.np_auraSlot - 1)
           if durSpellId == buff.np_spellId and remainingMs and remainingMs > 0 then
             timeleft = remainingMs / 1000

@@ -175,7 +175,31 @@ local function ResolveSpellString(text, rec)
     return tostring(mult * val)
   end)
 
-  -- 2) $o1/$o2/$o3 - total over time: (dur/amp) * $s[N]
+  -- 2) $/divisor;varN - division: $s1 / divisor  e.g. $/1000;s1
+  text = string.gsub(text, "%$/(%d+);([smMoS])(%d)", function(divisor, var, idx)
+    divisor = tonumber(divisor)
+    idx = tonumber(idx)
+    local val = 0
+    if var == "s" or var == "S" then val = getS(idx)
+    elseif var == "m" then val = (bp and bp[idx] or 0) + 1
+    elseif var == "M" then val = (bp and bp[idx] or 0) + (ds and ds[idx] or 1)
+    elseif var == "o" then
+      local s = getS(idx)
+      local a = amp and amp[idx] or 0
+      val = (a > 0 and durMs and durMs > 0) and math.floor((durMs / a) * s) or s
+    end
+    if var == "S" then val = math.abs(val) end
+    if not divisor or divisor == 0 then return tostring(val) end
+    local result = val / divisor
+    -- Show as integer if clean, otherwise 1 decimal
+    if result == math.floor(result) then
+      return tostring(math.floor(result))
+    else
+      return string.format("%.1f", result)
+    end
+  end)
+
+  -- 3) $o1/$o2/$o3 - total over time: (dur/amp) * $s[N]
   text = string.gsub(text, "%$o(%d)", function(idx)
     idx = tonumber(idx)
     local s = getS(idx)
@@ -186,31 +210,31 @@ local function ResolveSpellString(text, rec)
     return tostring(s)
   end)
 
-  -- 3) $M1/$M2/$M3 - max value (with level scaling)
+  -- 4) $M1/$M2/$M3 - max value (with level scaling)
   text = string.gsub(text, "%$M(%d)", function(idx)
     idx = tonumber(idx)
     return tostring(getS(idx))
   end)
 
-  -- 4) $m1/$m2/$m3 - min value (with level scaling)
+  -- 5) $m1/$m2/$m3 - min value (with level scaling)
   text = string.gsub(text, "%$m(%d)", function(idx)
     idx = tonumber(idx)
     return tostring(getS(idx))
   end)
 
-  -- 5) $S1/$S2/$S3 - absolute value of $s
+  -- 6) $S1/$S2/$S3 - absolute value of $s
   text = string.gsub(text, "%$S(%d)", function(idx)
     idx = tonumber(idx)
     return tostring(math.abs(getS(idx)))
   end)
 
-  -- 6) $s1/$s2/$s3 - base value
+  -- 7) $s1/$s2/$s3 - base value
   text = string.gsub(text, "%$s(%d)", function(idx)
     idx = tonumber(idx)
     return tostring(getS(idx))
   end)
 
-  -- 7) $t1/$t2/$t3 - tick interval in seconds
+  -- 8) $t1/$t2/$t3 - tick interval in seconds
   text = string.gsub(text, "%$t(%d)", function(idx)
     idx = tonumber(idx)
     local a = amp and amp[idx] or 0
@@ -218,28 +242,28 @@ local function ResolveSpellString(text, rec)
     return "0"
   end)
 
-  -- 8) $e1/$e2/$e3 - points per combo point
+  -- 9) $e1/$e2/$e3 - points per combo point
   text = string.gsub(text, "%$e(%d)", function(idx)
     idx = tonumber(idx)
     if ppc and ppc[idx] then return tostring(ppc[idx]) end
     return "0"
   end)
 
-  -- 9) $h1/$h2/$h3 - chain targets
+  -- 10) $h1/$h2/$h3 - chain targets
   text = string.gsub(text, "%$h(%d)", function(idx)
     idx = tonumber(idx)
     if chain and chain[idx] then return tostring(chain[idx]) end
     return "0"
   end)
 
-  -- 10) $b1/$b2/$b3 - points per level
+  -- 11) $b1/$b2/$b3 - points per level
   text = string.gsub(text, "%$b(%d)", function(idx)
     idx = tonumber(idx)
     if rpl and rpl[idx] then return tostring(rpl[idx]) end
     return "0"
   end)
 
-  -- 11) $d - duration
+  -- 12) $d - duration
   text = string.gsub(text, "%$d", function()
     if durMs and durMs > 0 then
       return FormatDuration(durMs)
@@ -247,26 +271,26 @@ local function ResolveSpellString(text, rec)
     return "until cancelled"
   end)
 
-  -- 12) $a1/$a2/$a3 - radius (index, skip for now - just remove placeholder)
+  -- 13) $a1/$a2/$a3 - radius (index, skip for now - just remove placeholder)
   text = string.gsub(text, "%$a(%d)", function(idx)
     return ""
   end)
 
-  -- 13) $i - max affected targets
+  -- 14) $i - max affected targets
   if rec.maxAffectedTargets and rec.maxAffectedTargets > 0 then
     text = string.gsub(text, "%$i", tostring(rec.maxAffectedTargets))
   else
     text = string.gsub(text, "%$i", "")
   end
 
-  -- 14) $n - proc chance
+  -- 15) $n - proc chance
   if rec.procChance and rec.procChance > 0 then
     text = string.gsub(text, "%$n", tostring(rec.procChance))
   else
     text = string.gsub(text, "%$n", "")
   end
 
-  -- 15) $lSingular;Plural; - pick based on previous number
+  -- 16) $lSingular;Plural; - pick based on previous number
   text = string.gsub(text, "(%d+)(.-)%$l([^;]+);([^;]+);", function(num, between, singular, plural)
     if tonumber(num) == 1 then
       return num .. between .. singular
