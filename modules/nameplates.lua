@@ -413,7 +413,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local function CreateDebuffIcon(plate, index)
     plate.debuffs[index] = CreateFrame("Frame", plate.platename.."Debuff"..index, plate)
     plate.debuffs[index]:Hide()
-    plate.debuffs[index]:SetFrameLevel(1)
+    plate.debuffs[index]:SetFrameLevel(4)
 
     plate.debuffs[index].icon = plate.debuffs[index]:CreateTexture(nil, "BACKGROUND")
     plate.debuffs[index].icon:SetTexture(.3,1,.8,1)
@@ -430,6 +430,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     if pfUI.client <= 11200 and cfg.debuffanim ~= 1 then
       plate.debuffs[index].cd = CreateFrame("Frame", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index])
       plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
+      plate.debuffs[index].cd:SetFrameLevel(6)
       plate.debuffs[index].cd:SetScript("OnUpdate", CooldownFrame_OnUpdateModel)
       plate.debuffs[index].cd.AdvanceTime = DoNothing
       plate.debuffs[index].cd.SetSequence = DoNothing
@@ -438,6 +439,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       -- Use CooldownFrameTemplate for animation or TBC+
       plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
       plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
+      plate.debuffs[index].cd:SetFrameLevel(6)
     end
 
     -- Set initial config flags (will be cached per-cooldown later)
