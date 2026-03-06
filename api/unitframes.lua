@@ -51,11 +51,14 @@ end
 
 local maxdurations = {}
 local function BuffOnUpdate()
-  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end
+  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
 
   -- Nampower path: use stored auraSlot + spellId
-  if this.libdebuff_auraSlot and this.libdebuff_spellId and GetPlayerAuraDuration
-      and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.libdebuff_spellId]) then
+  if this.libdebuff_spellId and pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.libdebuff_spellId] then
+    CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    return
+  end
+  if this.libdebuff_auraSlot and this.libdebuff_spellId and GetPlayerAuraDuration then
     if this.libdebuff_auraSlot == -1 then
       -- Overflow buff: use stored start/duration from IterBuffs callback
       if this.libdebuff_dur and this.libdebuff_start then
@@ -126,7 +129,7 @@ local function BuffOnUpdate()
 end
 
 local function TargetBuffOnUpdate()
-  if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .1 end
+  if ( this.tick or .1) > GetTime() then return else this.tick = GetTime() + .2 end
 
   -- Nampower path: use stored auraSlot + spellId for timer
   if this.libdebuff_auraSlot and this.libdebuff_spellId then
@@ -250,16 +253,17 @@ local function BuffOnClick()
   local parent = this:GetParent()
   if parent.label == "player" then
     if this.np_spellId and CancelPlayerAuraSpellId then
-      CancelPlayerAuraSpellId(this.np_spellId, 1)
+      -- Only optimistically hide overflow buffs (slot -1) since they have no aura slot
+      -- For normal buffs, let the server response + PLAYER_AURAS_CHANGED handle the hide
+      -- to avoid flicker when the buff cannot be cancelled
       if this.np_auraSlot == -1 and pfUI.libdebuff_overflow_buffs then
         pfUI.libdebuff_overflow_buffs[this.np_spellId] = nil
+        this:Hide()
+        pfUI_NotifyBuffCancel()
       end
-      this:Hide()
-      pfUI_NotifyBuffCancel()
+      CancelPlayerAuraSpellId(this.np_spellId, 1)
     elseif this.libdebuff_spellId and CancelPlayerAuraSpellId then
       CancelPlayerAuraSpellId(this.libdebuff_spellId, 1)
-      this:Hide()
-      pfUI_NotifyBuffCancel()
     else
       CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
     end
@@ -339,7 +343,8 @@ local function DebuffOnEnter()
   if this.np_spellId and lt and lt.SetSpellByID then
     -- Nampower: build tooltip from SpellRec via spellId (same as buff.lua)
     local remaining = 0
-    if this.np_auraSlot and GetPlayerAuraDuration then
+    if this.np_auraSlot and GetPlayerAuraDuration
+      and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.np_spellId]) then
       local durSpellId, remainingMs = GetPlayerAuraDuration(this.np_auraSlot - 1)
       if durSpellId == this.np_spellId and remainingMs and remainingMs > 0 then
         remaining = remainingMs / 1000

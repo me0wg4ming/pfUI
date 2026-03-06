@@ -126,15 +126,24 @@ local function ResolveSpellString(text, rec)
   -- Duration in ms (base, no modifiers)
   local durMs
   if GetSpellDuration then
-    durMs = GetSpellDuration(rec.id, 1)
+    durMs = GetSpellDuration(rec.id)  -- with modifiers (talents etc.)
   end
 
   -- 0) Cross-spell references: $<spellId><var><idx>
   --    e.g. $3025s1 = get $s1 from spell 3025
+  -- Cross-spell duration: $<spellId>d  e.g. $49560d = duration of spell 49560
+  text = string.gsub(text, "%$(%d%d+)d", function(refId)
+    refId = tonumber(refId)
+    if not GetSpellDuration then return "0" end
+    local refDur = GetSpellDuration(refId, 1)
+    if not refDur or refDur <= 0 then return "0" end
+    return tostring(math.floor(refDur / 1000)) .. " sec"
+  end)
+
   text = string.gsub(text, "%$(%d%d+)([smMoStT])(%d)", function(refId, var, idx)
     refId = tonumber(refId)
     idx = tonumber(idx)
-    local refOk, refRec = pcall(GetSpellRec, refId)
+    local refOk, refRec = pcall(GetSpellRec, refId, 1)  -- copy=1 to avoid overwriting reusable table
     if not refOk or not refRec then return "0" end
     local refBp = refRec.effectBasePoints
     local refDs = refRec.effectDieSides
@@ -142,7 +151,15 @@ local function ResolveSpellString(text, rec)
     local refAmp = refRec.effectAmplitude
     if not refBp or not refBp[idx] then return "0" end
     local refS = calcS(refBp, refDs, refRpl, refRec.spellLevel, idx)
-    if var == "s" then return tostring(refS)
+    if var == "s" then
+      -- Show range "X to Y" if dieSides > 1 (like the real client does)
+      local dSides = refDs and refDs[idx] or 1
+      if dSides > 1 then
+        local minVal = math.abs(refBp[idx] + 1)
+        local maxVal = math.abs(refBp[idx] + dSides + 1)
+        return tostring(minVal) .. " to " .. tostring(maxVal)
+      end
+      return tostring(math.abs(refS))
     elseif var == "S" then return tostring(math.abs(refS))
     elseif var == "m" then return tostring(refBp[idx] + 1)
     elseif var == "M" then return tostring(refBp[idx] + (refDs and refDs[idx] or 1))
@@ -228,10 +245,16 @@ local function ResolveSpellString(text, rec)
     return tostring(math.abs(getS(idx)))
   end)
 
-  -- 7) $s1/$s2/$s3 - base value
+  -- 7) $s1/$s2/$s3 - base value (range if dieSides > 1, always absolute)
   text = string.gsub(text, "%$s(%d)", function(idx)
     idx = tonumber(idx)
-    return tostring(getS(idx))
+    local dSides = ds and ds[idx] or 1
+    if dSides > 1 then
+      local minVal = math.abs((bp and bp[idx] or 0) + 1)
+      local maxVal = math.abs((bp and bp[idx] or 0) + dSides + 1)
+      return tostring(minVal) .. " to " .. tostring(maxVal)
+    end
+    return tostring(math.abs(getS(idx)))
   end)
 
   -- 8) $t1/$t2/$t3 - tick interval in seconds
@@ -290,7 +313,26 @@ local function ResolveSpellString(text, rec)
     text = string.gsub(text, "%$n", "")
   end
 
-  -- 16) $lSingular;Plural; - pick based on previous number
+  -- 16) $h (no index) - proc chance (same as $n)
+  if rec.procChance and rec.procChance > 0 then
+    text = string.gsub(text, "%$h", tostring(rec.procChance))
+  else
+    text = string.gsub(text, "%$h", "")
+  end
+
+  -- 17) $<spellId>d - duration of another spell by ID
+  text = string.gsub(text, "%$(%d+)d", function(refId)
+    refId = tonumber(refId)
+    if refId and GetSpellRec then
+      local ok2, rec2 = pcall(GetSpellRec, refId)
+      if ok2 and rec2 and rec2.durationMs and rec2.durationMs > 0 then
+        return FormatDuration(rec2.durationMs)
+      end
+    end
+    return "?"
+  end)
+
+  -- 18) $lSingular;Plural; - pick based on previous number
   text = string.gsub(text, "(%d+)(.-)%$l([^;]+);([^;]+);", function(num, between, singular, plural)
     if tonumber(num) == 1 then
       return num .. between .. singular
@@ -305,7 +347,7 @@ end
 -- Public API: get resolved tooltip text for a spell
 libtooltip.GetSpellTooltip = function(self, spellId)
   if not spellId or not GetSpellRec then return nil end
-  local ok, rec = pcall(GetSpellRec, spellId)
+  local ok, rec = pcall(GetSpellRec, spellId, 1)  -- copy=1
   if not ok or not rec then return nil end
   if not rec.tooltip or rec.tooltip == "" then return nil end
   return ResolveSpellString(rec.tooltip, rec)
@@ -314,7 +356,7 @@ end
 -- Public API: get resolved description text for a spell
 libtooltip.GetSpellDescription = function(self, spellId)
   if not spellId or not GetSpellRec then return nil end
-  local ok, rec = pcall(GetSpellRec, spellId)
+  local ok, rec = pcall(GetSpellRec, spellId, 1)  -- copy=1
   if not ok or not rec then return nil end
   if not rec.description or rec.description == "" then return nil end
   return ResolveSpellString(rec.description, rec)
@@ -351,7 +393,7 @@ end
 -- buffType:      (optional) "HELPFUL" or "HARMFUL"
 libtooltip.SetSpellByID = function(self, tooltip, spellId, remainingSec, dispelType, buffType)
   if not spellId or not GetSpellRec then return false end
-  local ok, rec = pcall(GetSpellRec, spellId)
+  local ok, rec = pcall(GetSpellRec, spellId, 1)  -- copy=1
   if not ok or not rec then return false end
 
   -- Resolve dispel type
