@@ -84,12 +84,21 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
 
   pfUI.uf.raid:Hide()
   pfUI.uf.raid:RegisterEvent("RAID_ROSTER_UPDATE")
+  pfUI.uf.raid:RegisterEvent("PARTY_MEMBERS_CHANGED")
+  pfUI.uf.raid:RegisterEvent("PARTY_LEADER_CHANGED")
   pfUI.uf.raid:RegisterEvent("VARIABLES_LOADED")
-  pfUI.uf.raid:SetScript("OnEvent", function() this:Show() end)
+  pfUI.uf.raid:SetScript("OnEvent", function()
+    this:Show()
+    -- Debounce: delay update by 0.5s to batch rapid roster changes (mass swaps)
+    this.pendingUpdate = GetTime() + 0.5
+  end)
   pfUI.uf.raid:SetScript("OnUpdate", function()
-    -- Throttle raid roster updates to 1 FPS
+    -- Wait for debounce: don't update until 0.5s after last event
+    if this.pendingUpdate and GetTime() < this.pendingUpdate then return end
+    -- Throttle raid roster updates to 1 FPS max
     if (this.tick or 0) > GetTime() then return end
     this.tick = GetTime() + 1.0
+    this.pendingUpdate = nil
 
     -- don't proceed without raid or during combat
     if not UnitInRaid("player") or (InCombatLockdown and InCombatLockdown()) then return end
