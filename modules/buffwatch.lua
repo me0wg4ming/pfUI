@@ -4,7 +4,6 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
 
   local fcache = {}
   local function BuffIsVisible(config, name)
-    -- return if all buffs should be shown
     if config.filter == "none" then return true end
 
     local index = tostring(config)
@@ -43,58 +42,28 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     return unpack(rgbcache[text])
   end
 
-
   local function GetSafeTop(frame)
     if frame and frame.IsShown and frame:IsShown() and frame:IsVisible() then
       return frame:GetTop(), frame
     end
-
     return 0
   end
 
-  -- iterate over given tables and return the first frame that is shown
   local function GetTopAnchor(anchors)
     local top, anchor = 0, anchors[1]
 
     for _, tbl in pairs(anchors) do
-
-      -- in case of multiple anchor elements, iterate over each one
       for i=32, 1, -1 do
         if GetSafeTop(tbl[i]) > top then
           top, anchor = GetSafeTop(tbl[i])
         end
       end
-
-      -- check top of regular anchor elements
       if GetSafeTop(tbl) > top then
         top, anchor = GetSafeTop(tbl)
       end
     end
 
     return anchor
-  end
-
-  local function GetBuffData(unit, id, type, selfdebuff)
-    if unit == "player" then
-      local bid = GetPlayerBuff(PLAYER_BUFF_START_ID+id, type)
-      local stacks = GetPlayerBuffApplications(bid)
-      local remaining = GetPlayerBuffTimeLeft(bid)
-      local texture = GetPlayerBuffTexture(bid)
-      local name
-
-      if texture then
-        scanner:SetPlayerBuff(bid)
-        name = scanner:Line(1)
-      end
-
-      return remaining, texture, name, stacks
-    elseif libdebuff and selfdebuff then
-      local name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unit, id)
-      return timeleft, texture, name, stacks
-    elseif libdebuff then
-      local name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unit, id)
-      return timeleft, texture, name, stacks
-    end
   end
 
   local function StatusBarOnClick()
@@ -233,152 +202,228 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     return frame
   end
 
+  -- Reusable sorted-insert buffer (avoids table.sort on 32 entries every refresh)
+  local sortbuf = {}
+
   local function RefreshBuffBarFrame(frame)
-    -- reinitialize all active buffs
-    local selfdebuff = frame.config.selfdebuff == "1"
+    local config = frame.config
+    local selfdebuff = config.selfdebuff == "1"
+    local isHarmful = frame.type == "HARMFUL"
+    local unit = frame.unit
+    local threshold = frame.threshold
 
-    for i=1,32 do
-      local timeleft, texture, name, stacks = GetBuffData(frame.unit, i, frame.type, selfdebuff)
-      timeleft = timeleft or 0
+    -- Clear sort buffer
+    local n = 0
 
-      if texture and name and name ~= "" and BuffIsVisible(frame.config, name) then
-        frame.buffs[i][1] = timeleft
-        frame.buffs[i][2] = i
-        frame.buffs[i][3] = name
-        frame.buffs[i][4] = texture
-        frame.buffs[i][5] = stacks
+    if libdebuff and (GetUnitGUID or unit == "player") then
+      -- Nampower path: use IterDebuffs/IterBuffs - only iterates occupied slots
+      if isHarmful then
+        if unit == "player" then
+          libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft)
+            if not tex or not spellName or spellName == "" then return end
+            if not BuffIsVisible(config, spellName) then return end
+            timeleft = timeleft or 0
+            if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
+            n = n + 1
+            sortbuf[n] = sortbuf[n] or {}
+            sortbuf[n][1] = timeleft
+            sortbuf[n][2] = auraSlot
+            sortbuf[n][3] = spellName
+            sortbuf[n][4] = tex
+            sortbuf[n][5] = st or 1
+            sortbuf[n][6] = dtype
+            sortbuf[n][7] = spellId
+          end)
+        else
+          libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft)
+            if not tex or not spellName or spellName == "" then return end
+            if not BuffIsVisible(config, spellName) then return end
+            timeleft = timeleft or 0
+            if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
+            n = n + 1
+            sortbuf[n] = sortbuf[n] or {}
+            sortbuf[n][1] = timeleft
+            sortbuf[n][2] = auraSlot
+            sortbuf[n][3] = spellName
+            sortbuf[n][4] = tex
+            sortbuf[n][5] = st or 1
+            sortbuf[n][6] = dtype
+            sortbuf[n][7] = spellId
+          end)
+        end
       else
-        frame.buffs[i][1] = 0
-        frame.buffs[i][2] = nil
-        frame.buffs[i][3] = nil
-        frame.buffs[i][4] = nil
-        frame.buffs[i][5] = 0
+        -- HELPFUL: IterBuffs
+        libdebuff:IterBuffs(unit, function(auraSlot, spellId, spellName, tex, st, tl, dur)
+          if not tex or not spellName or spellName == "" then return end
+          if not BuffIsVisible(config, spellName) then return end
+          local timeleft = tl or 0
+          if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
+          n = n + 1
+          sortbuf[n] = sortbuf[n] or {}
+          sortbuf[n][1] = timeleft
+          sortbuf[n][2] = auraSlot
+          sortbuf[n][3] = spellName
+          sortbuf[n][4] = tex
+          sortbuf[n][5] = st or 1
+          sortbuf[n][6] = nil
+          sortbuf[n][7] = spellId
+        end)
+      end
+    else
+      -- Blizzard fallback: original 32-slot loop
+      for i = 1, 32 do
+        local timeleft, texture, name, stacks
+        if unit == "player" then
+          local bid = GetPlayerBuff(PLAYER_BUFF_START_ID+i, frame.type)
+          stacks = GetPlayerBuffApplications(bid)
+          timeleft = GetPlayerBuffTimeLeft(bid)
+          texture = GetPlayerBuffTexture(bid)
+          if texture then
+            scanner:SetPlayerBuff(bid)
+            name = scanner:Line(1)
+          end
+        elseif isHarmful and selfdebuff then
+          name, _, texture, stacks, _, _, timeleft = libdebuff:UnitOwnDebuff(unit, i)
+        else
+          name, _, texture, stacks, _, _, timeleft = libdebuff:UnitDebuff(unit, i)
+        end
+
+        timeleft = timeleft or 0
+        if texture and name and name ~= "" and BuffIsVisible(config, name) then
+          if timeleft == 0 or timeleft < threshold or threshold == -1 then
+            n = n + 1
+            sortbuf[n] = sortbuf[n] or {}
+            sortbuf[n][1] = timeleft
+            sortbuf[n][2] = i
+            sortbuf[n][3] = name
+            sortbuf[n][4] = texture
+            sortbuf[n][5] = stacks or 1
+            sortbuf[n][6] = nil
+            sortbuf[n][7] = nil
+          end
+        end
       end
     end
 
-    table.sort(frame.buffs, frame.buffcmp)
+    -- Sort only the active entries (n entries, not 32)
+    if n > 1 then
+      table.sort(sortbuf, frame.buffcmp)
+    end
 
-    -- create a buff bar for each below threshold
-    local bar = 1
-    for id, data in pairs(frame.buffs) do
-      if data[1] and ((data[1] ~= 0 and data[1] < frame.threshold) or frame.threshold == -1) -- timeleft checks
-        and data[3] and data[3] ~= "" -- buff has a name
-        and data[4] and data[4] ~= "" -- buff has a texture
-      then
-        -- For player: no slot in uuid (slots shift when other buffs expire)
-        -- For target: include slot (multiple players can have same debuff, slot identifies who)
-        local uuid
-        if frame.unit == "player" then
-          uuid = data[4] .. data[3] -- texture + name only
-        else
-          uuid = data[4] .. data[3] .. data[2] -- texture + name + slot
-        end
+    -- Update bars
+    for bar = 1, n do
+      local data = sortbuf[bar]
+      local timeleft = data[1]
+      local slot     = data[2]
+      local name     = data[3]
+      local texture  = data[4]
+      local stacks   = data[5]
+      local dtype    = data[6]
+      local spellId  = data[7]
 
-        -- update bar data
-        frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)
-        frame.bars[bar].id = data[2]
-        frame.bars[bar].unit = frame.unit
-        frame.bars[bar].type = frame.type
-        frame.bars[bar].endtime = GetTime() + ( data[1] > 0 and data[1] or -1 )
-
-        -- update max duration the cached remaining values is less than
-        -- the real one, indicates a buff renewal
-        frame.durations[uuid] = frame.durations[uuid] or {}
-        if not frame.durations[uuid][1] or frame.durations[uuid][1] < data[1] then
-          frame.durations[uuid][2] = data[1] -- max
-        end
-        frame.durations[uuid][1] = data[1] -- current
-
-        -- cache max stacks for the buff
-        if not frame.charges[uuid] or frame.charges[uuid] < data[5] then
-          frame.charges[uuid] = data[5]
-        end
-
-        -- set name
-        if frame.bars[bar].cacheName ~= data[3] then
-          frame.bars[bar].cacheName = data[3]
-          frame.bars[bar].text:SetText(data[3])
-
-          -- calculate dynamic auto color
-          local r, g, b
-          if frame.type == "HARMFUL" then
-            r, g, b = 1, .2, .2
-            local _, _, dtype = UnitDebuff(frame.unit, data[2])
-            if dtype and DebuffTypeColor[dtype] then
-              r,g,b = DebuffTypeColor[dtype].r,DebuffTypeColor[dtype].g,DebuffTypeColor[dtype].b
-            end
-          else
-            r,g,b = str2rgb(data[3])
-          end
-
-          -- set auto background color
-          if frame.config.dtypebg == "1" then
-            frame.bars[bar].bar:SetStatusBarColor(r,g,b,1)
-          end
-
-          -- set auto border color
-          if frame.config.dtypeborder == "1" then
-            frame.bars[bar].backdrop:SetBackdropBorderColor(r,g,b,1)
-          end
-
-          -- set auto text color
-          if frame.config.dtypetext == "1" then
-            frame.bars[bar].text:SetTextColor(r,g,b,1)
-          end
-        end
-
-        -- set texture
-        if frame.bars[bar].cacheTexture ~= data[4] then
-          frame.bars[bar].cacheTexture = data[4]
-          frame.bars[bar].icon:SetTexture(data[4])
-        end
-
-        -- cache maxduration
-        if frame.bars[bar].cacheMaxDuration ~= frame.durations[uuid][2] then
-          frame.bars[bar].cacheMaxDuration = frame.durations[uuid][2]
-          frame.bars[bar].bar:SetMinMaxValues(0, frame.durations[uuid][2])
-        end
-
-        -- set stacks
-        if data[5] > 1 then
-          local stacks_percentage = data[5] / (frame.charges[uuid] * .01)
-          local sr, sg, sb, sa
-          if stacks_percentage >= 90 then
-            sr, sg, sb, sa = .3, 1, .3, 1
-          elseif stacks_percentage >= 60 then
-            sr, sg, sb, sa = 1, 1, .3, 1
-          elseif stacks_percentage >= 0 then
-            sr, sg, sb, sa = 1, .3, .3, 1
-          end
-          if frame.config.colorstacks == "1" then
-            frame.bars[bar].stacks:SetText(rgbhex(sr,sg,sb) .. data[5])
-          else
-            frame.bars[bar].stacks:SetText(data[5])
-          end
-        else
-          frame.bars[bar].stacks:SetText("")
-        end
-
-        frame.bars[bar]:Show()
-        bar = bar + 1
+      -- uuid for duration/charge tracking
+      local uuid
+      if unit == "player" then
+        uuid = texture .. name
+      else
+        uuid = texture .. name .. slot
       end
+
+      frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)
+      frame.bars[bar].id = slot
+      frame.bars[bar].unit = unit
+      frame.bars[bar].type = frame.type
+      frame.bars[bar].endtime = GetTime() + ( timeleft > 0 and timeleft or -1 )
+
+      -- duration tracking
+      frame.durations[uuid] = frame.durations[uuid] or {}
+      if not frame.durations[uuid][1] or frame.durations[uuid][1] < timeleft then
+        frame.durations[uuid][2] = timeleft
+      end
+      frame.durations[uuid][1] = timeleft
+
+      -- stacks tracking
+      if not frame.charges[uuid] or frame.charges[uuid] < stacks then
+        frame.charges[uuid] = stacks
+      end
+
+      -- set name + colors (only when changed)
+      if frame.bars[bar].cacheName ~= name then
+        frame.bars[bar].cacheName = name
+        frame.bars[bar].text:SetText(name)
+
+        local r, g, b
+        if isHarmful then
+          r, g, b = 1, .2, .2
+          -- Dispel type: from Nampower SpellRec or Blizzard UnitDebuff fallback
+          local dt = dtype
+          if not dt and spellId and GetSpellRecField then
+            dt = GetSpellRecField(spellId, "dispelType")
+          end
+          if not dt then
+            local _, _, blizzDtype = UnitDebuff(unit, slot)
+            dt = blizzDtype
+          end
+          if dt and DebuffTypeColor[dt] then
+            r,g,b = DebuffTypeColor[dt].r, DebuffTypeColor[dt].g, DebuffTypeColor[dt].b
+          end
+        else
+          r,g,b = str2rgb(name)
+        end
+
+        if config.dtypebg == "1" then
+          frame.bars[bar].bar:SetStatusBarColor(r,g,b,1)
+        end
+        if config.dtypeborder == "1" then
+          frame.bars[bar].backdrop:SetBackdropBorderColor(r,g,b,1)
+        end
+        if config.dtypetext == "1" then
+          frame.bars[bar].text:SetTextColor(r,g,b,1)
+        end
+      end
+
+      -- set texture (only when changed)
+      if frame.bars[bar].cacheTexture ~= texture then
+        frame.bars[bar].cacheTexture = texture
+        frame.bars[bar].icon:SetTexture(texture)
+      end
+
+      -- set max duration (only when changed)
+      if frame.bars[bar].cacheMaxDuration ~= frame.durations[uuid][2] then
+        frame.bars[bar].cacheMaxDuration = frame.durations[uuid][2]
+        frame.bars[bar].bar:SetMinMaxValues(0, frame.durations[uuid][2] or 1)
+      end
+
+      -- set stacks
+      if stacks > 1 then
+        local stacks_percentage = stacks / (frame.charges[uuid] * .01)
+        local sr, sg, sb
+        if stacks_percentage >= 90 then
+          sr, sg, sb = .3, 1, .3
+        elseif stacks_percentage >= 60 then
+          sr, sg, sb = 1, 1, .3
+        else
+          sr, sg, sb = 1, .3, .3
+        end
+        if config.colorstacks == "1" then
+          frame.bars[bar].stacks:SetText(rgbhex(sr,sg,sb) .. stacks)
+        else
+          frame.bars[bar].stacks:SetText(stacks)
+        end
+      else
+        frame.bars[bar].stacks:SetText("")
+      end
+
+      frame.bars[bar]:Show()
     end
 
     -- hide remaining bars
-    for i = bar, table.getn(frame.bars) do
+    for i = n + 1, table.getn(frame.bars) do
       frame.bars[i]:Hide()
     end
   end
 
-  -- Create a new Buff Bar
-  local function BuffBarFrameOnUpdate()
-    if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .4 end
-    RefreshBuffBarFrame(this)
-    this:RefreshPosition()
-  end
-
   local function RefreshPosition(self)
-    -- avoid position changes during unlock
     if pfUI.unlock and pfUI.unlock:IsShown() then return end
 
     if not pfUI_config["position"][self:GetName()] then
@@ -410,8 +455,29 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
 
     frame.RefreshPosition = RefreshPosition
 
-    -- OnEvent (UNIT_AURA) doesn't trigger properly on buff refresh
-    frame:SetScript("OnUpdate", BuffBarFrameOnUpdate)
+    -- Event-driven refresh: UNIT_AURA / PLAYER_AURAS_CHANGED
+    -- OnUpdate only runs the timer sweep on visible bars (StatusBarOnUpdate handles that per-bar)
+    -- BuffBarFrame itself only needs to re-sort/re-display when auras actually change
+    frame:RegisterEvent("UNIT_AURA")
+    if frame.unit == "player" then
+      frame:RegisterEvent("PLAYER_AURAS_CHANGED")
+    end
+    frame:SetScript("OnEvent", function()
+      if event == "PLAYER_AURAS_CHANGED" and this.unit == "player" then
+        RefreshBuffBarFrame(this)
+        this:RefreshPosition()
+      elseif event == "UNIT_AURA" and arg1 == this.unit then
+        RefreshBuffBarFrame(this)
+        this:RefreshPosition()
+      end
+    end)
+
+    -- Fallback heartbeat: every 2s in case events are missed (e.g. out of range)
+    frame:SetScript("OnUpdate", function()
+      if (this.tick or 1) > GetTime() then return else this.tick = GetTime() + 2 end
+      RefreshBuffBarFrame(this)
+      this:RefreshPosition()
+    end)
 
     return frame
   end

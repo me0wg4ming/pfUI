@@ -1571,10 +1571,11 @@ function pfUI.uf.OnUpdate()
         pfUI.uf:RefreshIndicators(this)
       end
 
-      -- Re-trigger aura refresh when unit comes back into range (GetUnitField starts returning data again)
+      -- Re-trigger aura refresh when unit comes back into range
+      -- Use "health" (scalar) not "aura" (table) to avoid GC pressure every frame
       if this.label ~= "player" and GetUnitGUID and GetUnitField then
         local guid = GetUnitGUID(unitstr)
-        local inRange = guid and GetUnitField(guid, "aura") ~= nil
+        local inRange = guid and GetUnitField(guid, "health") ~= nil
         if inRange ~= this.lastInRange then
           this.lastInRange = inRange
           if inRange then
@@ -1695,13 +1696,15 @@ function pfUI.uf.OnUpdate()
     if timeSinceEvent > 0.5 and this.label and _G.UnitExists(this.label .. this.id) then
       local needsFallback = false
       
-      -- Check if Nampower can provide aura data (not just health - auras go nil first when out of range)
+      -- Check if Nampower can provide aura data
+      -- GetUnitField("aura") returns nil when unit is out of range
+      -- Use field "health" (scalar, no table alloc) as lightweight range probe
       if GetUnitField and GetUnitGUID then
         local unitstr = this.label .. this.id
         local guid = GetUnitGUID(unitstr)
         if guid then
-          local auras = GetUnitField(guid, "aura")
-          if not auras then
+          local hp = GetUnitField(guid, "health")
+          if not hp then
             needsFallback = true
           end
         else
@@ -1731,14 +1734,27 @@ function pfUI.uf.OnUpdate()
         -- Nampower not available or no data - trigger fallback update
         this.update_base = true
         this.update_aura = true
+        this.lastEventUpdate = now  -- prevent immediate re-trigger next frame
         if pfUI.uf.stats and pfUI.uf.stats.enabled then
           pfUI.uf.stats.heartbeatUpdates = pfUI.uf.stats.heartbeatUpdates + 1
         end
       else
-        -- Nampower working fine - trigger aura update to switch back from Blizzard fallback
-        this.update_aura = true
-        if pfUI.uf.stats and pfUI.uf.stats.enabled then
-          pfUI.uf.stats.heartbeatUpdates = pfUI.uf.stats.heartbeatUpdates + 1
+        -- Nampower working fine - only trigger aura update if we're currently in Blizzard fallback
+        -- Check if any buff frame has blizzard_slot set (= Blizzard fallback active)
+        local needsSwitch = false
+        if this.buffs then
+          for i = 1, 4 do
+            if this.buffs[i] and this.buffs[i].blizzard_slot then
+              needsSwitch = true
+              break
+            end
+          end
+        end
+        if needsSwitch then
+          this.update_aura = true
+          if pfUI.uf.stats and pfUI.uf.stats.enabled then
+            pfUI.uf.stats.heartbeatUpdates = pfUI.uf.stats.heartbeatUpdates + 1
+          end
         end
       end
     else
@@ -1770,9 +1786,14 @@ function pfUI.uf.OnUpdate()
   else
     -- process individual events
     if this.update_aura then
-      pfUI.uf:RefreshUnit(this, "aura")
-      this.update_aura = nil
-      this.update_base = true
+      -- Throttle aura refresh to max 5/s to handle UNIT_AURA spam (e.g. training dummies)
+      local auraThrottle = 0.2
+      if not this.lastAuraRefresh or (now - this.lastAuraRefresh) >= auraThrottle then
+        pfUI.uf:RefreshUnit(this, "aura")
+        this.update_aura = nil
+        this.update_base = true
+        this.lastAuraRefresh = now
+      end
     end
 
     if this.update_portrait then
@@ -2375,6 +2396,7 @@ function pfUI.uf:RefreshUnit(unit, component)
         if not unit.buffs[i] then break end
 
         if unit.label == "player" then
+          -- Player is always in range of self - use GetPlayerBuff as Blizzard fallback
           stacks = GetPlayerBuffApplications(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
           texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+i,"HELPFUL"))
         elseif spilloverFilter and spilloverFilter[i] then

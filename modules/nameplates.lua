@@ -90,6 +90,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end
   
   local debuffCache = {}    -- guid -> { [spellID] = { start, duration } }
+  -- Reusable per-plate debuff display buffer (avoid GC churn from per-call table creation)
+  local debuffDisplayBuf = {}  -- [i] = { effect, texture, stacks, dtype, duration, timeleft }
+  for i = 1, 16 do debuffDisplayBuf[i] = {} end
   local threatMemory = {}   -- guid -> true if mob had player targeted
   local debuffSeen = {}     -- reusable table for debuff tracking (avoid GC churn)
 
@@ -336,20 +339,27 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
   local function PlateCacheDebuffs(self, unitstr, verify)
     if not self.debuffcache then self.debuffcache = {} end
-    if not libdebuff then return end  -- Safety check
+    if not libdebuff then return end
 
+    local selfdebuff = unitstr and C.nameplates.selfdebuff == "1"
+    local now = GetTime()
+
+    -- Clear existing cache slots
     for id = 1, 16 do
-      local effect, _, texture, stacks, _, duration, timeleft
-
-      if unitstr and C.nameplates.selfdebuff == "1" then
-        effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, id)
-      else
-        effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
+      if self.debuffcache[id] then
+        self.debuffcache[id].empty = true
       end
+    end
 
-      if effect and timeleft and timeleft > 0 then
-        local start = GetTime() - ( (duration or 0) - ( timeleft or 0) )
-        local stop = GetTime() + ( timeleft or 0 )
+    -- Use IterDebuffs if Nampower available, else fall back to slot loop
+    if unitstr and libdebuff.IterDebuffs and GetUnitGUID then
+      local id = 0
+      libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
+        if not effect or not timeleft or timeleft <= 0 then return end
+        id = id + 1
+        if id > 16 then return end
+        local start = now - ( (duration or 0) - ( timeleft or 0) )
+        local stop = now + timeleft
         self.debuffcache[id] = self.debuffcache[id] or {}
         self.debuffcache[id].effect = effect
         self.debuffcache[id].texture = texture
@@ -358,6 +368,27 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         self.debuffcache[id].start = start
         self.debuffcache[id].stop = stop
         self.debuffcache[id].empty = nil
+      end)
+    else
+      for id = 1, 16 do
+        local effect, _, texture, stacks, _, duration, timeleft
+        if selfdebuff then
+          effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, id)
+        else
+          effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
+        end
+        if effect and timeleft and timeleft > 0 then
+          local start = now - ( (duration or 0) - ( timeleft or 0) )
+          local stop = now + timeleft
+          self.debuffcache[id] = self.debuffcache[id] or {}
+          self.debuffcache[id].effect = effect
+          self.debuffcache[id].texture = texture
+          self.debuffcache[id].stacks = stacks
+          self.debuffcache[id].duration = duration or 0
+          self.debuffcache[id].start = start
+          self.debuffcache[id].stop = stop
+          self.debuffcache[id].empty = nil
+        end
       end
     end
 
@@ -1175,15 +1206,46 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       end
 
       -- update all debuff icons
+      -- Use IterDebuffs when Nampower available to avoid blind 16-slot loop
+      -- debuffDisplayBuf is a module-level reusable buffer (no GC churn)
+      local debuffCount = 0
+      for i = 1, 16 do debuffDisplayBuf[i].effect = nil end  -- clear previous
+      if unitstr and libdebuff and libdebuff.IterDebuffs and GetUnitGUID then
+        libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
+          debuffCount = debuffCount + 1
+          if debuffCount > 16 then return end
+          local b = debuffDisplayBuf[debuffCount]
+          b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft = effect, texture, stacks, dtype, duration, timeleft
+        end)
+      elseif unitstr and libdebuff then
+        for i = 1, 16 do
+          local effect, rank, texture, stacks, dtype, duration, timeleft
+          if C.nameplates.selfdebuff == "1" then
+            effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, i)
+          else
+            effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
+          end
+          if effect then
+            debuffCount = debuffCount + 1
+            local b = debuffDisplayBuf[debuffCount]
+            b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft = effect, texture, stacks, dtype, duration, timeleft
+          end
+        end
+      elseif plate.verify == verify then
+        for i = 1, 16 do
+          local effect, rank, texture, stacks, dtype, duration, timeleft = plate:UnitDebuff(i)
+          if effect then
+            debuffCount = debuffCount + 1
+            local b = debuffDisplayBuf[debuffCount]
+            b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft = effect, texture, stacks, dtype, duration, timeleft
+          end
+        end
+      end
       for i = 1, 16 do
-        local effect, rank, texture, stacks, dtype, duration, timeleft
-
-        if unitstr and C.nameplates.selfdebuff == "1" and libdebuff then
-          effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, i)
-        elseif unitstr and libdebuff then
-          effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
-        elseif plate.verify == verify then
-          effect, rank, texture, stacks, dtype, duration, timeleft = plate:UnitDebuff(i)
+        local effect, texture, stacks, dtype, duration, timeleft
+        if debuffDisplayBuf[i].effect then
+          local b = debuffDisplayBuf[i]
+          effect, texture, stacks, dtype, duration, timeleft = b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft
         end
 
         if effect and texture and DebuffFilter(effect) then

@@ -430,6 +430,17 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       local border = _G[pfUI.bags[bag].slots[slot].frame:GetName() .. "NormalTexture"]
       border:SetTexture("")
 
+      -- Throttle the template's OnUpdate to reduce GC pressure when hovering items
+      -- The template's default OnUpdate re-scans tooltip every frame; we limit to 0.2s
+      local templateOnUpdate = pfUI.bags[bag].slots[slot].frame:GetScript("OnUpdate")
+      if templateOnUpdate then
+        pfUI.bags[bag].slots[slot].frame:SetScript("OnUpdate", function()
+          if (this.tooltipTick or 0) > GetTime() then return end
+          this.tooltipTick = GetTime() + 0.2
+          templateOnUpdate(this)
+        end)
+      end
+
       if ShaguScore then
         pfUI.bags[bag].slots[slot].frame.scoreText = pfUI.bags[bag].slots[slot].frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         pfUI.bags[bag].slots[slot].frame.scoreText:SetFont(pfUI.font_default, 12, "OUTLINE")
