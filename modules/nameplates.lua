@@ -1212,6 +1212,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       for i = 1, 16 do debuffDisplayBuf[i].effect = nil end  -- clear previous
       if unitstr and libdebuff and libdebuff.IterDebuffs and GetUnitGUID then
         libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
+          if not texture or string.find(texture, "QuestionMark") then return end
           debuffCount = debuffCount + 1
           if debuffCount > 16 then return end
           local b = debuffDisplayBuf[debuffCount]

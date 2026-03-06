@@ -2290,6 +2290,7 @@ function pfUI.uf:RefreshUnit(unit, component)
       -- Update frames in-place first, then hide leftovers to avoid flicker
       local frameIdx = 0
       libdebuff:IterBuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, tl, dur)
+        if not tex or string.find(tex, "QuestionMark") then return end
         frameIdx = frameIdx + 1
         local frame = unit.buffs[frameIdx]
         if not frame then return end
@@ -2524,6 +2525,8 @@ function pfUI.uf:RefreshUnit(unit, component)
     if selfdebuff ~= "1" and libdebuff and libdebuff.IterDebuffs then
       local frameIdx = 0
       libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, dt, dur, tl, caster, isOurs)
+        -- Skip spells with no icon or QuestionMark (unknown server-side spells)
+        if not tex or string.find(tex, "QuestionMark") then return end
         frameIdx = frameIdx + 1
         local frame = unit.debuffs[frameIdx]
         if not frame then return end

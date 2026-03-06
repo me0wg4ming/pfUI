@@ -220,7 +220,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       if isHarmful then
         if unit == "player" then
           libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft)
-            if not tex or not spellName or spellName == "" then return end
+            if not tex or string.find(tex, "QuestionMark") or not spellName or spellName == "" then return end
             if not BuffIsVisible(config, spellName) then return end
             timeleft = timeleft or 0
             if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
@@ -236,7 +236,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
           end)
         else
           libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft)
-            if not tex or not spellName or spellName == "" then return end
+            if not tex or string.find(tex, "QuestionMark") or not spellName or spellName == "" then return end
             if not BuffIsVisible(config, spellName) then return end
             timeleft = timeleft or 0
             if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
@@ -254,7 +254,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       else
         -- HELPFUL: IterBuffs
         libdebuff:IterBuffs(unit, function(auraSlot, spellId, spellName, tex, st, tl, dur)
-          if not tex or not spellName or spellName == "" then return end
+          if not tex or string.find(tex, "QuestionMark") or not spellName or spellName == "" then return end
           if not BuffIsVisible(config, spellName) then return end
           local timeleft = tl or 0
           if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
