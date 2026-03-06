@@ -2384,7 +2384,7 @@ function pfUI.uf:RefreshUnit(unit, component)
           texture, stacks = pfUI.uf:DetectBuff(unitstr, i)
         end
 
-        -- Clear np_ fields so BuffOnEnter uses Blizzard tooltip
+        -- Clear np_ fields: Blizzard fallback active, blizzard_slot=i matches UnitBuff index
         unit.buffs[i].np_spellId   = nil
         unit.buffs[i].np_auraSlot  = nil
         unit.buffs[i].np_spellName = nil
