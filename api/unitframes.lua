@@ -186,13 +186,13 @@ local function BuffOnEnter()
   elseif this.np_spellName then
     GameTooltip:AddLine(this.np_spellName, 1, 1, 1)
     GameTooltip:Show()
-  else
-    -- Fallback: out of range, use Blizzard tooltip (no spellId available)
+  elseif this.blizzard_slot then
+    -- Blizzard fallback: out of range, use cached Blizzard slot index
     local unitstr = parent.label .. (parent.id or "")
     if parent.label == "player" then
-      GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID + this.id, "HELPFUL"))
+      GameTooltip:SetPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID + this.blizzard_slot, "HELPFUL"))
     else
-      GameTooltip:SetUnitBuff(unitstr, this.id)
+      GameTooltip:SetUnitBuff(unitstr, this.blizzard_slot)
     end
   end
 
@@ -1695,19 +1695,13 @@ function pfUI.uf.OnUpdate()
     if timeSinceEvent > 0.5 and this.label and _G.UnitExists(this.label .. this.id) then
       local needsFallback = false
       
-      -- Check if Nampower can provide data
-      if GetUnitField then
-        -- Use _G.UnitExists to avoid conflicts with range checking
+      -- Check if Nampower can provide aura data (not just health - auras go nil first when out of range)
+      if GetUnitField and GetUnitGUID then
         local unitstr = this.label .. this.id
-        local exists = _G.UnitExists(unitstr)
-        if exists then
-          local _, guid = _G.UnitExists(unitstr)
-          if guid then
-            local hp = GetUnitField(guid, "health")
-            if not hp or hp == 0 then
-              needsFallback = true
-            end
-          else
+        local guid = GetUnitGUID(unitstr)
+        if guid then
+          local auras = GetUnitField(guid, "aura")
+          if not auras then
             needsFallback = true
           end
         else
@@ -1718,36 +1712,34 @@ function pfUI.uf.OnUpdate()
       end
       
       if needsFallback then
-        -- GLOBAL Throttle: Limit fallback updates across ALL frames
-        local throttle = pfUI.uf.fallbackThrottle
-        
-        -- Reset counter each interval
-        if now - throttle.lastUpdate > throttle.interval then
-          throttle.lastUpdate = now
-          throttle.updatesThisInterval = 0
-        end
-        
-        -- Check if we've exceeded max updates this interval
-        if throttle.updatesThisInterval >= throttle.maxUpdatesPerInterval then
-          if pfUI.uf.stats and pfUI.uf.stats.enabled then
-            pfUI.uf.stats.earlyReturns = pfUI.uf.stats.earlyReturns + 1
+        -- GLOBAL Throttle: Limit fallback updates for raid+party (target always passes through)
+        if this.label == "raid" or this.label == "party" then
+          local throttle = pfUI.uf.fallbackThrottle
+          if now - throttle.lastUpdate > throttle.interval then
+            throttle.lastUpdate = now
+            throttle.updatesThisInterval = 0
           end
-          return
+          if throttle.updatesThisInterval >= throttle.maxUpdatesPerInterval then
+            if pfUI.uf.stats and pfUI.uf.stats.enabled then
+              pfUI.uf.stats.earlyReturns = pfUI.uf.stats.earlyReturns + 1
+            end
+            return
+          end
+          throttle.updatesThisInterval = throttle.updatesThisInterval + 1
         end
-        
-        throttle.updatesThisInterval = throttle.updatesThisInterval + 1
-        
+
         -- Nampower not available or no data - trigger fallback update
         this.update_base = true
+        this.update_aura = true
         if pfUI.uf.stats and pfUI.uf.stats.enabled then
           pfUI.uf.stats.heartbeatUpdates = pfUI.uf.stats.heartbeatUpdates + 1
         end
       else
-        -- Nampower working fine, no update needed
+        -- Nampower working fine - trigger aura update to switch back from Blizzard fallback
+        this.update_aura = true
         if pfUI.uf.stats and pfUI.uf.stats.enabled then
-          pfUI.uf.stats.earlyReturns = pfUI.uf.stats.earlyReturns + 1
+          pfUI.uf.stats.heartbeatUpdates = pfUI.uf.stats.heartbeatUpdates + 1
         end
-        return
       end
     else
       -- Too soon or unit doesn't exist
@@ -2286,6 +2278,7 @@ function pfUI.uf:RefreshUnit(unit, component)
         frame.np_auraSlot  = auraSlot
         frame.np_spellName = spellName
         frame.np_texture   = tex
+        frame.blizzard_slot = nil
         -- Legacy aliases still used by BuffOnUpdate timer code
         frame.libdebuff_auraSlot = auraSlot
         frame.libdebuff_spellName = spellName
@@ -2327,9 +2320,10 @@ function pfUI.uf:RefreshUnit(unit, component)
           frame:Hide()
         end
       end)
-      -- Hide remaining frames that are no longer needed
+      -- Hide remaining frames and clear blizzard_slot so tooltip switches back to Nampower
       for i = frameIdx + 1, tonumber(unit.config.bufflimit) or 32 do
         if not unit.buffs[i] then break end
+        unit.buffs[i].blizzard_slot = nil
         unit.buffs[i]:Hide()
       end
       -- Only mark as used if we actually got data (frameIdx=0 means out of range)
@@ -2337,6 +2331,8 @@ function pfUI.uf:RefreshUnit(unit, component)
         usedIterBuffs = true
       end
     end
+
+
 
     if not usedIterBuffs then
       -- Pre-build spillover filter: which Blizzard buff indices are actually debuffs?
@@ -2387,6 +2383,17 @@ function pfUI.uf:RefreshUnit(unit, component)
         else
           texture, stacks = pfUI.uf:DetectBuff(unitstr, i)
         end
+
+        -- Clear np_ fields so BuffOnEnter uses Blizzard tooltip
+        unit.buffs[i].np_spellId   = nil
+        unit.buffs[i].np_auraSlot  = nil
+        unit.buffs[i].np_spellName = nil
+        unit.buffs[i].np_texture   = nil
+        unit.buffs[i].np_startTime = nil
+        unit.buffs[i].np_duration  = nil
+        -- Store Blizzard slot index separately (UnitBuff slot = i in this fallback)
+        -- Always store even if texture is nil - client may have cached data for tooltip
+        unit.buffs[i].blizzard_slot = i
 
         unit.buffs[i].texture:SetTexture(texture)
 
