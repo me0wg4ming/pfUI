@@ -1663,6 +1663,12 @@ end
         libspelldata:ScheduleCarnageCheck(targetGuid)
       end
 
+      -- Track pending applicator for OTHER players (e.g. Judgement from other Paladins)
+      -- Ensures DEBUFF_ADDED can resolve real casterGuid via libspelldata:OnDebuffAdded
+      if event == "SPELL_GO_OTHER" and targetGuid and casterGuid and libspelldata then
+        libspelldata:OnSpellGo(spellId, spellName, casterGuid, targetGuid)
+      end
+
       -- Fire registered SPELL_GO_OTHER hooks
       if event == "SPELL_GO_OTHER" and pfUI.libdebuff_spell_go_other_hooks then
         for _, fn in pairs(pfUI.libdebuff_spell_go_other_hooks) do
