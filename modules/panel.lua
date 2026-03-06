@@ -349,7 +349,7 @@ pfUI:RegisterModule("panel", "vanilla:tbc", function()
 
         for friendIndex=1, all do
           local friend_name, friend_level, friend_class, friend_area, friend_connected = GetFriendInfo(friendIndex)
-          if friend_connected and friend_class and friend_level then
+          if friend_connected and friend_name and friend_class and friend_level and friend_area then
             if not init then
               GameTooltip_SetDefaultAnchor(GameTooltip, this)
               GameTooltip:ClearLines()
