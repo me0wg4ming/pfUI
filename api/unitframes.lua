@@ -264,8 +264,6 @@ local function BuffOnClick()
       CancelPlayerAuraSpellId(this.np_spellId, 1)
     elseif this.libdebuff_spellId and CancelPlayerAuraSpellId then
       CancelPlayerAuraSpellId(this.libdebuff_spellId, 1)
-    else
-      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HELPFUL"))
     end
   end
 end
@@ -299,38 +297,27 @@ end
 
 local function DebuffOnUpdate()
   if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
-  local bid = GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,"HARMFUL")
-  local timeleft = GetPlayerBuffTimeLeft(bid)
-  local texture = GetPlayerBuffTexture(bid)
-  local start = 0
 
-  -- slot is empty (debuff expired or doesn't exist), clear timer and bail
-  if not texture then
-    CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+  -- Nampower path: use stored auraSlot + spellId (set by IterDebuffs in RefreshUnit)
+  if this.np_auraSlot and this.np_spellId and GetPlayerAuraDuration
+      and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.np_spellId]) then
+    local durSpellId, remainingMs = GetPlayerAuraDuration(this.np_auraSlot - 1)
+    if durSpellId == this.np_spellId and remainingMs and remainingMs > 0 then
+      local timeleft = remainingMs / 1000
+      local key = this.np_spellId
+      if not maxdurations[key] then
+        maxdurations[key] = timeleft
+      elseif maxdurations[key] < timeleft then
+        maxdurations[key] = timeleft
+      end
+      CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - maxdurations[key], maxdurations[key], 1)
+    else
+      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
+    end
     return
   end
 
-  -- Get debuff name for unique key (two debuffs could share same texture)
-  local name = ""
-  if libtipscan then
-    scanner = scanner or libtipscan:GetScanner("unitframes")
-    if scanner then
-      scanner:SetPlayerBuff(bid)
-      name = scanner:Line(1) or ""
-    end
-  end
-  local key = texture .. name
-
-  if timeleft > 0 then
-    if not maxdurations[key] then
-      maxdurations[key] = timeleft
-    elseif maxdurations[key] and maxdurations[key] < timeleft then
-      maxdurations[key] = timeleft
-    end
-    start = GetTime() + timeleft - maxdurations[key]
-  end
-
-  CooldownFrame_SetTimer(this.cd, start, maxdurations[key], timeleft > 0 and 1 or 0)
+  CooldownFrame_SetTimer(this.cd, 0, 0, 0)
 end
 
 local function DebuffOnEnter()
@@ -2474,23 +2461,13 @@ function pfUI.uf:RefreshUnit(unit, component)
       end
 
       if unit.label == "player" then
-        texture = GetPlayerBuffTexture(GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HARMFUL"))
-        stacks = GetPlayerBuffApplications(GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HARMFUL"))
-        dtype = GetPlayerBuffDispelType(GetPlayerBuff(PLAYER_BUFF_START_ID+i, "HARMFUL"))
-
-        unit.debuffs[i].texture:SetTexture(texture)
-        local r,g,b = DebuffTypeColor.none.r,DebuffTypeColor.none.g,DebuffTypeColor.none.b
-        if dtype and DebuffTypeColor[dtype] then r,g,b = DebuffTypeColor[dtype].r,DebuffTypeColor[dtype].g,DebuffTypeColor[dtype].b end
-        unit.debuffs[i].backdrop:SetBackdropBorderColor(r,g,b,1)
-        if texture then
-          unit.debuffs[i]:Show()
-          local timeleft = GetPlayerBuffTimeLeft(GetPlayerBuff(PLAYER_BUFF_START_ID+unit.debuffs[i].id, "HARMFUL"),"HARMFUL")
-          CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime(), timeleft, 1)
-          if stacks > 1 then unit.debuffs[i].stacks:SetText(stacks)
-          else unit.debuffs[i].stacks:SetText("") end
-        else
-          unit.debuffs[i]:Hide()
-        end
+        -- Handled by IterDebuffs below; clear frame data here so
+        -- DebuffOnUpdate doesn't use stale np_ fields if count shrinks
+        unit.debuffs[i].np_spellId   = nil
+        unit.debuffs[i].np_auraSlot  = nil
+        unit.debuffs[i].np_spellName = nil
+        unit.debuffs[i].np_dtype     = nil
+        unit.debuffs[i]:Hide()
       elseif selfdebuff == "1" then
         local name, rank, tex, st, dt, dur, tl, caster, spellId = libdebuff:UnitOwnDebuff(unitstr, i)
         unit.debuffs[i].texture:SetTexture(tex)
@@ -2515,7 +2492,7 @@ function pfUI.uf:RefreshUnit(unit, component)
 
     -- IterDebuffs: fill debuff frames directly from stable aura slots (no scanner, no RebuildDebuffSlots)
     local usedIterDebuffs = false
-    if selfdebuff ~= "1" and unit.label ~= "player" and libdebuff and libdebuff.IterDebuffs then
+    if selfdebuff ~= "1" and libdebuff and libdebuff.IterDebuffs then
       local frameIdx = 0
       libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, dt, dur, tl, caster, isOurs)
         frameIdx = frameIdx + 1
