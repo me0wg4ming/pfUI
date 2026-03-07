@@ -2558,10 +2558,14 @@ function pfUI.uf:RefreshUnit(unit, component)
         frame.libdebuff_auraSlot = auraSlot
         frame.libdebuff_spellName = spellName
         frame:Show()
-        if frame.libdebuff_start then
-          CooldownFrame_SetTimer(frame.cd, frame.libdebuff_start, dur, 1)
-        else
-          CooldownFrame_SetTimer(frame.cd, 0, 0, 0)
+        -- Only reset CooldownFrame if spellId changed (avoid flicker on form swap / re-refresh)
+        if frame.np_last_spellId ~= spellId then
+          frame.np_last_spellId = spellId
+          if frame.libdebuff_start then
+            CooldownFrame_SetTimer(frame.cd, frame.libdebuff_start, dur, 1)
+          else
+            CooldownFrame_SetTimer(frame.cd, 0, 0, 0)
+          end
         end
         if (st or 0) > 1 then frame.stacks:SetText(st) else frame.stacks:SetText("") end
       end)
