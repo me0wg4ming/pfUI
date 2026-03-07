@@ -264,7 +264,6 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     if libdebuff and libdebuff.IterBuffs then
       local buffIdx = pfUI.buff.wepbuffs.count
       libdebuff:IterBuffs("player", function(auraSlot, spellId, spellName, tex, stacks, timeleft, duration)
-        if not tex or string.find(tex, "QuestionMark") then return end
         buffIdx = buffIdx + 1
         local btn = pfUI.buff.buffs.buttons[buffIdx]
         if not btn then return end
@@ -287,7 +286,6 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     if libdebuff and libdebuff.IterDebuffs then
       local debuffIdx = 0
       libdebuff:IterDebuffs("player", function(auraSlot, spellId, spellName, tex, stacks, dtype, duration, timeleft, caster, isOurs)
-        if not tex or string.find(tex, "QuestionMark") then return end
         debuffIdx = debuffIdx + 1
         local btn = pfUI.buff.debuffs.buttons[debuffIdx]
         if not btn then return end

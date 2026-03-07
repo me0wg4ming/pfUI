@@ -98,7 +98,9 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
         lt:SetUnitBuffTooltip(GameTooltip, this.unit, this.id)
       end
     elseif this.type == "HARMFUL" then
-      if lt and lt.SetUnitDebuffTooltip then
+      if this.spellId and lt and lt.SetSpellByID then
+        lt:SetSpellByID(GameTooltip, this.spellId, 0, nil, "HARMFUL")
+      elseif lt and lt.SetUnitDebuffTooltip then
         lt:SetUnitDebuffTooltip(GameTooltip, this.unit, this.id)
       end
     end
@@ -331,6 +333,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
 
       frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)
       frame.bars[bar].id = slot
+      frame.bars[bar].spellId = spellId
       frame.bars[bar].unit = unit
       frame.bars[bar].type = frame.type
       frame.bars[bar].endtime = GetTime() + ( timeleft > 0 and timeleft or -1 )
@@ -571,5 +574,17 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     pfUI.uf.target.debuffbar:SetPoint("LEFT", pfUI.uf.target, "LEFT", 0, 0)
     pfUI.uf.target.debuffbar:SetPoint("BOTTOM", pfUI.uf.target, "TOP", 0, border*2+1)
     UpdateMovable(pfUI.uf.target.debuffbar)
+
+    -- Refresh immediately on AURA_CAST for target debuffs
+    -- UNIT_AURA doesn't fire for enemy targets on refresh, causing 2s fallback delay
+    local tdebuffbar = pfUI.uf.target.debuffbar
+    pfUI.libdebuff_aura_cast_on_other_hooks = pfUI.libdebuff_aura_cast_on_other_hooks or {}
+    table.insert(pfUI.libdebuff_aura_cast_on_other_hooks, function(spellId, casterGuid, targetGuid)
+      if not targetGuid or not GetUnitGUID then return end
+      local currentTarget = GetUnitGUID("target")
+      if currentTarget and currentTarget == targetGuid then
+        RefreshBuffBarFrame(tdebuffbar)
+      end
+    end)
   end
 end)

@@ -109,10 +109,15 @@ end)
 pfUI.libdebuff_own = pfUI.libdebuff_own or {}
 local ownDebuffs = pfUI.libdebuff_own
 
--- allAuraCasts: [targetGUID][spellName][casterGuid] = {startTime, duration, rank}
--- Timer data for ALL debuffs (multi-caster support)
-pfUI.libdebuff_all_auras = pfUI.libdebuff_all_auras or {}
-local allAuraCasts = pfUI.libdebuff_all_auras
+-- slotTimers: [targetGUID][auraSlot] = {startTime, duration}
+-- Timer data keyed by stable Nampower auraSlot - no casterGuid needed
+pfUI.libdebuff_slot_timers = pfUI.libdebuff_slot_timers or {}
+local slotTimers = pfUI.libdebuff_slot_timers
+
+-- pendingSlotTimer: [targetGUID][spellName] = {startTime, duration, rank}
+-- Temporary: correlates AURA_CAST (has duration) with DEBUFF_ADDED (has auraSlot)
+pfUI.libdebuff_pending_slot_timer = pfUI.libdebuff_pending_slot_timer or {}
+local pendingSlotTimer = pfUI.libdebuff_pending_slot_timer
 
 -- slotOwnership: [targetGUID][auraSlot] = {casterGuid, spellName, spellId}
 -- Maps REAL aura slots (33-48) to caster info - NO SHIFTING NEEDED!
@@ -530,12 +535,11 @@ local function GetSlotCaster(guid, auraSlot, spellName)
     return myGuid, true
   end
   
-  -- Fallback: Check allAuraCasts for any caster
-  if allAuraCasts[guid] and allAuraCasts[guid][spellName] then
-    for casterGuid, data in pairs(allAuraCasts[guid][spellName]) do
-      local timeleft = (data.startTime + data.duration) - GetTime()
-      if timeleft > 0 then
-        return casterGuid, (casterGuid == myGuid)
+  -- Fallback: check slotOwnership by spellName
+  if slotOwnership[guid] then
+    for auraSlot, ownership in pairs(slotOwnership[guid]) do
+      if ownership.spellName == spellName then
+        return ownership.casterGuid, ownership.isOurs
       end
     end
   end
@@ -578,9 +582,13 @@ local function CleanupUnit(guid)
     spilloverLogged[guid] = nil
   end
   
-  if allAuraCasts[guid] then
-    allAuraCasts[guid] = nil
+  if slotTimers[guid] then
+    slotTimers[guid] = nil
     cleaned = true
+  end
+
+  if pendingSlotTimer[guid] then
+    pendingSlotTimer[guid] = nil
   end
   
   if objectsByGuid[guid] then
@@ -643,30 +651,19 @@ local function CleanupExpiredTimers(guid)
     end
   end
   
-  -- Cleanup allAuraCasts
-  if allAuraCasts[guid] then
-    for spellName, casterTable in pairs(allAuraCasts[guid]) do
-      local n2 = 0
-      for casterGuid, data in pairs(casterTable) do
-        local timeleft = (data.startTime + data.duration) - now
-        if timeleft < -2 then
-          n2 = n2 + 1
-          _cleanupBuf2[n2] = casterGuid
-        end
+  -- Cleanup slotTimers (expired slots)
+  if slotTimers[guid] then
+    local n2 = 0
+    for auraSlot, data in pairs(slotTimers[guid]) do
+      local timeleft = (data.startTime + data.duration) - now
+      if timeleft < -2 then
+        n2 = n2 + 1
+        _cleanupBuf2[n2] = auraSlot
       end
-      for i = 1, n2 do
-        allAuraCasts[guid][spellName][_cleanupBuf2[i]] = nil
-        _cleanupBuf2[i] = nil
-      end
-      -- Remove empty spell tables
-      local hasCasters = false
-      for _ in pairs(allAuraCasts[guid][spellName]) do
-        hasCasters = true
-        break
-      end
-      if not hasCasters then
-        allAuraCasts[guid][spellName] = nil
-      end
+    end
+    for i = 1, n2 do
+      slotTimers[guid][_cleanupBuf2[i]] = nil
+      _cleanupBuf2[i] = nil
     end
   end
 end
@@ -679,7 +676,7 @@ local function CleanupOutOfRangeUnits()
   local allGuids = {}
   for guid in pairs(ownDebuffs) do allGuids[guid] = true end
   for guid in pairs(slotOwnership) do allGuids[guid] = true end
-  for guid in pairs(allAuraCasts) do allGuids[guid] = true end
+  for guid in pairs(slotTimers) do allGuids[guid] = true end
   for guid in pairs(objectsByGuid) do allGuids[guid] = true end
   for guid in pairs(pendingCasts) do allGuids[guid] = true end
   for guid in pairs(displayToAura) do allGuids[guid] = true end
@@ -745,50 +742,46 @@ end
 
 -- Refresh passive proc debuffs when applicator spells hit
 local function RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
-  if not libspelldata or not allAuraCasts[targetGuid] or not targetGuid or not spellName or not myGuid then
+  if not libspelldata or not slotOwnership[targetGuid] or not targetGuid or not spellName or not myGuid then
     return false
   end
-  
+
   local now = GetTime()
   local refreshed = false
-  
-  for debuffName, casterData in pairs(allAuraCasts[targetGuid]) do
-    if libspelldata:IsApplicatorSpell(debuffName, spellName) then
-      -- For shared debuffs: refresh all casters. For own debuffs: only myGuid.
+
+  -- Iterate all owned slots to find applicator targets
+  for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+    local debuffName = ownership.spellName
+    if debuffName and libspelldata:IsApplicatorSpell(debuffName, spellName) then
       local isShared = libspelldata:IsSelfOverwrite(debuffName)
-      local duration = libspelldata:GetDuration(debuffName)
-      if duration then
-        for casterGuid, data in pairs(casterData) do
-          if casterGuid == myGuid or isShared then
-            -- Deduplication: Skip if already refreshed very recently (within 50ms)
-            local shouldRefresh = true
-            if data.startTime and (now - data.startTime) < 0.05 then
-              shouldRefresh = false
+      local isOurs = ownership.isOurs
+      if isOurs or isShared then
+        local duration = libspelldata:GetDuration(debuffName)
+        if duration and slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot] then
+          local data = slotTimers[targetGuid][auraSlot]
+          -- Deduplication: skip if refreshed very recently
+          if not data.startTime or (now - data.startTime) >= 0.05 then
+            data.startTime = now
+            data.duration = duration
+            refreshed = true
+            if ownDebuffs[targetGuid] and ownDebuffs[targetGuid][debuffName] then
+              ownDebuffs[targetGuid][debuffName].startTime = now
+              ownDebuffs[targetGuid][debuffName].duration = duration
             end
-            if shouldRefresh then
-              data.startTime = now
-              data.duration = duration
-              refreshed = true
-              if ownDebuffs[targetGuid] and ownDebuffs[targetGuid][debuffName] then
-                ownDebuffs[targetGuid][debuffName].startTime = now
-                ownDebuffs[targetGuid][debuffName].duration = duration
-              end
-              if debugStats.enabled and IsCurrentTarget(targetGuid) then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[APPLICATOR REFRESH]|r %s via %s (%.1fs)",
-                  GetDebugTimestamp(), debuffName, spellName, duration))
-              end
+            if debugStats.enabled and IsCurrentTarget(targetGuid) then
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[APPLICATOR REFRESH]|r %s via %s (%.1fs)",
+                GetDebugTimestamp(), debuffName, spellName, duration))
             end
           end
         end
       end
     end
   end
-  
+
   if refreshed then
     if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
       pfUI.nameplates:OnAuraUpdate(targetGuid, true)
     end
-    
     if GetUnitGUID("target") then
       local currentTargetGuid = GetUnitGUID("target")
       if currentTargetGuid == targetGuid then
@@ -797,7 +790,7 @@ local function RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
       end
     end
   end
-  
+
   return refreshed
 end
 
@@ -847,9 +840,14 @@ function libdebuff:GetMaxRank(effect)
   return max
 end
 
+local updateUnitsTimer = nil
+local updateUnitsPending = false
 function libdebuff:UpdateUnits()
   if not pfUI.uf or not pfUI.uf.target then return end
-  pfUI.uf:RefreshUnit(pfUI.uf.target, "aura")
+  -- Debounce: batch rapid successive aura events into single update (50ms window)
+  if pfUI.uf.target then
+    pfUI.uf.target.update_aura = true
+  end
 end
 
 -- libdebuff.objects kept as empty stub for external compat
@@ -929,12 +927,12 @@ function libdebuff:IterDebuffs(unit, fn)
     end
   end
 
-  -- Fetch auraFlags if spillover possible in either direction
+  -- Fetch auraFlags if any buff slots occupied (spillover debuffs stay in buff slots until expiry)
+  -- Must check even when debuffSlotCount < 16 since spillover debuffs don't move back
   local auraFlags = nil
-  if debuffSlotCount >= 16 or buffSlotCount >= 32 then
+  if buffSlotCount > 0 or debuffSlotCount >= 16 then
     auraFlags = GetUnitField(guid, "auraFlags")
   end
-
   -- ============================================================
   -- PASS 1: Normal debuff slots (33-48)
   -- ============================================================
@@ -965,63 +963,30 @@ function libdebuff:IterDebuffs(unit, fn)
             end
           end
 
-          -- Timer lookup: slotOwnership first, then fallback
+          -- Timer lookup: slotTimers keyed by auraSlot (stable with Nampower)
           local duration, timeleft, caster, isOurs = nil, -1, nil, false
           local ownership = slotOwnership[guid] and slotOwnership[guid][auraSlot]
           if ownership then
-            local casterGuid = ownership.casterGuid
             isOurs = ownership.isOurs
+          end
+          caster = isOurs and "player" or "other"
 
-            if isOurs then
-              local d = ownDebuffs[guid] and ownDebuffs[guid][spellName]
-              if d then
-                local remaining = (d.startTime + d.duration) - now
-                if remaining > -1 then
-                  duration = d.duration
-                  timeleft = remaining > 0 and remaining or 0
-                  caster = "player"
-                end
-              end
-            elseif casterGuid then
-              local d = allAuraCasts[guid] and allAuraCasts[guid][spellName]
-                        and allAuraCasts[guid][spellName][casterGuid]
-              if d and d.duration and d.duration > 0 then
-                local remaining = (d.startTime + d.duration) - now
-                if remaining > -1 then
-                  duration = d.duration
-                  timeleft = remaining > 0 and remaining or 0
-                  caster = "other"
-                end
-              end
+          local st = slotTimers[guid] and slotTimers[guid][auraSlot]
+          if st and st.duration and st.duration > 0 then
+            local remaining = (st.startTime + st.duration) - now
+            if remaining > -1 then
+              duration = st.duration
+              timeleft = remaining > 0 and remaining or 0
             end
           end
 
-          -- Fallback timer: when ownership unknown OR ownership exists but timer lookup failed
-          -- (e.g. ownership has casterGuid=nil, or allAuraCasts entry missing)
-          if not duration then
-            if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
-              local d = ownDebuffs[guid][spellName]
-              local remaining = (d.startTime + d.duration) - now
-              if remaining > -1 then
-                duration = d.duration
-                timeleft = remaining > 0 and remaining or 0
-                caster = "player"
-                isOurs = true
-              end
-            end
-            if not duration and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
-              for cGuid, d in pairs(allAuraCasts[guid][spellName]) do
-                if d.duration and d.duration > 0 then
-                  local remaining = (d.startTime + d.duration) - now
-                  if remaining > -1 then
-                    duration = d.duration
-                    timeleft = remaining > 0 and remaining or 0
-                    isOurs = (cGuid == myGuid)
-                    caster = isOurs and "player" or "other"
-                    break
-                  end
-                end
-              end
+          -- Fallback: ownDebuffs for own spells when slotTimers missing
+          if not duration and isOurs and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+            local d = ownDebuffs[guid][spellName]
+            local remaining = (d.startTime + d.duration) - now
+            if remaining > -1 then
+              duration = d.duration
+              timeleft = remaining > 0 and remaining or 0
             end
           end
 
@@ -1035,9 +1000,10 @@ function libdebuff:IterDebuffs(unit, fn)
 
   -- ============================================================
   -- PASS 2: Spillover debuffs in buff slots (1-32)
-  -- Only scan if all 16 debuff slots are occupied
+  -- Scan whenever auraFlags available - spillover debuffs stay in buff slots
+  -- even after debuffSlotCount drops below 16 (Nampower does not move them back)
   -- ============================================================
-  if debuffSlotCount >= 16 and auraFlags then
+  if auraFlags then
       for auraSlot = 1, 32 do
         local spellId = auras[auraSlot]
         if spellId and spellId ~= 0 then
@@ -1063,35 +1029,29 @@ function libdebuff:IterDebuffs(unit, fn)
                   end
                 end
 
-                -- Timer lookup for spillover: same logic as normal debuffs
-                -- Spillover debuffs won't have slotOwnership (those track 33-48),
-                -- so we go straight to ownDebuffs/allAuraCasts fallback
+                -- Timer lookup for spillover: use slotTimers (auraSlot 1-32)
                 local duration, timeleft, caster, isOurs = nil, -1, nil, false
 
-                if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+                local st = slotTimers[guid] and slotTimers[guid][auraSlot]
+                if st and st.duration and st.duration > 0 then
+                  local remaining = (st.startTime + st.duration) - now
+                  if remaining > -1 then
+                    duration = st.duration
+                    timeleft = remaining > 0 and remaining or 0
+                  end
+                end
+
+                -- Fallback: ownDebuffs for own spillover spells
+                if not duration and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
                   local d = ownDebuffs[guid][spellName]
                   local remaining = (d.startTime + d.duration) - now
                   if remaining > -1 then
                     duration = d.duration
                     timeleft = remaining > 0 and remaining or 0
-                    caster = "player"
                     isOurs = true
                   end
                 end
-                if not duration and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
-                  for cGuid, d in pairs(allAuraCasts[guid][spellName]) do
-                    if d.duration and d.duration > 0 then
-                      local remaining = (d.startTime + d.duration) - now
-                      if remaining > -1 then
-                        duration = d.duration
-                        timeleft = remaining > 0 and remaining or 0
-                        isOurs = (cGuid == myGuid)
-                        caster = isOurs and "player" or "other"
-                        break
-                      end
-                    end
-                  end
-                end
+                caster = isOurs and "player" or "other"
 
                 count = count + 1
 
@@ -1148,9 +1108,10 @@ function libdebuff:IterBuffs(unit, fn)
     end
   end
 
-  -- Only fetch auraFlags if spillover is possible in either direction
+  -- Fetch auraFlags whenever buff slots are occupied - spillover debuffs stay in buff slots
+  -- even after debuffSlotCount drops below 16 (Nampower does not move them back)
   local auraFlags = nil
-  if debuffSlotCount >= 16 or buffSlotCount >= 32 then
+  if buffSlotCount > 0 or debuffSlotCount >= 16 then
     auraFlags = GetUnitField(guid, "auraFlags")
   end
 
@@ -1160,7 +1121,7 @@ function libdebuff:IterBuffs(unit, fn)
   for auraSlot = 1, 32 do
     local spellId = auras[auraSlot]
     if spellId and spellId ~= 0 then
-      -- If debuff spillover possible, check auraFlags to skip debuffs in buff slots
+      -- Skip if this slot is a spillover debuff (check flag even when debuffSlotCount < 16)
       if auraFlags and IsDebuffByFlag(auraFlags, auraSlot) then
         -- Spillover debuff — skip for buff display
       else
@@ -1349,26 +1310,27 @@ function libdebuff:GetBestAuraCast(guid, spellName)
     end
   end
   
-  -- Check allAuraCasts (for any caster)
-  if allAuraCasts[guid] and allAuraCasts[guid][spellName] then
-    local bestData = nil
-    local bestCaster = nil
-    local bestTimeleft = 0
-    
-    for casterGuid, data in pairs(allAuraCasts[guid][spellName]) do
-      local timeleft = (data.startTime + data.duration) - GetTime()
-      if timeleft > bestTimeleft then
-        bestTimeleft = timeleft
-        bestData = data
-        bestCaster = casterGuid
+  -- Fallback: find slot by spellName in slotOwnership, return its timer
+  if slotOwnership[guid] and slotTimers[guid] then
+    local bestStart, bestDur, bestLeft = nil, nil, 0
+    for auraSlot, ownership in pairs(slotOwnership[guid]) do
+      if ownership.spellName == spellName then
+        local st = slotTimers[guid][auraSlot]
+        if st and st.duration and st.duration > 0 then
+          local timeleft = (st.startTime + st.duration) - GetTime()
+          if timeleft > bestLeft then
+            bestLeft = timeleft
+            bestStart = st.startTime
+            bestDur = st.duration
+          end
+        end
       end
     end
-    
-    if bestData and bestTimeleft > 0 then
-      return bestData.startTime, bestData.duration, bestTimeleft, bestData.rank, bestCaster
+    if bestStart then
+      return bestStart, bestDur, bestLeft, nil, nil
     end
   end
-  
+
   return nil
 end
 
@@ -1428,16 +1390,21 @@ end
             "|cff00ffff[CARNAGE]|r ownDebuffs[%s] NOT FOUND - skip", spellName))
         end
 
-        if allAuraCasts[targetGuid] and allAuraCasts[targetGuid][spellName] then
-          if debugStats.enabled then
-            for cGuid, d in pairs(allAuraCasts[targetGuid][spellName]) do
-              DEFAULT_CHAT_FRAME:AddMessage(string.format(
-                "|cff00ffff[CARNAGE allAuraCasts]|r %s caster=%s dur=%.1f isMyGuid=%s",
-                spellName, DebugGuid(cGuid), d.duration or 0, tostring(cGuid == myGuid)))
+        -- Carnage: refresh slotTimers for our slot of this spellName
+        if slotOwnership[targetGuid] and slotTimers[targetGuid] then
+          for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+            if ownership.spellName == spellName and ownership.isOurs then
+              local st = slotTimers[targetGuid][auraSlot]
+              if st then
+                st.startTime = refreshTime
+                if debugStats.enabled then
+                  DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                    "|cff00ffff[CARNAGE slotTimers]|r aura=%d %s refreshed dur=%.1f",
+                    auraSlot, spellName, st.duration or 0))
+                end
+              end
+              break
             end
-          end
-          if allAuraCasts[targetGuid][spellName][myGuid] then
-            allAuraCasts[targetGuid][spellName][myGuid].startTime = refreshTime
           end
         end
 
@@ -1649,32 +1616,22 @@ end
           time = GetTime()
         }
       end
-      -- Track hit for applicator refresh validation - ALL casters
-      -- needed so foreign caster applicator spells (e.g. other Priest's SWP) can
-      -- trigger refresh of shared debuffs we own (e.g. Shadow Weaving)
-      if targetGuid then
-        if casterGuid == myGuid or (libspelldata and libspelldata:IsAnyApplicatorSpell(spellName)) then
-          recentHits[targetGuid] = recentHits[targetGuid] or {}
-          recentHits[targetGuid][spellName] = GetTime()
-        end
+      -- Track hit for applicator refresh (own casts only)
+      if targetGuid and casterGuid == myGuid then
+        recentHits[targetGuid] = recentHits[targetGuid] or {}
+        recentHits[targetGuid][spellName] = GetTime()
       end
       if casterGuid == myGuid then
         -- Track pending applicator (Judgement etc.) for passive proc correlation
         if targetGuid and libspelldata then
           pendingApplicators[targetGuid] = { spell = spellName, time = GetTime(), casterGuid = casterGuid }
           libspelldata:OnSpellGo(spellId, spellName, casterGuid, targetGuid)
-          -- Own Shadow Weaving applicator spells: mark self as Shadow spec immediately
-          if libspelldata:IsApplicatorSpell("Shadow Weaving", spellName) then
-            libspelldata:MarkShadowSpec(casterGuid)
+
+          -- Refresh shared debuffs on SPELL_GO for own casts too
+          -- AURA_CAST only fires on new application, not server-side refresh (e.g. max stacks)
+          if libspelldata:IsAnyApplicatorSpell(spellName) then
+            RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
           end
-        end
-      elseif targetGuid and libspelldata and libspelldata:IsAnyApplicatorSpell(spellName) then
-        -- Track foreign caster applicators too (e.g. other Priest's SWP → Shadow Weaving ownership)
-        pendingApplicators[targetGuid] = { spell = spellName, time = GetTime(), casterGuid = casterGuid }
-        -- If this spell can apply Shadow Weaving, caster is confirmed Shadow spec immediately
-        -- This ensures OverrideDuration works on the SAME cast, not just subsequent ones
-        if libspelldata:IsApplicatorSpell("Shadow Weaving", spellName) and casterGuid then
-          libspelldata:MarkShadowSpec(casterGuid)
         end
       end
       
@@ -1735,7 +1692,7 @@ end
         return  -- UNAFFECTED(miss), DODGE, PARRY, EVADE, IMMUNE
       end
       
-      if libspelldata and allAuraCasts[targetGuid] then
+      if libspelldata and slotOwnership[targetGuid] then
         if not meleeRefreshSpells then
           meleeRefreshSpells = libspelldata:GetMeleeRefreshSpells()
         end
@@ -1743,21 +1700,25 @@ end
         local myGuid = GetPlayerGUID()
         local isOurs = (attackerGuid == myGuid)
         local refreshed = false
-        for spellName, refreshDur in pairs(meleeRefreshSpells) do
-          if allAuraCasts[targetGuid][spellName] and allAuraCasts[targetGuid][spellName][attackerGuid] then
-            local data = allAuraCasts[targetGuid][spellName][attackerGuid]
-            data.startTime = now
-            data.duration = refreshDur
-            refreshed = true
-            
-            if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
-              ownDebuffs[targetGuid][spellName].startTime = now
-              ownDebuffs[targetGuid][spellName].duration = refreshDur
-            end
-            
-            if debugStats.enabled and IsCurrentTarget(targetGuid) then
-              DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[MELEE REFRESH]|r %s on %s by %s", 
-                GetDebugTimestamp(), spellName, DebugGuid(targetGuid), DebugGuid(attackerGuid)))
+        for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+          local spellName = ownership.spellName
+          local refreshDur = spellName and meleeRefreshSpells[spellName]
+          if refreshDur and (ownership.isOurs or (isOurs)) then
+            local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
+            if st then
+              st.startTime = now
+              st.duration = refreshDur
+              refreshed = true
+
+              if ownership.isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
+                ownDebuffs[targetGuid][spellName].startTime = now
+                ownDebuffs[targetGuid][spellName].duration = refreshDur
+              end
+
+              if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[MELEE REFRESH]|r %s aura=%d on %s",
+                  GetDebugTimestamp(), spellName, auraSlot, DebugGuid(targetGuid)))
+              end
             end
           end
         end
@@ -1826,28 +1787,32 @@ end
       local isCrit = (tonumber(hitInfo) == 2)
       if not isCrit then return end
       
-      if libspelldata and allAuraCasts[targetGuid] then
+      if libspelldata and slotOwnership[targetGuid] then
         local now = GetTime()
         local refreshed = false
-        
-        for debuffName, casterData in pairs(allAuraCasts[targetGuid]) do
-          if casterData[myGuid] and libspelldata:RequiresCritForRefresh(debuffName, spellName) then
-            local data = casterData[myGuid]
-            local duration = libspelldata:GetDuration(debuffName)
-            
-            if duration then
-              data.startTime = now
-              data.duration = duration
-              refreshed = true
-              
-              if ownDebuffs[targetGuid] and ownDebuffs[targetGuid][debuffName] then
-                ownDebuffs[targetGuid][debuffName].startTime = now
-                ownDebuffs[targetGuid][debuffName].duration = duration
-              end
-              
-              if debugStats.enabled and IsCurrentTarget(targetGuid) then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff0000[CRIT REFRESH]|r %s via %s crit (%.1fs)", 
-                  GetDebugTimestamp(), debuffName, spellName, duration))
+
+        for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+          if ownership.isOurs then
+            local debuffName = ownership.spellName
+            if debuffName and libspelldata:RequiresCritForRefresh(debuffName, spellName) then
+              local duration = libspelldata:GetDuration(debuffName)
+              if duration then
+                local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
+                if st then
+                  st.startTime = now
+                  st.duration = duration
+                  refreshed = true
+
+                  if ownDebuffs[targetGuid] and ownDebuffs[targetGuid][debuffName] then
+                    ownDebuffs[targetGuid][debuffName].startTime = now
+                    ownDebuffs[targetGuid][debuffName].duration = duration
+                  end
+
+                  if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff0000[CRIT REFRESH]|r %s via %s crit (%.1fs)",
+                      GetDebugTimestamp(), debuffName, spellName, duration))
+                  end
+                end
               end
             end
           end
@@ -2107,116 +2072,41 @@ end
         end
       end
       
-      -- Talent-based duration override (e.g. Improved SWP for confirmed Shadow spec casters)
-      if libspelldata and casterGuid and duration > 0 then
-        local overridden = libspelldata:OverrideDuration(spellName, duration, casterGuid)
-        if overridden then duration = overridden end
-      end
-
-      -- Store in allAuraCasts
-      if targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" then
-        allAuraCasts[targetGuid] = allAuraCasts[targetGuid] or {}
-        allAuraCasts[targetGuid][spellName] = allAuraCasts[targetGuid][spellName] or {}
-        
-        -- Downrank Protection: Check BEFORE clearing old casters!
-        -- NOTE: Even if downranked, still allow applicator refresh (e.g. SWP Rank1 still refreshes Shadow Weaving)
-        local isDownranked = false
-        if libspelldata and libspelldata:IsSelfOverwrite(spellName) then
-          for otherCaster, existingData in pairs(allAuraCasts[targetGuid][spellName]) do
-            if existingData.rank and rankNum and rankNum > 0 then
-              local existingTimeleft = (existingData.startTime + existingData.duration) - GetTime()
-              if existingTimeleft > 0 and rankNum < existingData.rank then
-                isDownranked = true
-                if debugStats.enabled then
-                  DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d from %s cannot overwrite Rank %d from %s (%.1fs left)", 
-                    spellName, rankNum, DebugGuid(casterGuid), existingData.rank, DebugGuid(otherCaster), existingTimeleft))
-                end
-                break
-              end
-            end
-          end
-        else
-          -- For non-selfOverwrite: Check only same caster
-          local existingData = allAuraCasts[targetGuid][spellName][casterGuid]
-          if existingData and existingData.rank and rankNum and rankNum > 0 then
-            local existingTimeleft = (existingData.startTime + existingData.duration) - GetTime()
-            if existingTimeleft > 0 and rankNum < existingData.rank then
-              isDownranked = true
-              if debugStats.enabled and isOurs then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)", 
-                  spellName, rankNum, existingData.rank, existingTimeleft))
-              end
-            end
-          end
-        end
-
-        -- Always run applicator refresh even if downranked (e.g. SWP Rank1 still refreshes Shadow Weaving stacks)
-        if isOurs and isDownranked and libspelldata then
-          local now = GetTime()
-          if recentHits[targetGuid] and recentHits[targetGuid][spellName] then
-            if (now - recentHits[targetGuid][spellName]) < 0.1 then
-              RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
-            end
-          end
-          return  -- still block the debuff overwrite itself
-        end
-        
-        -- Handle self-overwrite debuffs (clear other casters)
-        if libspelldata and libspelldata:IsSelfOverwrite(spellName) then
-          local n = 0
-          for otherCaster in pairs(allAuraCasts[targetGuid][spellName]) do
-            if otherCaster ~= casterGuid then
-              n = n + 1
-              _cleanupBuf1[n] = otherCaster
-            end
-          end
-          for i = 1, n do
-            allAuraCasts[targetGuid][spellName][_cleanupBuf1[i]] = nil
-            _cleanupBuf1[i] = nil
-          end
-          
-          -- Clear from ownDebuffs if we're being overwritten
-          if not isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
-            ownDebuffs[targetGuid][spellName] = nil
-          end
-        end
-        
-        -- Handle variant pairs (Faerie Fire <-> Faerie Fire (Feral))
-        local overwritePair = libspelldata and libspelldata:GetOverwritePair(spellName)
-        if overwritePair then
-          if allAuraCasts[targetGuid][overwritePair] and allAuraCasts[targetGuid][overwritePair][casterGuid] then
-            allAuraCasts[targetGuid][overwritePair][casterGuid] = nil
-          end
-        end
-        
-        -- Store timer data
-        allAuraCasts[targetGuid][spellName][casterGuid] = {
+      -- Store timer in pendingSlotTimer[targetGuid][spellName]
+      -- DEBUFF_ADDED will pick this up and key it by auraSlot
+      if targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" and duration > 0 then
+        pendingSlotTimer[targetGuid] = pendingSlotTimer[targetGuid] or {}
+        pendingSlotTimer[targetGuid][spellName] = {
           startTime = startTime,
-          duration = duration,
-          rank = rankNum
+          duration  = duration,
+          isOurs    = isOurs,
+          time      = startTime  -- for stale-entry detection
         }
-        
-        -- UPDATE slotOwnership for selfOverwrite refreshes
-        -- (DEBUFF_ADDED doesn't fire on refresh, so we must update here!)
-        if libspelldata and libspelldata:IsSelfOverwrite(spellName) and slotOwnership[targetGuid] then
+
+        -- On refresh DEBUFF_ADDED doesn't fire - update slotTimers directly for any known slot
+        if slotOwnership[targetGuid] then
           for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
             if ownership.spellName == spellName then
-              -- Update the casterGuid and isOurs for this slot
-              ownership.casterGuid = casterGuid
               ownership.isOurs = isOurs
-              
+              slotTimers[targetGuid] = slotTimers[targetGuid] or {}
+              slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration }
+              -- Also sync ownDebuffs for our refreshes
+              if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
+                ownDebuffs[targetGuid][spellName].startTime = startTime
+                ownDebuffs[targetGuid][spellName].duration = duration
+              end
               if debugStats.enabled and IsCurrentTarget(targetGuid) then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[SLOT UPDATED]|r aura=%d %s newCaster=%s isOurs=%s", 
-                  auraSlot, spellName, DebugGuid(casterGuid), tostring(isOurs)))
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[SLOT REFRESHED]|r aura=%d %s isOurs=%s dur=%.1f",
+                  auraSlot, spellName, tostring(isOurs), duration))
               end
               break
             end
           end
         end
-        
+
         if debugStats.enabled and IsCurrentTarget(targetGuid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[AURA_CAST]|r %s target=%s caster=%s isOurs=%s dur=%.1fs", 
-            GetDebugTimestamp(), spellName, DebugGuid(targetGuid), DebugGuid(casterGuid), tostring(isOurs), duration))
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[AURA_CAST]|r %s target=%s isOurs=%s dur=%.1fs",
+            GetDebugTimestamp(), spellName, DebugGuid(targetGuid), tostring(isOurs), duration))
         end
       end
       
@@ -2237,8 +2127,9 @@ end
         -- Check target
         if GetUnitGUID("target") then
           local targetUnitGuid = GetUnitGUID("target")
-          if targetUnitGuid == targetGuid and pfTarget then
-            pfTarget.update_aura = true
+          if targetUnitGuid == targetGuid then
+            if pfTarget then pfTarget.update_aura = true end
+            libdebuff:UpdateUnits()
           end
         end
       
@@ -2405,38 +2296,10 @@ end
       -- Using allAuraCasts here would pick up stale entries from previous casts by us.
       local isAoESpell = libspelldata and libspelldata:IsAoEChannel(spellName)
 
-      if not casterGuid and not isAoESpell and libspelldata and libspelldata:HasForcedDuration(spellName) then
-        if allAuraCasts[guid] and allAuraCasts[guid][spellName] then
-          local mostRecentTime = 0
-          local mostRecentCaster = nil
-          for casterId, data in pairs(allAuraCasts[guid][spellName]) do
-            local timeleft = (data.startTime + data.duration) - GetTime()
-            if timeleft > -1 and data.startTime > mostRecentTime then
-              mostRecentTime = data.startTime
-              mostRecentCaster = casterId
-            end
-          end
-          if mostRecentCaster then
-            casterGuid = mostRecentCaster
-          end
-        end
-      end
+      -- forcedDuration casterGuid fallback no longer needed:
+      -- slotTimers are keyed by auraSlot, not casterGuid
       
-      -- Fallback: Check allAuraCasts for most recent caster
-      -- Skip for AoE spells: same reason as above.
-      if not casterGuid and not isAoESpell and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
-        local mostRecent = nil
-        local mostRecentTime = 0
-        for casterId, data in pairs(allAuraCasts[guid][spellName]) do
-          if data.startTime > mostRecentTime then
-            mostRecentTime = data.startTime
-            mostRecent = casterId
-          end
-        end
-        if mostRecent then
-          casterGuid = mostRecent
-        end
-      end
+
       
       -- libspelldata: Check applicator tracking (e.g. Judgement → JoW caster)
       if not casterGuid and libspelldata then
@@ -2504,89 +2367,52 @@ end
           GetDebugTimestamp(), displaySlot, auraSlot, spellName, DebugGuid(casterGuid), tostring(isOurs)))
       end
       
-      -- Shadow Weaving: Mark caster as Shadow spec in libspelldata for Improved SWP heuristic
-      if spellName == "Shadow Weaving" and casterGuid and libspelldata then
-        libspelldata:MarkShadowSpec(casterGuid)
-      end
-
-      -- libspelldata: Create timer for forced-duration spells (no AURA_CAST fires for these)
-      if libspelldata and libspelldata:HasForcedDuration(spellName) and casterGuid then
-        local hasExistingTimer = false
-        if allAuraCasts[guid] and allAuraCasts[guid][spellName] and allAuraCasts[guid][spellName][casterGuid] then
-          local existingData = allAuraCasts[guid][spellName][casterGuid]
-          local existingTimeleft = (existingData.startTime + existingData.duration) - GetTime()
-          
-          -- Check if this was refreshed by an applicator spell
-          local wasRefreshedByApplicator = false
-          if pendingApplicators[guid] then
-            local timeSinceCast = GetTime() - pendingApplicators[guid].time
-            if timeSinceCast < 1.0 and libspelldata:IsApplicatorSpell(spellName, pendingApplicators[guid].spell) then
-              wasRefreshedByApplicator = true
-            end
-          end
-          
-          if existingTimeleft > 0 and (wasRefreshedByApplicator or (GetTime() - existingData.startTime) < 10) then
-            hasExistingTimer = true
-          end
+      -- Resolve pendingSlotTimer → slotTimers for this auraSlot
+      -- AURA_CAST fires slightly before DEBUFF_ADDED, so pending entry should be here
+      local now = GetTime()
+      slotTimers[guid] = slotTimers[guid] or {}
+      local pending = pendingSlotTimer[guid] and pendingSlotTimer[guid][spellName]
+      if pending and (now - pending.time) < 2.0 then
+        -- Fresh pending timer from AURA_CAST - commit to slot
+        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration }
+        pendingSlotTimer[guid][spellName] = nil
+        if debugStats.enabled and IsCurrentTarget(guid) then
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER]|r aura=%d %s start=%.2f dur=%.1f",
+            auraSlot, spellName, pending.startTime, pending.duration))
         end
-        
+      elseif libspelldata and libspelldata:HasForcedDuration(spellName) then
+        -- No AURA_CAST for this spell (passive proc) - create timer from libspelldata
+        local existingST = slotTimers[guid][auraSlot]
+        local hasExistingTimer = existingST and ((existingST.startTime + existingST.duration) - now) > 0
         if not hasExistingTimer then
           local forcedDur = libspelldata:GetDuration(spellName)
           if forcedDur and forcedDur > 0 then
-            local now = GetTime()
-            local texture = libdebuff:GetSpellIcon(spellId)
-            
-            allAuraCasts[guid] = allAuraCasts[guid] or {}
-            allAuraCasts[guid][spellName] = allAuraCasts[guid][spellName] or {}
-            allAuraCasts[guid][spellName][casterGuid] = {
-              startTime = now,
-              duration = forcedDur,
-              rank = 0
-            }
-            
-            if isOurs then
-              ownDebuffs[guid] = ownDebuffs[guid] or {}
-              ownDebuffs[guid][spellName] = {
-                startTime = now,
-                duration = forcedDur,
-                texture = texture,
-                rank = 0,
-                spellId = spellId,
-                stacks = stacks or 1
-              }
-            end
-            
+            slotTimers[guid][auraSlot] = { startTime = now, duration = forcedDur }
             if debugStats.enabled and IsCurrentTarget(guid) then
-              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[FORCED TIMER]|r %s dur=%.1f caster=%s", 
-                spellName, forcedDur, DebugGuid(casterGuid)))
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[FORCED TIMER]|r aura=%d %s dur=%.1f",
+                auraSlot, spellName, forcedDur))
             end
           end
         end
       end
-      
-      -- CRITICAL FIX: Update ownDebuffs here too for refresh timing!
-      -- This prevents the gap between DEBUFF_REMOVED and AURA_CAST where buffwatch shows nothing
-      if isOurs and casterGuid then
-        local myGuid = GetPlayerGUID()
-        if myGuid and casterGuid == myGuid then
-          -- Check if we have timer data from allAuraCasts
-          if allAuraCasts[guid] and allAuraCasts[guid][spellName] and allAuraCasts[guid][spellName][casterGuid] then
-            local auraData = allAuraCasts[guid][spellName][casterGuid]
-            local texture = libdebuff:GetSpellIcon(spellId)
-            
-            ownDebuffs[guid] = ownDebuffs[guid] or {}
-            ownDebuffs[guid][spellName] = {
-              startTime = auraData.startTime,
-              duration = auraData.duration,
-              texture = texture,
-              rank = auraData.rank or 0,
-              spellId = spellId,
-              stacks = stacks or 1
-            }
-            
-            if debugStats.enabled and IsCurrentTarget(guid) then
-              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[OWNDEBUFF SYNC]|r %s from DEBUFF_ADDED", spellName))
-            end
+
+      -- Sync ownDebuffs from slotTimers for our own debuffs
+      -- Prevents gap between DEBUFF_REMOVED and AURA_CAST where buffwatch shows nothing
+      if isOurs then
+        local st = slotTimers[guid][auraSlot]
+        if st then
+          local texture = libdebuff:GetSpellIcon(spellId)
+          ownDebuffs[guid] = ownDebuffs[guid] or {}
+          ownDebuffs[guid][spellName] = {
+            startTime = st.startTime,
+            duration  = st.duration,
+            texture   = texture,
+            rank      = 0,
+            spellId   = spellId,
+            stacks    = stacks or 1
+          }
+          if debugStats.enabled and IsCurrentTarget(guid) then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[OWNDEBUFF SYNC]|r %s from DEBUFF_ADDED", spellName))
           end
         end
       end
@@ -2711,15 +2537,13 @@ end
         end
       end
       
-      -- Remove from allAuraCasts (but NOT if still present = stack change)
-      if not isStillPresent and removedCasterGuid and allAuraCasts[guid] and allAuraCasts[guid][spellName] then
-        if allAuraCasts[guid][spellName][removedCasterGuid] then
-          local auraData = allAuraCasts[guid][spellName][removedCasterGuid]
-          local age = GetTime() - auraData.startTime
-          -- Only delete if not recently refreshed
-          if age > 1 then
-            allAuraCasts[guid][spellName][removedCasterGuid] = nil
-          end
+      -- Remove from slotTimers (but NOT if still present = stack change)
+      if not isStillPresent and foundAuraSlot and slotTimers[guid] and slotTimers[guid][foundAuraSlot] then
+        local st = slotTimers[guid][foundAuraSlot]
+        local age = GetTime() - st.startTime
+        -- Only delete if not recently refreshed
+        if age > 1 then
+          slotTimers[guid][foundAuraSlot] = nil
         end
       end
       
@@ -2867,7 +2691,7 @@ _G.SlashCmdList["MEMCHECK"] = function()
   DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00Primary Tables:|r"))
   DEFAULT_CHAT_FRAME:AddMessage(string.format("  ownDebuffs: %d GUIDs, %d debuffs", countTable(ownDebuffs), countNestedEntries(ownDebuffs)))
   DEFAULT_CHAT_FRAME:AddMessage(string.format("  slotOwnership: %d GUIDs, %d slots", countTable(slotOwnership), countNestedEntries(slotOwnership)))
-  DEFAULT_CHAT_FRAME:AddMessage(string.format("  allAuraCasts: %d GUIDs", countTable(allAuraCasts)))
+  DEFAULT_CHAT_FRAME:AddMessage(string.format("  slotTimers: %d GUIDs", countTable(slotTimers)))
   DEFAULT_CHAT_FRAME:AddMessage(string.format("  pendingCasts: %d GUIDs", countTable(pendingCasts)))
   DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00No ownSlots/allSlots (eliminated by GetUnitField approach!)|r")
   DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff============================================================|r")

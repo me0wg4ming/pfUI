@@ -2288,9 +2288,11 @@ function pfUI.uf:RefreshUnit(unit, component)
     if libdebuff and libdebuff.IterBuffs then
       -- Fill from IterBuffs (includes timer for player via GetPlayerAuraDuration)
       -- Update frames in-place first, then hide leftovers to avoid flicker
+      local buffLimit = tonumber(unit.config.bufflimit) or 32
       local frameIdx = 0
       libdebuff:IterBuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, tl, dur)
         if not tex or string.find(tex, "QuestionMark") then return end
+        if frameIdx >= buffLimit then return end
         frameIdx = frameIdx + 1
         local frame = unit.buffs[frameIdx]
         if not frame then return end
@@ -2348,10 +2350,10 @@ function pfUI.uf:RefreshUnit(unit, component)
         unit.buffs[i].blizzard_slot = nil
         unit.buffs[i]:Hide()
       end
-      -- Only mark as used if we actually got data (frameIdx=0 means out of range)
-      if frameIdx > 0 then
-        usedIterBuffs = true
-      end
+      -- Mark as used even if frameIdx=0: IterBuffs ran successfully (unit in range)
+      -- frameIdx=0 means unit has no buffs, not that it's out of range
+      -- Falling through to Blizzard fallback would show spillover debuffs as buffs
+      usedIterBuffs = true
     end
 
 
@@ -2516,7 +2518,12 @@ function pfUI.uf:RefreshUnit(unit, component)
           unit.debuffs[i]:Hide()
         end
       else
-        -- IterDebuffs handles display, skip individual hide here
+        -- Clear np_ fields before IterDebuffs fills them to avoid stale tooltip data
+        unit.debuffs[i].np_spellId   = nil
+        unit.debuffs[i].np_auraSlot  = nil
+        unit.debuffs[i].np_spellName = nil
+        unit.debuffs[i].np_dtype     = nil
+        unit.debuffs[i]:Hide()
       end
     end
 
@@ -2524,9 +2531,11 @@ function pfUI.uf:RefreshUnit(unit, component)
     local usedIterDebuffs = false
     if selfdebuff ~= "1" and libdebuff and libdebuff.IterDebuffs then
       local frameIdx = 0
+      local debuffLimit = tonumber(unit.config.debufflimit) or 16
       libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, dt, dur, tl, caster, isOurs)
         -- Skip spells with no icon or QuestionMark (unknown server-side spells)
         if not tex or string.find(tex, "QuestionMark") then return end
+        if frameIdx >= debuffLimit then return end  -- respect debufflimit
         frameIdx = frameIdx + 1
         local frame = unit.debuffs[frameIdx]
         if not frame then return end
@@ -2561,9 +2570,9 @@ function pfUI.uf:RefreshUnit(unit, component)
         if not unit.debuffs[i] then break end
         unit.debuffs[i]:Hide()
       end
-      if frameIdx > 0 then
-        usedIterDebuffs = true
-      end
+      -- Always mark as used: IterDebuffs ran, don't fall through to Blizzard fallback
+      -- (frameIdx=0 = no debuffs on unit, not out of range)
+      usedIterDebuffs = true
     end
 
     -- Fallback to Blizzard UnitDebuff when out of range (IterDebuffs returned nothing)

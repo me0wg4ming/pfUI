@@ -38,10 +38,6 @@ local lib = pfUI.libspelldata
 -- When a new caster applies it, the old caster's entry is replaced.
 -- ============================================================================
 
--- shadowSpecCasters: [casterGUID] = true
--- Players confirmed as Shadow spec (applied Shadow Weaving).
--- Used to infer Improved Shadow Word: Pain (+3s per talent point, max 2 = +6s).
-local shadowSpecCasters = {}
 
 local selfOverwriteDebuffs = {
   ["Faerie Fire"] = true,
@@ -64,6 +60,7 @@ local selfOverwriteDebuffs = {
   ["Judgement of Justice"] = true,
   ["Shadow Weaving"] = true,
   ["Winter's Chill"] = true,
+  ["Fire Vulnerability"] = true,
 }
 
 -- ============================================================================
@@ -116,7 +113,7 @@ local forcedDurations = {
   ["Judgement of Justice"]      = { duration = 10, refreshOnMelee = true,  applicatorSpells = false },
 
   -- MAGE PASSIVE PROCS
-  ["Fire Vulnerability"]        = { duration = 30, refreshOnMelee = false, applicatorSpells = {"Scorch", "Fire Blast", "Fireball", "Pyroblast"} },
+  ["Fire Vulnerability"]        = { duration = 30, refreshOnMelee = false, applicatorSpells = {"Scorch", "Fire Blast", "Fireball", "Pyroblast", "Flamestrike", "Fire Blast", "Blast Wave", "Dragon's Breath", "Arcane Explosion"} },
   ["Ignite"]                    = { duration = 4,  refreshOnMelee = false, critBasedRefresh = true },
   ["Winter's Chill"]            = { duration = 15, refreshOnMelee = false, applicatorSpells = {"Frostbolt", "Cone of Cold", "Frost Nova"} },
 
@@ -132,7 +129,7 @@ local forcedDurations = {
   ["Frost Trap Aura"]           = { duration = 30,  isAoEChannel = true },
   ["Explosive Trap Effect"]     = { duration = 20,  isAoEChannel = true },
   ["Flamestrike"]               = { duration = 8,  isAoEChannel = true },
-  ["Garrote"]                   = { duration = 8,  isAoEChannel = false },
+  ["Garrote"]                   = { duration = 18,  isAoEChannel = false },
 
   -- Other spells with no duration from AURA_CAST
   ["Pain Spike"]                = { duration = 5,  refreshOnMelee = false, applicatorSpells = false },
@@ -284,28 +281,6 @@ end
 
 --- Get the correct duration for a managed spell.
 -- For combopoint abilities use GetComboPointData() instead.
-function lib:MarkShadowSpec(casterGuid)
-  if casterGuid then
-    shadowSpecCasters[casterGuid] = true
-  end
-end
-
-function lib:IsShadowSpec(casterGuid)
-  return casterGuid and shadowSpecCasters[casterGuid] == true
-end
-
--- OverrideDuration: Apply talent-based duration corrections after Nampower provides base duration.
--- Returns corrected duration or nil if no override applies.
-function lib:OverrideDuration(spellName, duration, casterGuid)
-  if not spellName or not duration or not casterGuid then return nil end
-  -- Improved Shadow Word: Pain heuristic:
-  -- Caster confirmed Shadow spec (applied Shadow Weaving) = 2/2 Improved SWP = +6s
-  if spellName == "Shadow Word: Pain" and shadowSpecCasters[casterGuid] and duration <= 18 then
-    return duration + 6
-  end
-  return nil
-end
-
 function lib:GetDuration(spellName, rank, casterGuid)
   if not spellName then return nil end
   local forced = forcedDurations[spellName]

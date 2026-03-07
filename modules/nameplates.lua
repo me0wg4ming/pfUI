@@ -1201,7 +1201,13 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local isFriendly = unittype == "FRIENDLY_PLAYER" or unittype == "FRIENDLY_NPC"
     local showDebuffsForType = cfg.showdebuffs and (isFriendly and cfg.showdebuffs_friendly or (not isFriendly and cfg.showdebuffs_hostile))
     if showDebuffsForType then
-      local verify = string.format("%s:%s", (name or ""), (level or ""))
+      -- Cache verify string - only recompute when name/level changes
+      local verify = plate.cachedVerify
+      local newVerify = (name or "") .. ":" .. (level or "")
+      if newVerify ~= verify then
+        verify = newVerify
+        plate.cachedVerify = verify
+      end
 
       -- update cached debuffs
       if C.nameplates["guessdebuffs"] == "1" and unitstr then
