@@ -38,6 +38,11 @@ local lib = pfUI.libspelldata
 -- When a new caster applies it, the old caster's entry is replaced.
 -- ============================================================================
 
+-- shadowSpecCasters: [casterGUID] = true
+-- Players confirmed as Shadow spec (applied Shadow Weaving).
+-- Used to infer Improved Shadow Word: Pain (+3s per talent point, max 2 = +6s).
+local shadowSpecCasters = {}
+
 local selfOverwriteDebuffs = {
   ["Faerie Fire"] = true,
   ["Faerie Fire (Feral)"] = true,
@@ -111,7 +116,7 @@ local forcedDurations = {
   ["Judgement of Justice"]      = { duration = 10, refreshOnMelee = true,  applicatorSpells = false },
 
   -- MAGE PASSIVE PROCS
-  ["Fire Vulnerability"]        = { duration = 30, refreshOnMelee = false, applicatorSpells = {"Scorch", "Fire Blast"} },
+  ["Fire Vulnerability"]        = { duration = 30, refreshOnMelee = false, applicatorSpells = {"Scorch", "Fire Blast", "Fireball", "Pyroblast"} },
   ["Ignite"]                    = { duration = 4,  refreshOnMelee = false, critBasedRefresh = true },
   ["Winter's Chill"]            = { duration = 15, refreshOnMelee = false, applicatorSpells = {"Frostbolt", "Cone of Cold", "Frost Nova"} },
 
@@ -246,6 +251,18 @@ function lib:IsAoEChannel(spellName)
   return data and data.isAoEChannel or false
 end
 
+function lib:IsAnyApplicatorSpell(spellName)
+  if not spellName then return false end
+  for _, data in pairs(forcedDurations) do
+    if data.applicatorSpells then
+      for _, applicator in ipairs(data.applicatorSpells) do
+        if applicator == spellName then return true end
+      end
+    end
+  end
+  return false
+end
+
 function lib:IsApplicatorSpell(debuffName, spellName)
   if not debuffName or not spellName then return false end
   local data = forcedDurations[debuffName]
@@ -267,7 +284,29 @@ end
 
 --- Get the correct duration for a managed spell.
 -- For combopoint abilities use GetComboPointData() instead.
-function lib:GetDuration(spellName)
+function lib:MarkShadowSpec(casterGuid)
+  if casterGuid then
+    shadowSpecCasters[casterGuid] = true
+  end
+end
+
+function lib:IsShadowSpec(casterGuid)
+  return casterGuid and shadowSpecCasters[casterGuid] == true
+end
+
+-- OverrideDuration: Apply talent-based duration corrections after Nampower provides base duration.
+-- Returns corrected duration or nil if no override applies.
+function lib:OverrideDuration(spellName, duration, casterGuid)
+  if not spellName or not duration or not casterGuid then return nil end
+  -- Improved Shadow Word: Pain heuristic:
+  -- Caster confirmed Shadow spec (applied Shadow Weaving) = 2/2 Improved SWP = +6s
+  if spellName == "Shadow Word: Pain" and shadowSpecCasters[casterGuid] and duration <= 18 then
+    return duration + 6
+  end
+  return nil
+end
+
+function lib:GetDuration(spellName, rank, casterGuid)
   if not spellName then return nil end
   local forced = forcedDurations[spellName]
   if forced then

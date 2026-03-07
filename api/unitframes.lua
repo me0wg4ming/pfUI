@@ -2719,109 +2719,71 @@ function pfUI.uf:RefreshUnit(unit, component)
 
     local pos = 1
     if table.getn(unit.indicators) > 0 then
-      for i=1,32 do
-        local texture, count = UnitBuff(unitstr, i)
-        local timeleft, buffName, _
-        if pfUI.client > 11200 then
-          buffName, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
-        end
-
-        if texture then
-          -- match filter
+      if libdebuff and libdebuff.IterBuffs then
+        libdebuff:IterBuffs(unitstr, function(auraSlot, spellId, spellName, texture, count, timeleft, duration)
+          if not texture or string.find(texture, "QuestionMark") then return end
+          local start = timeleft and duration and (GetTime() + timeleft - duration) or nil
           for _, filter in pairs(unit.indicators) do
             if filter == string.lower(texture) then
               if string.lower(texture) == "interface\\icons\\spell_nature_rejuvenation" then
-                -- Also verify spell name to avoid false matches from spells sharing this icon
-                if not buffName then
-                  scanner = scanner or libtipscan:GetScanner("unitframes")
-                  scanner:SetUnitBuff(unitstr, i)
-                  buffName = scanner:Line(1) or ""
-                end
-                if string.lower(buffName) ~= "rejuvenation" then break end
-                local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Reju")
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
+                if not spellName or string.lower(spellName) ~= "rejuvenation" then return end
+                local s, d, prediction = libpredict:GetHotDuration(unitstr, "Reju")
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(s), tonumber(d))
                 pos = pos + 1
-                break
+                return
               elseif string.lower(texture) == "interface\\icons\\spell_holy_renew" then
-                local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Renew")
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
+                local s, d, prediction = libpredict:GetHotDuration(unitstr, "Renew")
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(s), tonumber(d))
                 pos = pos + 1
-                break
+                return
               elseif string.lower(texture) == "interface\\icons\\spell_nature_resistnature" then
-                -- Also verify spell name to avoid false matches from spells sharing this icon
-                if not buffName then
-                  scanner = scanner or libtipscan:GetScanner("unitframes")
-                  scanner:SetUnitBuff(unitstr, i)
-                  buffName = scanner:Line(1) or ""
-                end
-                if string.lower(buffName) ~= "regrowth" then break end
-                local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Regr")
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
+                if not spellName or string.lower(spellName) ~= "regrowth" then return end
+                local s, d, prediction = libpredict:GetHotDuration(unitstr, "Regr")
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(s), tonumber(d))
                 pos = pos + 1
-                break
+                return
               else
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
+                pfUI.uf:AddIcon(unit, pos, texture, timeleft, count, start, duration)
                 pos = pos + 1
-                break
+                return
               end
             end
           end
-        end
+        end)
       end
     end
 
     if table.getn(unit.indicator_custom) > 0 then
-      scanner = scanner or libtipscan:GetScanner("unitframes")
-
-      for i=1,32 do -- scan for custom buffs
-        local texture, count = UnitBuff(unitstr, i)
-        if texture then
-          local timeleft, name, _
-          if pfUI.client > 11200 then
-            name, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
-          else
-            scanner:SetUnitBuff(unitstr, i)
-            name = scanner:Line(1) or ""
-          end
-
-          -- match filter
+      if libdebuff and libdebuff.IterBuffs then
+        libdebuff:IterBuffs(unitstr, function(auraSlot, spellId, spellName, texture, count, timeleft, duration)
+          if not texture or string.find(texture, "QuestionMark") then return end
+          if not spellName then return end
+          local start = timeleft and duration and (GetTime() + timeleft - duration) or nil
           for _, filter in pairs(unit.indicator_custom) do
-            if filter == string.lower(name) then
-              pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
+            if filter == string.lower(spellName) then
+              pfUI.uf:AddIcon(unit, pos, texture, timeleft, count, start, duration)
               pos = pos + 1
-              break
+              return
             end
           end
-        end
+        end)
       end
 
-      for i=1,32 do -- scan for custom debuffs
-        local texture, count = UnitDebuff(unitstr, i)
-        if texture then
-          local timeleft, name, _
-          if libdebuff then
-            -- Use UnitOwnDebuff if "show only own debuffs" is enabled
-            if unit.config.selfdebuff == "1" then
-              name, _, texture, _, _, _, timeleft = libdebuff:UnitOwnDebuff(unitstr, i)
-            else
-              name, _, texture, _, _, _, timeleft = libdebuff:UnitDebuff(unitstr, i)
-            end
-          else
-            scanner:SetUnitDebuff(unitstr, i)
-            name = scanner:Line(1) or ""
-          end
-
-          -- match filter
-          if name then
-            for _, filter in pairs(unit.indicator_custom) do
-              if filter == string.lower(name) then
-                pfUI.uf:AddIcon(unit, pos, texture, timeleft, count)
-                pos = pos + 1
-                break
-              end
+      if libdebuff and libdebuff.IterDebuffs then
+        local selfOnly = unit.config.selfdebuff == "1"
+        libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, spellName, texture, count, dt, duration, timeleft, caster, isOurs)
+          if not texture or string.find(texture, "QuestionMark") then return end
+          if selfOnly and not isOurs then return end
+          if not spellName then return end
+          local start = timeleft and duration and (GetTime() + timeleft - duration) or nil
+          for _, filter in pairs(unit.indicator_custom) do
+            if filter == string.lower(spellName) then
+              pfUI.uf:AddIcon(unit, pos, texture, timeleft, count, start, duration)
+              pos = pos + 1
+              return
             end
           end
-        end
+        end)
       end
     end
 
@@ -3146,7 +3108,7 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks, start, duration)
   if not frame.icon[pos] then
     frame.icon[pos] = CreateFrame("Frame", nil, frame.icon)
     frame.icon[pos]:SetParent(frame)
-    frame.icon[pos].tex = frame.icon[pos]:CreateTexture("OVERLAY")
+    frame.icon[pos].tex = frame.icon[pos]:CreateTexture(nil, "BACKGROUND")
     frame.icon[pos].tex:SetAllPoints(frame.icon[pos])
     frame.icon[pos].tex:SetTexCoord(.08, .92, .08, .92)
     frame.icon[pos].stacks = frame.icon[pos]:CreateFontString(nil, "OVERLAY")
@@ -3191,6 +3153,12 @@ function pfUI.uf:AddIcon(frame, pos, icon, timeleft, stacks, start, duration)
     CooldownFrame_SetTimer(frame.icon[pos].cd, start, duration, 1)
   elseif showtime and timeleft and timeleft < 100 and iconsize > 9 then
     CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), timeleft, 1)
+  elseif not timeleft then
+    -- no timeleft available (Vanilla UnitBuff): don't reset existing timer to avoid flicker
+    -- only reset if icon changed (new aura on this slot)
+    if frame.icon[pos].icon ~= icon then
+      CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), 0, 1)
+    end
   else
     CooldownFrame_SetTimer(frame.icon[pos].cd, GetTime(), 0, 1)
   end

@@ -985,6 +985,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     if plate.cache.name ~= name then
       plate.cache.name = name
       plate.cache.player = nil
+      plate.cdCache = nil  -- new unit, reset spell-keyed timer cache
     end
 
     -- read and cache unittype
@@ -1213,6 +1214,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       local debuffCount = 0
       for i = 1, 16 do debuffDisplayBuf[i].effect = nil end  -- clear previous
       if unitstr and libdebuff and libdebuff.IterDebuffs and GetUnitGUID then
+
         libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
           if not texture or string.find(texture, "QuestionMark") then return end
           debuffCount = debuffCount + 1
@@ -1269,11 +1271,16 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
           end
 
           if duration and timeleft and cfg.debufftimers then
-            -- PERF: Only update cooldown if start time changed significantly
-            local cd = plate.debuffs[index].cd
+            -- PERF: cachedStart keyed by auraSlot (stable, unique even for same spell cast by multiple casters)
+            -- fallback to spellId for non-IterDebuffs paths where auraSlot is nil
+            local cacheKey = auraSlot or spellId
+            plate.cdCache = plate.cdCache or {}
             local newStart = GetTime() + timeleft - duration
-            
-            if not cd.cachedStart or abs(cd.cachedStart - newStart) > 0.5 then
+            local cached = cacheKey and plate.cdCache[cacheKey]
+
+            local cd = plate.debuffs[index].cd
+            cd:Show()
+            if not cached or abs(cached - newStart) > 0.5 then
               -- Update config flags only on first run or config change
               if not cd.configCached or cd.cachedAnim ~= cfg.debuffanim or cd.cachedText ~= cfg.debufftext then
                 cd.pfCooldownStyleAnimation = cfg.debuffanim
@@ -1283,10 +1290,8 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
                 cd.cachedText = cfg.debufftext
                 cd.configCached = true
               end
-              
-              cd:Show()
               CooldownFrame_SetTimer(cd, newStart, duration, 1)
-              cd.cachedStart = newStart
+              if cacheKey then plate.cdCache[cacheKey] = newStart end
             end
           end
 
