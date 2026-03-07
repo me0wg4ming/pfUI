@@ -2108,9 +2108,21 @@ end
         if slotOwnership[targetGuid] then
           for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
             if ownership.spellName == spellName then
+              -- Downrank protection: don't overwrite higher rank timer
+              local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
+              if st and st.rank and st.rank > 0 and rankNum > 0 and rankNum < st.rank then
+                local existingTimeleft = (st.startTime + st.duration) - GetTime()
+                if existingTimeleft > 0 then
+                  if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
+                      spellName, rankNum, st.rank, existingTimeleft))
+                  end
+                  break
+                end
+              end
               ownership.isOurs = isOurs
               slotTimers[targetGuid] = slotTimers[targetGuid] or {}
-              slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration }
+              slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration, rank = rankNum }
               -- Also sync ownDebuffs for our refreshes
               if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
                 ownDebuffs[targetGuid][spellName].startTime = startTime
@@ -2408,7 +2420,7 @@ end
         if not hasExistingTimer then
           local forcedDur = libspelldata:GetDuration(spellName)
           if forcedDur and forcedDur > 0 then
-            slotTimers[guid][auraSlot] = { startTime = now, duration = forcedDur }
+            slotTimers[guid][auraSlot] = { startTime = now, duration = forcedDur, rank = 0 }
             if debugStats.enabled and IsCurrentTarget(guid) then
               DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[FORCED TIMER]|r aura=%d %s dur=%.1f",
                 auraSlot, spellName, forcedDur))
