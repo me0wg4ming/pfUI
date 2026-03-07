@@ -18,7 +18,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       if C.buffs.separateweapons == "1" then
         buff.id = buff.gid - (buff.weapon ~= nil and buff.gid or 0)
       else
-        buff.id = buff.gid - pfUI.buff.wepbuffs.count
+        buff.id = buff.gid - ((C.buffs.weapons == "1" and C.buffs.separateweapons == "0") and pfUI.buff.wepbuffs.count or 0)
       end
     else
       buff.id = buff.gid
@@ -262,7 +262,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
 
     -- Fill buff buttons from IterBuffs
     if libdebuff and libdebuff.IterBuffs then
-      local buffIdx = pfUI.buff.wepbuffs.count
+      local buffIdx = (C.buffs.weapons == "1" and C.buffs.separateweapons == "0") and pfUI.buff.wepbuffs.count or 0
       libdebuff:IterBuffs("player", function(auraSlot, spellId, spellName, tex, stacks, timeleft, duration)
         buffIdx = buffIdx + 1
         local btn = pfUI.buff.buffs.buttons[buffIdx]
