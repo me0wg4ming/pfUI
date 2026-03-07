@@ -2072,6 +2072,26 @@ end
         end
       end
       
+      -- Downrank Protection for own spells: check slotOwnership for existing higher-rank slot
+      if isOurs and rankNum > 0 and slotOwnership[targetGuid] then
+        for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+          if ownership.spellName == spellName and ownership.isOurs then
+            local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
+            if st and st.rank and st.rank > rankNum then
+              local existingTimeleft = (st.startTime + st.duration) - GetTime()
+              if existingTimeleft > 0 then
+                if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                  DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
+                    spellName, rankNum, st.rank, existingTimeleft))
+                end
+                return
+              end
+            end
+            break
+          end
+        end
+      end
+
       -- Store timer in pendingSlotTimer[targetGuid][spellName]
       -- DEBUFF_ADDED will pick this up and key it by auraSlot
       if targetGuid and targetGuid ~= "" and targetGuid ~= "0x0000000000000000" and duration > 0 then
@@ -2080,6 +2100,7 @@ end
           startTime = startTime,
           duration  = duration,
           isOurs    = isOurs,
+          rank      = rankNum,
           time      = startTime  -- for stale-entry detection
         }
 
@@ -2374,7 +2395,7 @@ end
       local pending = pendingSlotTimer[guid] and pendingSlotTimer[guid][spellName]
       if pending and (now - pending.time) < 2.0 then
         -- Fresh pending timer from AURA_CAST - commit to slot
-        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration }
+        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = pending.rank or 0 }
         pendingSlotTimer[guid][spellName] = nil
         if debugStats.enabled and IsCurrentTarget(guid) then
           DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER]|r aura=%d %s start=%.2f dur=%.1f",

@@ -130,6 +130,7 @@ local forcedDurations = {
   ["Explosive Trap Effect"]     = { duration = 20,  isAoEChannel = true },
   ["Flamestrike"]               = { duration = 8,  isAoEChannel = true },
   ["Garrote"]                   = { duration = 18,  isAoEChannel = false },
+  ["Piercing Shots"]            = { duration = 8,  isAoEChannel = false },
 
   -- Other spells with no duration from AURA_CAST
   ["Pain Spike"]                = { duration = 5,  refreshOnMelee = false, applicatorSpells = false },
