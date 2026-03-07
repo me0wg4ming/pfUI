@@ -1052,10 +1052,8 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
           end
         end)
 
-        frame.search.edit:SetScript("OnLeave", function()
-          if GetMouseFocus() ~= this then
-            this:ClearFocus()
-          end
+        frame.search:SetScript("OnLeave", function()
+          frame.search.edit:ClearFocus()
         end)
 
         frame.search:SetScript("OnHide", function()
