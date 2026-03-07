@@ -106,12 +106,6 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
       end
     end
 
-    -- add druids tree of life and fast travel form to autoshift
-    if pfUI.autoshift then
-      table.insert(pfUI.autoshift.shapeshifts, "ability_druid_treeoflife")
-      table.insert(pfUI.autoshift.shapeshifts, "ability_druid_stagform")
-    end
-
     -- apply chat styles to hardcore chat
     if pfUI.chat and pfUI.chat.left then
       -- read and parse chat bracket settings

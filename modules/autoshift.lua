@@ -24,9 +24,19 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
     "根据您的骑行技能提高速度。", "根据骑术技能提高速度。", "又慢又稳......",
   }
 
+  -- Shapeshift spell IDs for CancelPlayerAuraSpellId
+  -- shadowform uses CancelLater logic (only cancel if nothing else found)
   pfUI.autoshift.shapeshifts = {
-    "ability_racial_bearform", "ability_druid_catform", "ability_druid_travelform",
-    "ability_druid_aquaticform", "spell_shadow_shadowform", "spell_nature_spiritwolf",
+    [5487]  = false, -- Bear Form
+    [9634]  = false, -- Dire Bear Form
+    [768]   = false, -- Cat Form
+    [783]   = false, -- Travel Form
+    [51398] = false, -- Swift Travel Form (Turtle WoW)
+    [1066]  = false, -- Aquatic Form
+    [24858] = false, -- Moonkin Form
+    [33891] = false, -- Tree of Life
+    [15473] = true,  -- Shadowform (cancel later)
+    [2645]  = false, -- Ghost Wolf
   }
 
   -- an agility buff exists which has the same icon as the moonkin form
@@ -41,7 +51,7 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
     if class == "DRUID" then
       local _,_,_,_,moonkin = GetTalentInfo(1,16)
       if moonkin == 1 then
-        table.insert(pfUI.autoshift.shapeshifts, "spell_nature_forceofnature")
+        pfUI.autoshift.shapeshifts[24858] = false  -- Moonkin Form confirmed via talent
         moonkin_scan:UnregisterAllEvents()
       end
     else
@@ -82,8 +92,8 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
           return
         end
 
+        -- detect mounts via tooltip scan (still needed, no spell ID approach)
         for i=0,31,1 do
-          -- detect mounts based on tooltip text
           pfUI.autoshift.scanner:SetPlayerBuff(i)
           for _, str in pairs(pfUI.autoshift.mounts) do
             if pfUI.autoshift.scanner:Find(str) then
@@ -91,19 +101,20 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
               return
             end
           end
+        end
 
-          -- detect shapeshift based on texture
-          local buff = GetPlayerBuffTexture(i)
-          if buff then
-            for id, bufftype in pairs(pfUI.autoshift.shapeshifts) do
-              if string.find(string.lower(buff), bufftype, 1) then
-                if string.find(string.lower(buff), "spell_shadow_shadowform", 1) then
-                  -- only cancel shadow form if no other buff was hindering casting
-                  CancelLater = i
-                else
-                  CancelPlayerBuff(i)
-                  return
-                end
+        -- detect and cancel shapeshift via aura spell IDs
+        local auras = GetUnitField("player", "aura")
+        if auras then
+          for i = 1, 48 do
+            local spellId = auras[i]
+            if spellId and spellId > 0 then
+              local cancelLater = pfUI.autoshift.shapeshifts[spellId]
+              if cancelLater == true then
+                CancelLater = spellId
+              elseif cancelLater == false then
+                CancelPlayerAuraSpellId(spellId)
+                return
               end
             end
           end
@@ -111,7 +122,7 @@ pfUI:RegisterModule("autoshift", "vanilla", function ()
 
         -- if nothing else was found, cancel shadowform
         if CancelLater then
-          CancelPlayerBuff(CancelLater)
+          CancelPlayerAuraSpellId(CancelLater)
         end
       end
     end

@@ -196,12 +196,10 @@ pfUI:RegisterModule("tracking", "vanilla", function ()
 
   function pfUI.tracking:PlayerIsDruidInCatForm(playerClass)
     if playerClass == "DRUID" then
-      for i = 0, 31 do
-        local texture = GetPlayerBuffTexture(i)
-        if not texture then break end
-        if strfind(texture, "Ability_Druid_CatForm") then
-          return true
-        end
+      local b = GetUnitField("player", "bytes1")
+      if b then
+        local form = math.floor(b / 65536) - math.floor(b / 16777216) * 256
+        return form == 1  -- 1 = Cat Form
       end
     end
     return false
