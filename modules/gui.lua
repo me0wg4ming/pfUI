@@ -18,10 +18,26 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
     U = setmetatable({}, { __index = function(tab,key)
       local ufunc
-      if type(pfUI[key]) == "table" and pfUI[key].UpdateConfig then
-        ufunc = function() return pfUI[key]:UpdateConfig() end
-      elseif pfUI.uf and type(pfUI.uf[key]) == "table" and pfUI.uf[key].UpdateConfig then
-        ufunc = function() return pfUI.uf[key]:UpdateConfig() end
+      -- search pfUI.uf.frames first - these are the active unit frames
+      if pfUI.uf and pfUI.uf.frames then
+        for _, f in ipairs(pfUI.uf.frames) do
+          if f.label == key and f.id == "" then
+            ufunc = function()
+              for _, fr in ipairs(pfUI.uf.frames) do
+                if fr.label == key and fr.id == "" then
+                  pfUI.uf.UpdateConfig(fr)
+                end
+              end
+            end
+            break
+          end
+        end
+      end
+      -- fallback to pfUI[key] for non-unitframe modules
+      if not ufunc then
+        if type(pfUI[key]) == "table" and pfUI[key].UpdateConfig then
+          ufunc = function() return pfUI[key]:UpdateConfig() end
+        end
       end
       if ufunc then
         rawset(tab,key,ufunc)
