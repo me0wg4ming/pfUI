@@ -35,13 +35,23 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
   local realm = GetRealmName()
   local player = UnitName("player")
   local history
-  local function SaveChatHistory(id, msg, r, g, b)
-    -- create cache tables if not existing
+
+  -- Cache the per-character history root so we don't traverse 4 table levels every message
+  local function GetCharHistory()
     pfUI_cache = pfUI_cache or {}
-    pfUI_cache["chathistory"] = pfUI_cache["chathistory"] or {}
-    pfUI_cache["chathistory"][realm] = pfUI_cache["chathistory"][realm] or {}
-    pfUI_cache["chathistory"][realm][player] = pfUI_cache["chathistory"][realm][player] or {}
-    pfUI_cache["chathistory"][realm][player][id] = pfUI_cache["chathistory"][realm][player][id] or {}
+    local ch = pfUI_cache["chathistory"]
+    if not ch then ch = {} pfUI_cache["chathistory"] = ch end
+    local cr = ch[realm]
+    if not cr then cr = {} ch[realm] = cr end
+    local cp = cr[player]
+    if not cp then cp = {} cr[player] = cp end
+    return cp
+  end
+  local charHistory = nil  -- lazily initialised on first use
+
+  local function SaveChatHistory(id, msg, r, g, b)
+    if not charHistory then charHistory = GetCharHistory() end
+    if not charHistory[id] then charHistory[id] = {} end
 
     if r and g and b then
       local color = rgbhex(r*.5+.2, g*.5+.2, b*.5+.2)
@@ -49,20 +59,15 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
       msg = string.gsub(msg, "|r", "|r" .. color)
     end
 
-    history = pfUI_cache["chathistory"][realm][player][id]
+    history = charHistory[id]
     table.insert(history, 1, msg)
     if history[30] then table.remove(history, 30) end
   end
 
   local function GetChatHistory(id)
-    -- create cache tables if not existing
-    pfUI_cache = pfUI_cache or {}
-    pfUI_cache["chathistory"] = pfUI_cache["chathistory"] or {}
-    pfUI_cache["chathistory"][realm] = pfUI_cache["chathistory"][realm] or {}
-    pfUI_cache["chathistory"][realm][player] = pfUI_cache["chathistory"][realm][player] or {}
-    pfUI_cache["chathistory"][realm][player][id] = pfUI_cache["chathistory"][realm][player][id] or {}
-
-    return pfUI_cache["chathistory"][realm][player][id]
+    if not charHistory then charHistory = GetCharHistory() end
+    if not charHistory[id] then charHistory[id] = {} end
+    return charHistory[id]
   end
 
   pfUI.chat = CreateFrame("Frame",nil,UIParent)
@@ -752,15 +757,15 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
       return frame:HookAddMessage(text, a1, a2, a3, a4, a5)
     end
 
-    -- Remove prat CLINKs
-    text = gsub(text, "{CLINK:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r") -- tbc
-    text = gsub(text, "{CLINK:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r") -- vanilla
-
-    -- Remove chatter CLINKs
-    text = gsub(text, "{CLINK:item:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r")
-    text = gsub(text, "{CLINK:enchant:(%x+):([%d-]-):([^}]-)}", "|c%1|Henchant:%2|h[%3]|h|r")
-    text = gsub(text, "{CLINK:spell:(%x+):([%d-]-):([^}]-)}", "|c%1|Hspell:%2|h[%3]|h|r")
-    text = gsub(text, "{CLINK:quest:(%x+):([%d-]-):([%d-]-):([^}]-)}", "|c%1|Hquest:%2:%3|h[%4]|h|r")
+    -- Remove prat CLINKs (fast-path: only run if CLINK is present)
+    if string.find(text, "{CLINK:", 1, true) then
+      text = gsub(text, "{CLINK:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r") -- tbc
+      text = gsub(text, "{CLINK:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r") -- vanilla
+      text = gsub(text, "{CLINK:item:(%x+):([%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-:[%d-]-):([^}]-)}", "|c%1|Hitem:%2|h[%3]|h|r")
+      text = gsub(text, "{CLINK:enchant:(%x+):([%d-]-):([^}]-)}", "|c%1|Henchant:%2|h[%3]|h|r")
+      text = gsub(text, "{CLINK:spell:(%x+):([%d-]-):([^}]-)}", "|c%1|Hspell:%2|h[%3]|h|r")
+      text = gsub(text, "{CLINK:quest:(%x+):([%d-]-):([%d-]-):([^}]-)}", "|c%1|Hquest:%2:%3|h[%4]|h|r")
+    end
 
     -- detect urls
     if C.chat.text.detecturl == "1" then
@@ -768,8 +773,13 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
     end
 
     -- display class colors if already indexed
-    if C.chat.text.classcolor == "1" then
+    if C.chat.text.classcolor == "1" and string.find(text, "|Hplayer:", 1, true) then
+      -- Collect all player names first, then do a single-pass replacement
+      local names = {}
       for name in gfind(text, "|Hplayer:(.-)|h") do
+        names[name] = true
+      end
+      for name in pairs(names) do
         local real, _ = strsplit(":", name)
         local color = unknowncolorhex
         local match = false
@@ -792,18 +802,16 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
     end
 
     -- display player levels if available
-    if C.chat.text.playerlevel == "1" then
+    if C.chat.text.playerlevel == "1" and string.find(text, "|Hplayer:", 1, true) then
       for name in gfind(text, "|Hplayer:(.-)|h") do
         local real, _ = strsplit(":", name)
         local level = GetPlayerLevel(real)
 
         if level and level > 0 then
           local levelcolor = rgbhex(GetDifficultyColor(level))
-          -- Add level after the player name, before the closing bracket
           text = string.gsub(text, "(|Hplayer:" .. name .. "|h.-|h|r)" .. right,
             "%1 " .. levelcolor .. level .. "|r" .. right)
         elseif level and level <= 0 then
-          -- Show ?? for unknown levels (e.g. -1 from UnitLevel)
           text = string.gsub(text, "(|Hplayer:" .. name .. "|h.-|h|r)" .. right,
             "%1 |cffff0000??|r" .. right)
         end
@@ -820,21 +828,20 @@ pfUI:RegisterModule("chat", "vanilla:tbc", function ()
       end
     end
 
-    -- show timestamp in chat
+    -- show timestamp in chat (use string.format instead of concatenation)
     if C.chat.text.time == "1" then
-      text = timecolorhex .. tleft .. date(C.chat.text.timeformat) .. tright .. "|r " .. text
+      text = string.format("%s%s%s%s|r %s", timecolorhex, tleft, date(C.chat.text.timeformat), tright, text)
     end
 
     -- save chat history
-    if C.chat.global.whispermod == "1" and string.find(text, wcol, 1) == 1 then
+    if C.chat.global.whispermod == "1" and string.find(text, wcol, 1, true) == 1 then
       SaveChatHistory(frame:GetID(), string.gsub(text, wcol, ""), cr, cg, cb)
     else
       SaveChatHistory(frame:GetID(), text, a1, a2, a3)
     end
 
     if C.chat.global.whispermod == "1" then
-      -- patch incoming whisper string to match the colors
-      if string.find(text, wcol, 1) == 1 then
+      if string.find(text, wcol, 1, true) == 1 then
         text = string.gsub(text, "|r", "|r" .. wcol)
       end
     end
