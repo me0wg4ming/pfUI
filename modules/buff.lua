@@ -233,6 +233,9 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   pfUI.buff:RegisterEvent("UNIT_INVENTORY_CHANGED")
   pfUI.buff:RegisterEvent("UNIT_MODEL_CHANGED")
   pfUI.buff:SetScript("OnEvent", function()
+    -- UNIT_MODEL_CHANGED fires for every unit nearby, only care about player
+    if event == "UNIT_MODEL_CHANGED" and arg1 ~= "player" then return end
+
     if C.buffs.weapons == "1" then
       local mh, mhtime, mhcharge, oh, ohtime, ohcharge = GetWeaponEnchantInfo()
       pfUI.buff.wepbuffs.count = (mh and 1 or 0) + (oh and 1 or 0)

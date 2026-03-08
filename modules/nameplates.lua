@@ -1324,6 +1324,12 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       if guid then
         nameplate.cachedGuid = guid
         guidRegistry[guid] = frame
+        -- notify libunitscan so it can cache unit data without mouseover
+        if pfUI.api.libunitscan and pfUI.api.libunitscan.ScanGuid then
+          local name = frame.nameplate.original.name:GetText()
+          local npcFlags = GetUnitField(guid, "npcFlags") or 0
+          pfUI.api.libunitscan.ScanGuid(guid, name, npcFlags == 0)
+        end
       end
     end
 
