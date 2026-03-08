@@ -243,21 +243,25 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     -- Clear Nampower data on all buttons
     for i=1,48 do
       local btn = pfUI.buff.buffs.buttons[i]
-      btn.np_texture = nil
-      btn.np_spellName = nil
-      btn.np_spellId = nil
-      btn.np_auraSlot = nil
-      btn.np_dtype = nil
-      btn.np_startTime = nil
-      btn.np_duration = nil
+      if btn then
+        btn.np_texture = nil
+        btn.np_spellName = nil
+        btn.np_spellId = nil
+        btn.np_auraSlot = nil
+        btn.np_dtype = nil
+        btn.np_startTime = nil
+        btn.np_duration = nil
+      end
     end
     for i=1,16 do
       local btn = pfUI.buff.debuffs.buttons[i]
-      btn.np_texture = nil
-      btn.np_spellName = nil
-      btn.np_spellId = nil
-      btn.np_auraSlot = nil
-      btn.np_dtype = nil
+      if btn then
+        btn.np_texture = nil
+        btn.np_spellName = nil
+        btn.np_spellId = nil
+        btn.np_auraSlot = nil
+        btn.np_dtype = nil
+      end
     end
 
     -- Fill buff buttons from IterBuffs
@@ -299,10 +303,10 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
 
     -- Refresh display
     for i=1,48 do
-      RefreshBuffButton(pfUI.buff.buffs.buttons[i])
+      if pfUI.buff.buffs.buttons[i] then RefreshBuffButton(pfUI.buff.buffs.buttons[i]) end
     end
     for i=1,16 do
-      RefreshBuffButton(pfUI.buff.debuffs.buttons[i])
+      if pfUI.buff.debuffs.buttons[i] then RefreshBuffButton(pfUI.buff.debuffs.buttons[i]) end
     end
     if C.buffs.separateweapons == "1" then
       for i=1,2 do
@@ -328,7 +332,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     local buttons = pfUI.buff.buffs.buttons
     for i = 1, 48 do
       local buff = buttons[i]
-      if buff:IsShown() then
+      if buff and buff:IsShown() then
         local timeleft, stacks = 0, 0
         if buff.mode == "MAINHAND" then
           timeleft = mhtime and mhtime / 1000 or 0
@@ -368,7 +372,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     buttons = pfUI.buff.debuffs.buttons
     for i = 1, 16 do
       local buff = buttons[i]
-      if buff:IsShown() then
+      if buff and buff:IsShown() then
         local timeleft, stacks = 0, 0
         if buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration
             and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[buff.np_spellId]) then
@@ -419,15 +423,23 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   -- Buff Frame
   pfUI.buff.buffs = CreateFrame("Frame", "pfBuffFrame", UIParent)
   pfUI.buff.buffs.buttons = {}
-  for i=1,48 do
-    pfUI.buff.buffs.buttons[i] = CreateBuffButton(i, "HELPFUL")
+  if C.buffs.buffs == "1" then
+    for i=1,48 do
+      pfUI.buff.buffs.buttons[i] = CreateBuffButton(i, "HELPFUL")
+    end
+  else
+    pfUI.buff.buffs:Hide()
   end
 
   -- Debuffs
   pfUI.buff.debuffs = CreateFrame("Frame", "pfDebuffFrame", UIParent)
   pfUI.buff.debuffs.buttons = {}
-  for i=1,16 do
-    pfUI.buff.debuffs.buttons[i] = CreateBuffButton(i, "HARMFUL")
+  if C.buffs.debuffs == "1" then
+    for i=1,16 do
+      pfUI.buff.debuffs.buttons[i] = CreateBuffButton(i, "HARMFUL")
+    end
+  else
+    pfUI.buff.debuffs:Hide()
   end
 
   -- ============================================================================
@@ -499,11 +511,11 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     end
 
     for i=1,48 do
-      pfUI.buff:UpdateConfigBuffButton(pfUI.buff.buffs.buttons[i])
+      if pfUI.buff.buffs.buttons[i] then pfUI.buff:UpdateConfigBuffButton(pfUI.buff.buffs.buttons[i]) end
     end
 
     for i=1,16 do
-      pfUI.buff:UpdateConfigBuffButton(pfUI.buff.debuffs.buttons[i])
+      if pfUI.buff.debuffs.buttons[i] then pfUI.buff:UpdateConfigBuffButton(pfUI.buff.debuffs.buttons[i]) end
     end
 
     for i=1,2 do
