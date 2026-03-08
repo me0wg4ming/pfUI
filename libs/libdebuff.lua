@@ -2260,9 +2260,9 @@ end
       local displaySlot = arg2  -- Display slot (1-16), compacted
       local spellId = arg3
       local stacks = arg4
-      local auraSlot_0based = arg6  -- Nampower 2.29+: raw slot 0-based (32-47)
+      local auraSlot_0based = arg6  -- Nampower 2.29+: debuff aura slot, 0-based (32-47). GetUnitField uses 1-based (33-48), so we add +1 below.
 
-      -- Convert 0-based (Nampower event) to 1-based (Lua GetUnitField array)
+      -- Convert Nampower 0-based slot (32-47) to GetUnitField 1-based slot (33-48)
       local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
 
       -- Invalidate slot map cache for this GUID
@@ -2290,8 +2290,9 @@ end
         end
       end
       
-      -- Fallback: Calculate aura slot if GetUnitField didn't work
-      -- (This assumes no gaps, which isn't always true, but better than nothing)
+      -- Last resort fallback: derive 1-based aura slot from display slot.
+      -- displaySlot is 1-based (1-16), debuff aura slots start at 33, so: 32 + displaySlot.
+      -- Unreliable if there are gaps in the aura array (removed debuffs leave holes).
       if not auraSlot then
         auraSlot = 32 + displaySlot
       end
@@ -2478,9 +2479,9 @@ end
       local guid = arg1
       local displaySlot = arg2  -- Display slot (1-16), compacted
       local spellId = arg3
-      local auraSlot_0based = arg6  -- Nampower 2.29+: raw slot 0-based (32-47)
+      local auraSlot_0based = arg6  -- Nampower 2.29+: debuff aura slot, 0-based (32-47). GetUnitField uses 1-based (33-48), so we add +1 below.
 
-      -- Convert 0-based (Nampower event) to 1-based (Lua GetUnitField array)
+      -- Convert Nampower 0-based slot (32-47) to GetUnitField 1-based slot (33-48)
       local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
 
       -- Invalidate slot map cache for this GUID
