@@ -1321,6 +1321,7 @@ function pfUI.uf.OnEvent()
     else
       this.update_full = true
     end
+    this.update_aura = true  -- force aura refresh on party change (initial buff population)
   elseif ( this.label == "raid" or this.label == "party" ) and event == "PARTY_MEMBER_ENABLE" then
     this.update_full = true
   elseif ( this.label == "raid" or this.label == "party" ) and event == "PARTY_MEMBER_DISABLE" then
@@ -1334,6 +1335,7 @@ function pfUI.uf.OnEvent()
       this.update_full = true
     end
     -- Raid frames: update_full is set by raid.lua GUID tracker
+    this.update_aura = true  -- force aura refresh on roster change (initial buff population)
   elseif this.label == "pet" and event == "UNIT_PET" then
     this.update_full = true
   elseif this.label == "player" and (event == "PLAYER_AURAS_CHANGED" or event == "UNIT_INVENTORY_CHANGED") then
