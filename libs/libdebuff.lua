@@ -905,9 +905,6 @@ function libdebuff:IterDebuffs(unit, fn)
 
   local auras = GetUnitField(guid, "aura")
   if not auras then
-    if debugStats.enabled then
-      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO AURAS for: "..guid.."|r")
-    end
     return 0
   end
   local auraApps = GetUnitField(guid, "auraApplications")
