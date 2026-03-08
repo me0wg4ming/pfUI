@@ -575,15 +575,30 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     pfUI.uf.target.debuffbar:SetPoint("BOTTOM", pfUI.uf.target, "TOP", 0, border*2+1)
     UpdateMovable(pfUI.uf.target.debuffbar)
 
-    -- Refresh immediately on AURA_CAST for target debuffs
-    -- UNIT_AURA doesn't fire for enemy targets on refresh, causing 2s fallback delay
+    -- Refresh via libdebuff hooks (UNIT_AURA doesn't fire on enemy target refreshes)
     local tdebuffbar = pfUI.uf.target.debuffbar
+
     pfUI.libdebuff_aura_cast_on_other_hooks = pfUI.libdebuff_aura_cast_on_other_hooks or {}
     table.insert(pfUI.libdebuff_aura_cast_on_other_hooks, function(spellId, casterGuid, targetGuid)
       if not targetGuid or not GetUnitGUID then return end
-      local currentTarget = GetUnitGUID("target")
-      if currentTarget and currentTarget == targetGuid then
+      if GetUnitGUID("target") == targetGuid then
         RefreshBuffBarFrame(tdebuffbar)
+        tdebuffbar:RefreshPosition()
+      end
+    end)
+
+    pfUI.libdebuff_melee_refresh_hooks = {}
+    table.insert(pfUI.libdebuff_melee_refresh_hooks, function(targetGuid)
+      RefreshBuffBarFrame(tdebuffbar)
+      tdebuffbar:RefreshPosition()
+    end)
+
+    pfUI.libdebuff_debuff_added_other_hooks = pfUI.libdebuff_debuff_added_other_hooks or {}
+    table.insert(pfUI.libdebuff_debuff_added_other_hooks, function(guid, luaSlot, spellId, stackCount)
+      if not guid or not GetUnitGUID then return end
+      if GetUnitGUID("target") == guid then
+        RefreshBuffBarFrame(tdebuffbar)
+        tdebuffbar:RefreshPosition()
       end
     end)
   end

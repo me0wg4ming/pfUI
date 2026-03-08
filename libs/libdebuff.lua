@@ -198,6 +198,9 @@ pfUI.libdebuff_aura_cast_on_other_hooks = pfUI.libdebuff_aura_cast_on_other_hook
 -- Callbacks fired after DEBUFF_ADDED_OTHER is processed: fn(guid, luaSlot, spellId, stackCount)
 pfUI.libdebuff_debuff_added_other_hooks = pfUI.libdebuff_debuff_added_other_hooks or {}
 
+-- Callbacks fired after melee refresh updates slotTimers: fn(targetGuid)
+pfUI.libdebuff_melee_refresh_hooks = pfUI.libdebuff_melee_refresh_hooks or {}
+
 -- Callbacks fired after DEBUFF_REMOVED_OTHER is processed: fn(guid, luaSlot, spellId, stackCount)
 pfUI.libdebuff_debuff_removed_other_hooks = pfUI.libdebuff_debuff_removed_other_hooks or {}
 
@@ -1732,6 +1735,12 @@ end
             if currentTargetGuid == targetGuid then
               if pfTarget then pfTarget.update_aura = true end
               libdebuff:UpdateUnits()
+              -- Notify buffwatch (UNIT_AURA doesn't fire on melee refresh)
+              if pfUI.libdebuff_melee_refresh_hooks then
+                for _, fn in pairs(pfUI.libdebuff_melee_refresh_hooks) do
+                  fn(targetGuid)
+                end
+              end
             end
           end
         end
