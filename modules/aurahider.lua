@@ -86,7 +86,7 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
   closeTex:SetText("|cffaaaaaa×|r")
   closeBtn:SetScript("OnEnter", function() closeTex:SetText("|cffffffff×|r") end)
   closeBtn:SetScript("OnLeave", function() closeTex:SetText("|cffaaaaaa×|r") end)
-  closeBtn:SetScript("OnClick", function() frame:Hide() end)
+  closeBtn:SetScript("OnClick", function() frame:Hide(); frame.unit = "target" end)
 
   -- ── Scroll area ──────────────────────────────────────────────
   local scroll = CreateFrame("ScrollFrame", "pfUIBuffAnalyzerScroll", frame, "UIPanelScrollFrameTemplate")
@@ -232,18 +232,22 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
   end
 
   -- ── Update function ──────────────────────────────────────────
-  frame.Update = function()
-    if not UnitExists("target") then
+  frame.unit = "target" -- default, overridden when opened for player
+
+  frame.Update = function(unit)
+    unit = unit or frame.unit or "target"
+    frame.unit = unit
+    if not UnitExists(unit) then
       frame:Hide()
       return
     end
 
     -- Update portrait
-    SetPortraitTexture(portrait, "target")
+    SetPortraitTexture(portrait, unit)
 
     -- Update title with class color
-    local targetName = UnitName("target") or "?"
-    local _, class = UnitClass("target")
+    local targetName = UnitName(unit) or "?"
+    local _, class = UnitClass(unit)
     local cc = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
     local hex = cc and string.format("%02x%02x%02x",
       math.floor(cc.r * 255),
@@ -251,7 +255,7 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
       math.floor(cc.b * 255)) or "ffffff"
     title:SetText("|cff" .. hex .. targetName .. "|r")
 
-    local guid = GetUnitGUID and GetUnitGUID("target")
+    local guid = GetUnitGUID and GetUnitGUID(unit)
     if not guid or not GetUnitField then
       title:SetText("|cffff4444Nampower required|r")
       return
@@ -346,43 +350,51 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
   frame:RegisterEvent("UNIT_AURA")
   frame:SetScript("OnEvent", function()
     if not frame:IsShown() then return end
-    if event == "UNIT_AURA" and arg1 ~= "target" then return end
-    if UnitExists("target") then
+    if event == "PLAYER_TARGET_CHANGED" then
+      frame.unit = UnitExists("target") and "target" or "player"
+      if UnitExists(frame.unit) then
+        frame.Update()
+      else
+        frame:Hide()
+        frame.unit = "target"
+      end
+      return
+    end
+    local unit = frame.unit or "target"
+    if event == "UNIT_AURA" and arg1 ~= unit then return end
+    if UnitExists(unit) then
       frame.Update()
     else
       frame:Hide()
+      frame.unit = "target"
     end
   end)
 
   -- debuff_added/removed for debuffs on target
   local function refreshNow()
-    if frame:IsShown() and UnitExists("target") then frame.Update() end
+    local unit = frame.unit or "target"
+    if frame:IsShown() and UnitExists(unit) then frame.Update() end
   end
 
   pfUI.libdebuff_debuff_added_other_hooks = pfUI.libdebuff_debuff_added_other_hooks or {}
   table.insert(pfUI.libdebuff_debuff_added_other_hooks, function(guid, luaSlot, spellId, stackCount)
     if not frame:IsShown() then return end
-    if not GetUnitGUID or GetUnitGUID("target") ~= guid then return end
+    if not GetUnitGUID or GetUnitGUID(frame.unit or "target") ~= guid then return end
     refreshNow()
   end)
 
   pfUI.libdebuff_debuff_removed_other_hooks = pfUI.libdebuff_debuff_removed_other_hooks or {}
   table.insert(pfUI.libdebuff_debuff_removed_other_hooks, function(guid, luaSlot, spellId)
     if not frame:IsShown() then return end
-    if not GetUnitGUID or GetUnitGUID("target") ~= guid then return end
+    if not GetUnitGUID or GetUnitGUID(frame.unit or "target") ~= guid then return end
     refreshNow()
   end)
 
-  -- Heartbeat fallback via central libdebuff timer
+  -- Heartbeat fallback via central libdebuff timer (2s)
   pfUI.libdebuff_heartbeat_hooks = pfUI.libdebuff_heartbeat_hooks or {}
   pfUI.libdebuff_heartbeat_hooks["aurahider"] = function()
-    if frame:IsShown() and UnitExists("target") then frame.Update() end
-  end
-
-  -- Fallback heartbeat via central libdebuff timer (2s)
-  pfUI.libdebuff_heartbeat_hooks = pfUI.libdebuff_heartbeat_hooks or {}
-  pfUI.libdebuff_heartbeat_hooks["aurahider"] = function()
-    if frame:IsShown() and UnitExists("target") then frame.Update() end
+    local unit = frame.unit or "target"
+    if frame:IsShown() and UnitExists(unit) then frame.Update() end
   end
 
   -- ── Right-click menu integration ─────────────────────────────
@@ -403,13 +415,19 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
     hooksecurefunc("UnitPopup_OnClick", function()
       if this.value ~= "PF_HIDE_AURAS" then return end
 
-      if not UnitExists("target") then
+      local dropdownFrame = _G[UIDROPDOWNMENU_INIT_MENU]
+      local dropdownUnit = dropdownFrame and dropdownFrame.unit or ""
+      local isSelf = UnitIsUnit(dropdownUnit, "player")
+      local unit = isSelf and "player" or "target"
+
+      if not UnitExists(unit) then
         DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[AuraHider] No target selected!|r")
         return
       end
 
       if frame:IsShown() then
         frame:Hide()
+        frame.unit = "target"
       else
         frame:ClearAllPoints()
         if pfUI.gui and pfUI.gui:IsShown() then
@@ -417,7 +435,7 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
         else
           frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
-        frame.Update()
+        frame.Update(unit)
         frame:Show()
       end
     end)

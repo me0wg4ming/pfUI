@@ -2573,8 +2573,29 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
                 sep:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
                 sep:SetTexture(0.2, 0.2, 0.2, 0.8)
 
-                row:SetScript("OnEnter", function() this.highlight:Show() end)
-                row:SetScript("OnLeave", function() this.highlight:Hide() end)
+                row:SetScript("OnEnter", function()
+                  this.highlight:Show()
+                  GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+                  GameTooltip:ClearLines()
+                  local shown = false
+                  if this.spellId then
+                    local lt = pfUI.api.libtooltip
+                    if lt and lt.SetSpellByID then
+                      shown = lt:SetSpellByID(GameTooltip, this.spellId)
+                    end
+                  end
+                  if not shown then
+                    GameTooltip:AddLine(this.spellName or "Unknown", 1, 1, 1)
+                    if this.spellId then
+                      GameTooltip:AddLine("SpellID: " .. this.spellId, 0.6, 0.6, 0.6)
+                    end
+                  end
+                  GameTooltip:Show()
+                end)
+                row:SetScript("OnLeave", function()
+                  this.highlight:Hide()
+                  GameTooltip:Hide()
+                end)
               end
 
               row:SetPoint("TOPLEFT", 10, -yOffset)
@@ -2599,6 +2620,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
                 if name == "" then name = "Unknown" end
                 rank = GetSpellRecField(spellId, "rank") or ""
               end
+              row.spellName = name
 
               local displayText = "|cffffd100" .. name .. "|r"
               if rank ~= "" then displayText = displayText .. " |cffff4444" .. rank .. "|r" end
