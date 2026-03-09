@@ -111,6 +111,7 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
     local row = CreateFrame("Button", nil, content)
     row:SetWidth(FRAME_WIDTH - 28)
     row:SetHeight(ROW_HEIGHT)
+    row:EnableMouse(true)
 
     -- Hover highlight
     local hl = row:CreateTexture(nil, "BACKGROUND")
@@ -160,12 +161,19 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
       hl:Show()
       GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
       GameTooltip:ClearLines()
-      GameTooltip:AddLine(this.spellName or "Unknown", 1, 1, 1)
+      local shown = false
       if this.spellId then
-        GameTooltip:AddLine("SpellID: " .. this.spellId, 0.6, 0.6, 0.6)
-        GameTooltip:AddLine(" ")
+        local lt = pfUI.api.libtooltip
+        if lt and lt.SetSpellByID then
+          shown = lt:SetSpellByID(GameTooltip, this.spellId)
+        end
       end
-      GameTooltip:AddLine("Click to hide this spell", 0.2, 1, 0.4)
+      if not shown then
+        GameTooltip:AddLine(this.spellName or "Unknown", 1, 1, 1)
+        if this.spellId then
+          GameTooltip:AddLine("SpellID: " .. this.spellId, 0.6, 0.6, 0.6)
+        end
+      end
       GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function()
@@ -375,6 +383,44 @@ pfUI:RegisterModule("auraanalyzer", "vanilla:tbc", function()
   pfUI.libdebuff_heartbeat_hooks = pfUI.libdebuff_heartbeat_hooks or {}
   pfUI.libdebuff_heartbeat_hooks["aurahider"] = function()
     if frame:IsShown() and UnitExists("target") then frame.Update() end
+  end
+
+  -- ── Right-click menu integration ─────────────────────────────
+  -- Add "Hide Auras" to player self-menu and target/other-player menus
+  if UnitPopupButtons and UnitPopupMenus then
+    UnitPopupButtons["PF_HIDE_AURAS"] = { text = "|cffff4444Hide Auras|r", dist = 0 }
+
+    -- SELF = PlayerFrame right-click (yourself)
+    if UnitPopupMenus["SELF"] then
+      table.insert(UnitPopupMenus["SELF"], "PF_HIDE_AURAS")
+    end
+
+    -- PLAYER = TargetFrame right-click when target is another player
+    if UnitPopupMenus["PLAYER"] then
+      table.insert(UnitPopupMenus["PLAYER"], "PF_HIDE_AURAS")
+    end
+
+    hooksecurefunc("UnitPopup_OnClick", function()
+      if this.value ~= "PF_HIDE_AURAS" then return end
+
+      if not UnitExists("target") then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[AuraHider] No target selected!|r")
+        return
+      end
+
+      if frame:IsShown() then
+        frame:Hide()
+      else
+        frame:ClearAllPoints()
+        if pfUI.gui and pfUI.gui:IsShown() then
+          frame:SetPoint("TOPLEFT", pfUI.gui, "TOPRIGHT", 5, 0)
+        else
+          frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        end
+        frame.Update()
+        frame:Show()
+      end
+    end)
   end
 
   -- Slash commands
