@@ -25,7 +25,7 @@ function librange:UnitInSpellRange(unit)
     end
   end
 
-  -- Nampower fallback: IsSpellInRange with fixed SpellID, works for all classes
+  -- Nampower: IsSpellInRange with fixed SpellID, works for all classes
   local result = IsSpellInRange(5185, unit)
   return result == 1 and 1 or nil
 end
