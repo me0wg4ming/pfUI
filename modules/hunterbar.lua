@@ -28,9 +28,9 @@ pfUI:RegisterModule("hunterbar", "vanilla", function ()
 
     -- swap to ranged bar: out of melee range AND arcane shot (8yd) in range
     if wingclipInRange == 0 and arcaneshotInRange == 1 then
-      if this.lastPage ~= 9 then
-        this.lastPage = 9
-        _G.CURRENT_ACTIONBAR_PAGE = 9
+      if this.lastPage ~= 2 then
+        this.lastPage = 2
+        _G.CURRENT_ACTIONBAR_PAGE = 2
         ChangeActionBarPage()
       end
 
