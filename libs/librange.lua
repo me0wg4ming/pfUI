@@ -34,11 +34,12 @@ end
 pfUI.api.librange = librange
 
 -- resume auto-attack after spell cast ends (normal or failed)
--- uses libdebuff hook system to avoid extra frames
+-- only call AttackTarget() if auto-attack was interrupted by the cast
 local reattack_pending = false
 
 local function reattack_check()
-  if UnitExists("target") and UnitCanAttack("player", "target") then
+  local _,_,_,_,_,_,autoattack = GetCurrentCastingInfo()
+  if autoattack == 0 and UnitExists("target") and UnitCanAttack("player", "target") then
     reattack_pending = true
   end
 end
