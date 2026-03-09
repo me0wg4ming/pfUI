@@ -2722,6 +2722,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           if pfUI.aurahider_forceRefresh then
             pfUI.aurahider_forceRefresh()
           end
+          if pfUI.gui and pfUI.gui.updateBuffAnalyzer then
+            pfUI.gui.updateBuffAnalyzer()
+          end
 
           local name = GetSpellRecField and GetSpellRecField(spellId, "name") or "Unknown"
           DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[AuraHider] Hidden:|r " .. name .. " (" .. spellId .. ")")
