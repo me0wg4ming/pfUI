@@ -177,6 +177,9 @@ local recentCasts = pfUI.libdebuff_recent_casts
 -- Callbacks fired after SPELL_GO_SELF is processed: fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
 
+-- Callbacks fired after SPELL_FAILED_SELF is processed: fn(spellId, spellResult, failedByServer)
+pfUI.libdebuff_spell_failed_self_hooks = pfUI.libdebuff_spell_failed_self_hooks or {}
+
 -- Callbacks fired after SPELL_GO_OTHER is processed: fn(spellId, casterGuid, targetGuid)
 pfUI.libdebuff_spell_go_other_hooks = pfUI.libdebuff_spell_go_other_hooks or {}
 
@@ -1679,6 +1682,11 @@ end
     elseif event == "SPELL_FAILED_SELF" then
       -- Clear captured CPs on failed cast
       capturedCP = nil
+      if pfUI.libdebuff_spell_failed_self_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_failed_self_hooks) do
+          fn(arg1, arg2, arg3)
+        end
+      end
 
     elseif event == "AUTO_ATTACK_SELF" or event == "AUTO_ATTACK_OTHER" then
       -- Melee autohit: refresh Judgement debuffs from this attacker on the target

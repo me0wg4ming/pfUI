@@ -960,7 +960,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "16:" .. T["Very Slow"],
       },
       ["uf_rangecheck_mode"] = {
-        "vanilla:" .. T["Vanilla (Spellbook)"],
+        "vanilla:" .. T["Nampower"],
         "unitxp:" .. T["UnitXP (Precise)"],
       },
       ["uf_raidlayout"] = {
@@ -2082,7 +2082,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Enable 40y-Range Check"], C.unitframes, "rangecheck", "checkbox", nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Range Check Mode"], C.unitframes, "rangecheck_mode", "dropdown", pfUI.gui.dropdowns.uf_rangecheck_mode, nil, nil, nil, "vanilla")
       CreateConfig(nil, T["UnitXP Range Threshold (yards)"], C.unitframes, "rangecheck_distance", nil, nil, nil, nil, nil, "vanilla")
-      CreateConfig(nil, T["Range Check Interval"], C.unitframes, "rangechecki", "dropdown", pfUI.gui.dropdowns.uf_rangecheckinterval, nil, nil, nil, "vanilla")
       CreateConfig(nil, T["Use Raid Frames To Display Group Members"], C.unitframes, "raidforgroup", "checkbox")
       CreateConfig(nil, T["Always Show Self In Raid Frames"], C.unitframes, "selfinraid", "checkbox")
       CreateConfig(nil, T["Show Self In Group Frames"], C.unitframes, "selfingroup", "checkbox")
