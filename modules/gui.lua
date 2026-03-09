@@ -560,6 +560,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
     pfUI.gui:SetMovable(true)
     pfUI.gui:EnableMouse(true)
     pfUI.gui:RegisterForDrag("LeftButton")
+    pfUI.gui:SetClampedToScreen(true)
     pfUI.gui:SetWidth(720)
     pfUI.gui:SetHeight(480)
     pfUI.gui:SetFrameStrata("DIALOG")
@@ -2490,6 +2491,226 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Whitelist"], C.buffbar.tdebuff, "whitelist", "list")
       CreateConfig(nil, T["Blacklist"], C.buffbar.tdebuff, "blacklist", "list")
     end)
+    if pfUI.module["aurahider"] then
+    CreateGUIEntry(T["Buffs"], T["Hide Auras"], function()
+      -- Get the outer scroll content frame as parent (no dummy needed)
+      local header = CreateConfig(nil, "Hidden Buff/Debuff Aura List", nil, nil, "header")
+      header:GetParent().objectCount = header:GetParent().objectCount - 1
+      header:SetHeight(20)
+      local parent = header:GetParent()
+
+      -- listFrame is parented to pfUI.gui (NOT parent/scroll.content)
+      -- so it does NOT inflate the outer scroll content height
+      local listFrame = CreateFrame("Frame", nil, pfUI.gui)
+      listFrame:SetWidth(410)
+      listFrame:SetHeight(325)
+      listFrame:SetFrameStrata("DIALOG")
+      listFrame:SetFrameLevel(pfUI.gui:GetFrameLevel() + 20)
+
+      -- sync visibility with the scroll content
+      parent:SetScript("OnShow", function() listFrame:Show() end)
+      parent:SetScript("OnHide", function() listFrame:Hide() end)
+      if not parent:IsShown() then listFrame:Hide() end
+      listFrame:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 }
+      })
+      listFrame:SetBackdropColor(0.1, 0.1, 0.1, 1)
+      listFrame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+      listFrame.scroll = CreateFrame("ScrollFrame", "pfUI_HiddenBuffsScroll", listFrame, "UIPanelScrollFrameTemplate")
+      listFrame.scroll:SetPoint("TOPLEFT", 5, -5)
+      listFrame.scroll:SetPoint("BOTTOMRIGHT", -25, 5)
+
+      listFrame.content = CreateFrame("Frame", nil, listFrame.scroll)
+      listFrame.content:SetWidth(380)
+      listFrame.content:SetHeight(1)
+      listFrame.scroll:SetScrollChild(listFrame.content)
+
+      listFrame.updateHiddenList = function()
+        for i = 1, 100 do
+          if listFrame.content[i] then listFrame.content[i]:Hide() end
+        end
+
+        local yOffset = 10
+        local index = 0
+
+        if pfUI_config.buffs.hidelist and pfUI_config.buffs.hidelist ~= "" then
+          for id in string.gfind(pfUI_config.buffs.hidelist, "([^#]+)") do
+            local spellId = tonumber(id)
+            if spellId then
+              index = index + 1
+
+              local row = listFrame.content[index]
+              if not row then
+                row = CreateFrame("Button", nil, listFrame.content)
+                row:SetWidth(380)
+                row:SetHeight(36)
+                listFrame.content[index] = row
+
+                row.icon = row:CreateTexture(nil, "ARTWORK")
+                row.icon:SetWidth(32)
+                row.icon:SetHeight(32)
+                row.icon:SetPoint("LEFT", 2, 0)
+                row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+                row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                row.text:SetPoint("LEFT", 38, 0)
+                row.text:SetJustifyH("LEFT")
+                row.text:SetWidth(340)
+
+                row.highlight = row:CreateTexture(nil, "BACKGROUND")
+                row.highlight:SetAllPoints(row)
+                row.highlight:SetTexture(1, 1, 1, 0.1)
+                row.highlight:Hide()
+
+                -- Separator line at bottom (like BuffAnalyzer)
+                local sep = row:CreateTexture(nil, "BACKGROUND")
+                sep:SetHeight(1)
+                sep:SetPoint("BOTTOMLEFT",  row, "BOTTOMLEFT",  0, 0)
+                sep:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+                sep:SetTexture(0.2, 0.2, 0.2, 0.8)
+
+                row:SetScript("OnEnter", function() this.highlight:Show() end)
+                row:SetScript("OnLeave", function() this.highlight:Hide() end)
+              end
+
+              row:SetPoint("TOPLEFT", 10, -yOffset)
+              row.spellId = spellId
+
+              local texture = nil
+              if GetSpellRecField and GetSpellIconTexture then
+                local iconId = GetSpellRecField(spellId, "spellIconID")
+                if iconId then
+                  texture = GetSpellIconTexture(iconId)
+                  if texture and not string.find(texture, "\\") then
+                    texture = "Interface\\Icons\\" .. texture
+                  end
+                end
+              end
+              row.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+              local name = "Unknown"
+              local rank = ""
+              if GetSpellRecField then
+                name = GetSpellRecField(spellId, "name") or "Unknown"
+                if name == "" then name = "Unknown" end
+                rank = GetSpellRecField(spellId, "rank") or ""
+              end
+
+              local displayText = "|cffffd100" .. name .. "|r"
+              if rank ~= "" then displayText = displayText .. " |cffff4444" .. rank .. "|r" end
+              displayText = displayText .. " |cff44ff44" .. spellId .. "|r"
+              displayText = displayText .. " |cffff0000[X]|r"
+              row.text:SetText(displayText)
+
+              row:SetScript("OnClick", function()
+                local removeId = this.spellId
+                local newList = {}
+                for id in string.gfind(pfUI_config.buffs.hidelist, "([^#]+)") do
+                  if tonumber(id) ~= removeId then
+                    table.insert(newList, id)
+                  end
+                end
+                pfUI_config.buffs.hidelist = table.concat(newList, "#")
+
+                if pfUI.api.libdebuff then
+                  pfUI.api.libdebuff:ClearBuffCache()
+                end
+                if pfUI.aurahider_forceRefresh then
+                  pfUI.aurahider_forceRefresh()
+                end
+
+                DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[AuraHider] Removed SpellID " .. removeId .. " - changes applied immediately|r")
+                listFrame.updateHiddenList()
+
+                -- Refresh BuffAnalyzer so removed buff reappears
+                if pfUI.gui and pfUI.gui.updateBuffAnalyzer then
+                  pfUI.gui.updateBuffAnalyzer()
+                end
+              end)
+
+              row:Show()
+              yOffset = yOffset + 38
+            end
+          end
+        end
+
+        local contentHeight = index * 38 + 20
+        if contentHeight < 300 then contentHeight = 300 end
+        listFrame.content:SetHeight(contentHeight)
+        listFrame.scroll:UpdateScrollChildRect()
+        listFrame.scroll:SetVerticalScroll(0)
+      end
+
+      pfUI.gui.updateHiddenBuffsList = listFrame.updateHiddenList
+
+      -- Add button
+      local addButton = CreateFrame("Button", nil, parent)
+      addButton:SetWidth(60)
+      addButton:SetHeight(25)
+      addButton:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -8)
+      addButton:SetText("[+] Add")
+      SkinButton(addButton)
+
+      -- Spell Analyzer button
+      local analyzerButton = CreateFrame("Button", nil, parent)
+      analyzerButton:SetWidth(130)
+      analyzerButton:SetHeight(25)
+      analyzerButton:SetPoint("LEFT", addButton, "RIGHT", 5, 0)
+      analyzerButton:SetText("Show Target Spells")
+      SkinButton(analyzerButton)
+      analyzerButton:SetScript("OnClick", function()
+        if not UnitExists("target") then
+          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[AuraHider] No target selected!|r")
+          return
+        end
+        SlashCmdList["PFUIAURAANALYZER"]()
+      end)
+
+      listFrame:SetPoint("TOPLEFT", addButton, "BOTTOMLEFT", 0, -17.5)
+
+      addButton:SetScript("OnClick", function()
+        CreateQuestionDialog(T["Enter SpellID to hide:"], function()
+          local spellId = tonumber(this:GetParent().input:GetText())
+          if not spellId then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[AuraHider] Invalid SpellID!|r")
+            return
+          end
+
+          local current = pfUI_config.buffs.hidelist or ""
+          for id in string.gfind(current, "([^#]+)") do
+            if tonumber(id) == spellId then
+              DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[AuraHider] Already in list!|r")
+              return
+            end
+          end
+
+          if current ~= "" then
+            pfUI_config.buffs.hidelist = current .. "#" .. spellId
+          else
+            pfUI_config.buffs.hidelist = tostring(spellId)
+          end
+
+          if pfUI.api.libdebuff then
+            pfUI.api.libdebuff:ClearBuffCache()
+          end
+          if pfUI.aurahider_forceRefresh then
+            pfUI.aurahider_forceRefresh()
+          end
+
+          local name = GetSpellRecField and GetSpellRecField(spellId, "name") or "Unknown"
+          DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[AuraHider] Hidden:|r " .. name .. " (" .. spellId .. ")")
+          listFrame.updateHiddenList()
+        end, false, true)
+      end)
+
+      listFrame.updateHiddenList()
+    end)
+    end -- aurahider module check
+
 
     CreateGUIEntry(T["Actionbar"], T["General"], function()
       CreateConfig(U["bars"], T["Trigger Actions On Key Down"], C.bars, "keydown", "checkbox")

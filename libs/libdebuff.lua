@@ -177,9 +177,6 @@ local recentCasts = pfUI.libdebuff_recent_casts
 -- Callbacks fired after SPELL_GO_SELF is processed: fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
 
--- Callbacks fired after SPELL_FAILED_SELF is processed: fn(spellId, spellResult, failedByServer)
-pfUI.libdebuff_spell_failed_self_hooks = pfUI.libdebuff_spell_failed_self_hooks or {}
-
 -- Callbacks fired after SPELL_GO_OTHER is processed: fn(spellId, casterGuid, targetGuid)
 pfUI.libdebuff_spell_go_other_hooks = pfUI.libdebuff_spell_go_other_hooks or {}
 
@@ -1682,11 +1679,6 @@ end
     elseif event == "SPELL_FAILED_SELF" then
       -- Clear captured CPs on failed cast
       capturedCP = nil
-      if pfUI.libdebuff_spell_failed_self_hooks then
-        for _, fn in pairs(pfUI.libdebuff_spell_failed_self_hooks) do
-          fn(arg1, arg2, arg3)
-        end
-      end
 
     elseif event == "AUTO_ATTACK_SELF" or event == "AUTO_ATTACK_OTHER" then
       -- Melee autohit: refresh Judgement debuffs from this attacker on the target
@@ -2743,6 +2735,28 @@ _G.SlashCmdList["MEMCHECK"] = function()
   DEFAULT_CHAT_FRAME:AddMessage(string.format("  pendingCasts: %d GUIDs", countTable(pendingCasts)))
   DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00No ownSlots/allSlots (eliminated by GetUnitField approach!)|r")
   DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff============================================================|r")
+end
+
+-- Clear buff slot map cache and rebuild HiddenBuffsLookup (call after hidelist changes)
+function libdebuff:ClearBuffCache()
+  slotMapCache = {}
+  playerBuffMapCache = { map = nil, timestamp = 0 }
+  playerDebuffMapCache = { map = nil, timestamp = 0 }
+  pfUI_HiddenBuffsLookup = {}
+  pfUI_HiddenBuffNames = {}
+  local hidelist = pfUI_config and pfUI_config.buffs and pfUI_config.buffs.hidelist
+  if hidelist and hidelist ~= "" then
+    for id in string.gfind(hidelist, "([^#]+)") do
+      local sid = tonumber(id)
+      if sid then
+        pfUI_HiddenBuffsLookup[sid] = true
+        local sname = GetSpellRecField and GetSpellRecField(sid, "name")
+        if sname and sname ~= "" then
+          pfUI_HiddenBuffNames[sname] = true
+        end
+      end
+    end
+  end
 end
 
 DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r GetUnitField Edition loaded!")

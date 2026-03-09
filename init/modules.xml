@@ -39,6 +39,7 @@
   <Include file="..\modules\thirdparty-vanilla.lua"/>
   <Include file="..\modules\thirdparty-tbc.lua"/>
   <Include file="..\modules\buff.lua"/>
+  <Include file="..\modules\aurahider.lua"/>
   <Include file="..\modules\buffwatch.lua"/>
   <Include file="..\modules\nameplates.lua"/>
   <Include file="..\modules\loot.lua"/>

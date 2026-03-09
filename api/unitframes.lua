@@ -1795,6 +1795,13 @@ function pfUI.uf.OnUpdate()
         this.update_aura = nil
         this.update_base = true
         this.lastAuraRefresh = now
+        -- Notify buffwatch and other subscribers (single source of truth for aura updates)
+        if pfUI.libdebuff_uf_aura_hooks then
+          local unitstr = this.label and (this.label .. (this.id or ""))
+          if unitstr then
+            for _, fn in pairs(pfUI.libdebuff_uf_aura_hooks) do fn(unitstr) end
+          end
+        end
       end
     end
 

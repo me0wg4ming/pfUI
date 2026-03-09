@@ -84,7 +84,11 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ffcc" .. skill .. "|r" .. T["is now blacklisted."])
       end
     elseif this.parent.unit == "player" then
-      CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id,this.type))
+      if this.spellId and CancelPlayerAuraSpellId then
+        CancelPlayerAuraSpellId(this.spellId, this.type == "HELPFUL" and 1 or 0)
+      else
+        CancelPlayerBuff(GetPlayerBuff(PLAYER_BUFF_START_ID+this.id, this.type))
+      end
     end
   end
 
@@ -93,14 +97,15 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
 
     local lt = pfUI.api.libtooltip
 
-    if this.type == "HELPFUL" then
+    if this.spellId and lt and lt.SetSpellByID then
+      -- Use spellId directly - avoids index mismatch between auraSlot and display index
+      lt:SetSpellByID(GameTooltip, this.spellId, 0, nil, this.type == "HARMFUL" and "HARMFUL" or nil)
+    elseif this.type == "HELPFUL" then
       if lt and lt.SetUnitBuffTooltip then
         lt:SetUnitBuffTooltip(GameTooltip, this.unit, this.id)
       end
     elseif this.type == "HARMFUL" then
-      if this.spellId and lt and lt.SetSpellByID then
-        lt:SetSpellByID(GameTooltip, this.spellId, 0, nil, "HARMFUL")
-      elseif lt and lt.SetUnitDebuffTooltip then
+      if lt and lt.SetUnitDebuffTooltip then
         lt:SetUnitDebuffTooltip(GameTooltip, this.unit, this.id)
       end
     end
@@ -119,7 +124,22 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
   end
 
   local function StatusBarOnUpdate()
-    local remaining = this.endtime - GetTime()
+    local remaining
+
+    if this.unit == "player"
+        and this.spellId and this.id and this.id > 0 and GetPlayerAuraDuration
+        and not (pfUI.libdebuff_forced_no_timer and pfUI.libdebuff_forced_no_timer[this.spellId]) then
+      local durSpellId, remainingMs = GetPlayerAuraDuration(this.id - 1)
+      if durSpellId == this.spellId and remainingMs and remainingMs > 0 then
+        remaining = remainingMs / 1000
+        this.endtime = GetTime() + remaining
+      else
+        remaining = this.endtime and (this.endtime - GetTime()) or 0
+      end
+    else
+      remaining = this.endtime and (this.endtime - GetTime()) or 0
+    end
+
     this.bar:SetValue(remaining > 0 and remaining or 0)
 
     if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end
@@ -204,10 +224,9 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     return frame
   end
 
-  -- Reusable sorted-insert buffer (avoids table.sort on 32 entries every refresh)
-  local sortbuf = {}
-
   local function RefreshBuffBarFrame(frame)
+    -- Local sortbuf per call - avoids cross-frame contamination when multiple frames refresh
+    local sortbuf = {}
     local config = frame.config
     local selfdebuff = config.selfdebuff == "1"
     local isHarmful = frame.type == "HARMFUL"
@@ -221,9 +240,11 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       -- Nampower path: use IterDebuffs/IterBuffs - only iterates occupied slots
       if isHarmful then
         if unit == "player" then
-          libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft)
+          libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft, caster, isOurs)
             if not tex or string.find(tex, "QuestionMark") or not spellName or spellName == "" then return end
             if not BuffIsVisible(config, spellName) then return end
+            -- Skip spillover slots (1-32): these can briefly show buffs as debuffs during flag desync
+            if auraSlot < 33 then return end
             timeleft = timeleft or 0
             if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
             n = n + 1
@@ -255,9 +276,12 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
         end
       else
         -- HELPFUL: IterBuffs
+        local seen = {}
         libdebuff:IterBuffs(unit, function(auraSlot, spellId, spellName, tex, st, tl, dur)
           if not tex or string.find(tex, "QuestionMark") or not spellName or spellName == "" then return end
           if not BuffIsVisible(config, spellName) then return end
+          if spellId and seen[spellId] then return end  -- skip duplicates (spillover slots)
+          if spellId then seen[spellId] = true end
           local timeleft = tl or 0
           if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
           n = n + 1
@@ -336,7 +360,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       frame.bars[bar].spellId = spellId
       frame.bars[bar].unit = unit
       frame.bars[bar].type = frame.type
-      frame.bars[bar].endtime = GetTime() + ( timeleft > 0 and timeleft or -1 )
+      frame.bars[bar].endtime = timeleft > 0 and (GetTime() + timeleft) or 0
 
       -- duration tracking
       frame.durations[uuid] = frame.durations[uuid] or {}
@@ -458,24 +482,24 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
 
     frame.RefreshPosition = RefreshPosition
 
-    -- Event-driven refresh: UNIT_AURA / PLAYER_AURAS_CHANGED
-    -- OnUpdate only runs the timer sweep on visible bars (StatusBarOnUpdate handles that per-bar)
-    -- BuffBarFrame itself only needs to re-sort/re-display when auras actually change
-    frame:RegisterEvent("UNIT_AURA")
+    -- Own event listener on a always-visible frame (UIParent child stays visible)
+    -- Vanilla WoW only fires events for visible frames - the buffbar container is never shown
+    local eventFrame = CreateFrame("Frame", nil, UIParent)
+    eventFrame:RegisterEvent("UNIT_AURA")
     if frame.unit == "player" then
-      frame:RegisterEvent("PLAYER_AURAS_CHANGED")
+      eventFrame:RegisterEvent("PLAYER_AURAS_CHANGED")
     end
-    frame:SetScript("OnEvent", function()
-      if event == "PLAYER_AURAS_CHANGED" and this.unit == "player" then
-        RefreshBuffBarFrame(this)
-        this:RefreshPosition()
-      elseif event == "UNIT_AURA" and arg1 == this.unit then
-        RefreshBuffBarFrame(this)
-        this:RefreshPosition()
+    eventFrame:SetScript("OnEvent", function()
+      if event == "PLAYER_AURAS_CHANGED" then
+        RefreshBuffBarFrame(frame)
+        frame:RefreshPosition()
+      elseif event == "UNIT_AURA" and arg1 == frame.unit then
+        RefreshBuffBarFrame(frame)
+        frame:RefreshPosition()
       end
     end)
 
-    -- Fallback heartbeat: every 2s in case events are missed (e.g. out of range)
+    -- Fallback heartbeat: every 2s for out-of-range / missed events
     frame:SetScript("OnUpdate", function()
       if (this.tick or 1) > GetTime() then return else this.tick = GetTime() + 2 end
       RefreshBuffBarFrame(this)
@@ -486,10 +510,12 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
   end
 
   local function asc(a,b)
+    if a[1] == b[1] then return a[2] < b[2] end
     return a[1] > b[1]
   end
 
   local function desc(a,b)
+    if a[1] == b[1] then return a[2] < b[2] end
     return a[1] < b[1]
   end
 
@@ -587,7 +613,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       end
     end)
 
-    pfUI.libdebuff_melee_refresh_hooks = {}
+    pfUI.libdebuff_melee_refresh_hooks = pfUI.libdebuff_melee_refresh_hooks or {}
     table.insert(pfUI.libdebuff_melee_refresh_hooks, function(targetGuid)
       RefreshBuffBarFrame(tdebuffbar)
       tdebuffbar:RefreshPosition()
