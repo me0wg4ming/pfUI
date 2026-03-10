@@ -10,10 +10,10 @@ assignees: ''
 <!-- Please fill out ALL fields below. Issues without this info may be closed. -->
 
 **pfUI Branch:**
-- [ ] Nampower
-- [ ] Compat (non-Nampower)
+- [ ] Master
+- [ ] experiment
 
-**Nampower Version:** (e.g. latest, or specific commit/date)
+**Your Nampower Version:** (e.g. latest, or specific commit/date)
 <!-- Skip if using Compat branch -->
 
 **Other Addons installed:**
