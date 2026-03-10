@@ -1,12 +1,11 @@
 ---
 name: Bug Report
 about: Report a bug or issue with pfUI
-title: "[Bug] "
+title: "[Bug Description] "
 labels: bug
 assignees: ''
 ---
 
-## Environment
 <!-- Please fill out ALL fields below. Issues without this info may be closed. -->
 
 **pfUI Branch:**
