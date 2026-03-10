@@ -6,12 +6,11 @@ setfenv(1, pfUI:GetEnvironment())
 -- Such as level, class, elite-state and playertype. Each query causes the library
 -- to automatically scan for the target if not already existing. Player-data is
 -- persisted within the pfUI_playerDB where the mob data is a throw-away table.
--- The automatic target scanner is only working for vanilla due to client limitations
--- on further expansions.
 --
--- When Nampower is available, the TargetByName scanner is replaced entirely by
--- a GUID-based mouseover/target scan using GetUnitField() for direct memory access.
--- This avoids TargetByName, ClearTarget, and the OnUpdate scanner entirely.
+-- Requires Nampower. Uses GUID-based GetUnitField() for direct memory access.
+-- mouseover and target are scanned via GetUnitGUID() + GetUnitField().
+-- elite is the only value still read via UnitClassification() as it has no
+-- equivalent in the Nampower unit fields.
 --
 -- External functions:
 --   GetUnitData(name, active)
@@ -36,7 +35,7 @@ if pfUI.api.libunitscan then return end
 local units = { players = {}, mobs = {} }
 local queue = { }
 
--- save Nampower's GetUnitData before we overwrite the global
+-- save Nampower's GetUnitField before we overwrite the global
 local NP_GetUnitField = GetUnitField
 
 -- reusable locals to avoid per-event allocations
@@ -77,13 +76,13 @@ local function AddData(db, name, class, level, elite, guild)
   queue[name] = nil
 end
 
--- Nampower: scan a GUID directly (called by nameplates OnShow)
--- Allows libunitscan to cache unit data as soon as a nameplate appears,
--- without requiring the user to mouseover the unit first.
-local function ScanGuid(guid, name, isPlayer)
+-- Nampower: scan a GUID directly.
+-- Called by nameplates OnShow and mouseover/target events.
+-- elite is passed in from UnitClassification() when available (mouseover/target only).
+local function ScanGuid(guid, name, isPlayer, elite)
   if not NP_GetUnitField or not guid or not name then return end
-  -- skip if already cached
-  if units["players"][name] or units["mobs"][name] then return end
+  -- skip if already fully cached (elite only available on mouseover/target)
+  if not elite and (units["players"][name] or units["mobs"][name]) then return end
 
   _level = NP_GetUnitField(guid, "level")
   _level = (_level and _level > 0) and _level or nil
@@ -93,7 +92,7 @@ local function ScanGuid(guid, name, isPlayer)
     _class = ClassFromBytes0(bytes0)
     AddData("players", name, _class, _level, nil, nil)
   else
-    AddData("mobs", name, nil, _level, nil)
+    AddData("mobs", name, nil, _level, elite or nil)
   end
 end
 
@@ -124,7 +123,6 @@ libunitscan:SetScript("OnEvent", function()
     for i = 1, GetNumFriends() do
       _name, _level, _class = GetFriendInfo(i)
       _class = L["class"][_class] or nil
-      -- friendlist updates due to friend going off-line return level 0, let's not overwrite good older values
       _level = _level > 0 and _level or nil
       AddData("players", _name, _class, _level)
     end
@@ -164,63 +162,31 @@ libunitscan:SetScript("OnEvent", function()
   elseif event == "UPDATE_MOUSEOVER_UNIT" or event == "PLAYER_TARGET_CHANGED" then
     local scan = event == "PLAYER_TARGET_CHANGED" and "target" or "mouseover"
 
-    -- always use Blizzard API for mouseover/target: GetUnitField with unit tokens
-    -- returns unreliable data (wrong class/level), only GUID-based nameplate scan is safe
     _name = UnitName(scan)
     if not _name then return end
-    -- skip if already cached
-    if units["players"][_name] or units["mobs"][_name] then return end
+
+    local guid = GetUnitGUID(scan)
+    if not guid then return end
 
     if UnitIsPlayer(scan) then
-      _, _class = UnitClass(scan)
-      _level = UnitLevel(scan)
-      _level = _level > 0 and _level or nil
+      -- guild requires Blizzard API, patch in after ScanGuid
       _guild = GetGuildInfo(scan)
-      AddData("players", _name, _class, _level, nil, _guild)
+      ScanGuid(guid, _name, true, nil)
+      if units["players"][_name] then
+        units["players"][_name].guild = _guild or units["players"][_name].guild
+      end
     else
-      _, _class = UnitClass(scan)
+      -- elite has no equivalent in Nampower unit fields, only available here
       _elite = UnitClassification(scan)
-      _level = UnitLevel(scan)
-      _level = _level > 0 and _level or nil
-      AddData("mobs", _name, _class, _level, _elite)
+      ScanGuid(guid, _name, false, _elite)
     end
 
   end
 end)
 
--- TargetByName scanner: only active when Nampower is NOT available.
--- With Nampower, UPDATE_MOUSEOVER_UNIT + GUID passively covers most units,
--- so the OnUpdate queue stays empty and hidden most of the time.
-if pfUI.client <= 11200 then
-  if NP_GetUnitField then
-    -- Nampower available: nameplate ScanGuid covers most units passively
-    -- OnUpdate TargetByName scanner not needed
-    libunitscan:Hide()
-  else
-    -- Vanilla fallback: TargetByName queue scanner
-    local SoundOn = PlaySound
-    local SoundOff = function() return end
-
-    libunitscan:SetScript("OnUpdate", function()
-      -- don't scan when another unit is in target
-      if UnitExists("target") or UnitName("target") then return end
-
-      local name = next(queue)
-      if not name then
-        this:Hide()
-        return
-      end
-
-      _G.PlaySound = SoundOff
-      TargetByName(name, true)
-      ClearTarget()
-      _G.PlaySound = SoundOn
-
-      queue[name] = nil
-      -- don't Hide() here: next frame processes next queue item
-    end)
-  end
-end
+-- Nampower: nameplate ScanGuid passively covers units as nameplates appear.
+-- OnUpdate TargetByName scanner not needed with Nampower.
+libunitscan:Hide()
 
 pfUI.api.libunitscan = libunitscan
 pfUI.api.libunitscan.ScanGuid = ScanGuid

@@ -83,6 +83,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- OPTIMIZATION: GUID-based registries for O(1) lookups
   -- ============================================================================
   local guidRegistry = {}   -- guid -> plate (for direct event routing)
+  local raidGuidCache = {}  -- guid -> name (rebuilt on RAID_ROSTER_UPDATE/PARTY_MEMBERS_CHANGED)
   
   -- Helper function to safely access libdebuff cast data
   local function GetCastInfo(guid)
@@ -172,10 +173,33 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local UNIT_FLAG_IN_COMBAT = 524288  -- 0x00080000
   local NULL_GUID           = "0x0000000000000000"
 
+  local function RebuildRaidGuidCache()
+    for k in pairs(raidGuidCache) do raidGuidCache[k] = nil end
+    for i = 1, GetNumRaidMembers() do
+      local g = GetUnitGUID("raid"..i)
+      if g then raidGuidCache[g] = UnitName("raid"..i) end
+    end
+    for i = 1, GetNumPartyMembers() do
+      local g = GetUnitGUID("party"..i)
+      if g then raidGuidCache[g] = UnitName("party"..i) end
+    end
+    local pg = GetUnitGUID("player")
+    if pg then raidGuidCache[pg] = UnitName("player") end
+  end
+
+  local combatColorCache = {}  -- guid -> { color, expires }
+
   local function GetCombatStateColor(guid)
     -- PERF: Quick exit if player not in combat
     if not UnitAffectingCombat("player") then return false end
     if UnitCanAssist("player", guid) then return false end
+
+    -- PERF: 0.2s throttle per guid - color changes are not time-critical
+    local now = frameState.now
+    local cached = combatColorCache[guid]
+    if cached and cached.expires > now then
+      return cached.color
+    end
 
     local flags = GetUnitField and GetUnitField(guid, "flags")
     if not flags then return false end
@@ -188,34 +212,17 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local color = false
 
     local castInfo = GetCastInfo(guid)
-    local isCasting = castInfo and castInfo.endTime and frameState.now < castInfo.endTime
+    local isCasting = castInfo and castInfo.endTime and now < castInfo.endTime
     local targetingPlayer = hasTarget and UnitIsUnit(target, "player")
 
-    -- Remember if mob targets player, clear only when targeting someone else while NOT casting
     if targetingPlayer then
       threatMemory[guid] = true
     elseif hasTarget and not isCasting then
       threatMemory[guid] = nil
     end
 
-    -- OFFTANK: resolve mob's target name via GUID for reliable cross-group detection
-    local targetName = hasTarget and UnitName(target)
-    if not targetName and hasTarget then
-      for i = 1, GetNumRaidMembers() do
-        if GetUnitGUID("raid"..i) == mobTargetGuid then
-          targetName = UnitName("raid"..i)
-          break
-        end
-      end
-      if not targetName then
-        for i = 1, GetNumPartyMembers() do
-          if GetUnitGUID("party"..i) == mobTargetGuid then
-            targetName = UnitName("party"..i)
-            break
-          end
-        end
-      end
-    end
+    -- PERF: O(1) GUID lookup via raidGuidCache instead of O(40) loop
+    local targetName = hasTarget and (UnitName(target) or raidGuidCache[mobTargetGuid])
 
     if cfg.ccombatcasting and isCasting then
       color = combatstate.CASTING
@@ -230,6 +237,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     elseif cfg.ccombatstun and not hasTarget then
       color = combatstate.STUN
     end
+
+    combatColorCache[guid] = combatColorCache[guid] or {}
+    combatColorCache[guid].color = color
+    combatColorCache[guid].expires = now + 0.2
 
     return color
   end
@@ -543,6 +554,8 @@ nameplates:RegisterEvent("PLAYER_LOGOUT")
 nameplates:RegisterEvent("UNIT_COMBO_POINTS")
 nameplates:RegisterEvent("PLAYER_COMBO_POINTS")
 nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+nameplates:RegisterEvent("RAID_ROSTER_UPDATE")
+nameplates:RegisterEvent("PARTY_MEMBERS_CHANGED")
 if hasNampower then
   nameplates:RegisterEvent("UNIT_FLAGS_GUID")
 end
@@ -578,6 +591,7 @@ end
         _, PlayerGUID = UnitExists("player")
         CacheConfig()
         this:SetGameVariables()
+        RebuildRaidGuidCache()
       end
       
       -- Handle friendly zone nameplate disable feature
@@ -621,6 +635,9 @@ end
           savedFriendlyState = nil
         end
       end
+
+    elseif event == "RAID_ROSTER_UPDATE" or event == "PARTY_MEMBERS_CHANGED" then
+      RebuildRaidGuidCache()
 
     elseif event == "UNIT_FLAGS_GUID" then
       -- Nampower: fires instantly when any unit's flags change (e.g. stun, combat enter/leave)
@@ -737,6 +754,11 @@ end
           -- Clean threatMemory
           if threatMemory[guid] then
             threatMemory[guid] = nil
+          end
+
+          -- Clean combatColorCache
+          if combatColorCache[guid] then
+            combatColorCache[guid] = nil
           end
         end
       end
