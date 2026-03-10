@@ -163,15 +163,26 @@ pfUI:RegisterModule("tooltip", "vanilla", function ()
 
     if hpmax > 100 or (round(hpmax/100*hp) ~= hp) then
       rhp, rhpmax = hp, hpmax
-    elseif pfUI.libhealth and pfUI.libhealth.enabled then
-      rhp, rhpmax, estimated = pfUI.libhealth:GetUnitHealthByName(this.name, this.level, tonumber(hp), tonumber(hpmax))
-    elseif MobHealthFrame then
-      local index = (this.name or "") .. ":" .. (this.level or "")
-      local ppp = MobHealth_PPP(index)
-      if perc and ppp and ppp > 0 and not UnitIsUnit("mouseover", "pet") then
-        rhp = round(hp * ppp)
-        rhpmax = round(100 * ppp)
-        estimated = true
+    else
+      -- Nampower: use real HP via mouseover GUID
+      local guid = GetUnitGUID and GetUnitGUID("mouseover")
+      if guid and GetUnitField then
+        local npHp = GetUnitField(guid, "health")
+        local npMaxHp = GetUnitField(guid, "maxHealth")
+        if npHp and npHp > 0 and npMaxHp and npMaxHp > 0 then
+          rhp, rhpmax = npHp, npMaxHp
+        end
+      -- libhealth fallback without Nampower
+      elseif pfUI.libhealth and pfUI.libhealth.enabled then
+        rhp, rhpmax, estimated = pfUI.libhealth:GetUnitHealthByName(this.name, this.level, tonumber(hp), tonumber(hpmax))
+      elseif MobHealthFrame then
+        local index = (this.name or "") .. ":" .. (this.level or "")
+        local ppp = MobHealth_PPP(index)
+        if perc and ppp and ppp > 0 and not UnitIsUnit("mouseover", "pet") then
+          rhp = round(hp * ppp)
+          rhpmax = round(100 * ppp)
+          estimated = true
+        end
       end
     end
 

@@ -2285,6 +2285,14 @@ function pfUI.uf:RefreshUnit(unit, component)
   local unitstr = unit.label..unit.id
   local rawborder, default_border = GetBorderSize("unitframes")
 
+  -- Shared Nampower range probe: used by both HP and buff display
+  -- GetUnitField(guid, "health") returns nil when unit is out of range
+  local unitGuid = GetUnitGUID and GetUnitGUID(unitstr)
+  local inRange = false
+  if unitGuid and GetUnitField then
+    inRange = GetUnitField(unitGuid, "health") ~= nil
+  end
+
   -- save current values
   unit.namecache = UnitName(unitstr)
 
@@ -2295,6 +2303,7 @@ function pfUI.uf:RefreshUnit(unit, component)
     -- Use IterBuffs for all units with Nampower: filters spillover, handles buff-spillover into debuff slots
     local usedIterBuffs = false
     if libdebuff and libdebuff.IterBuffs then
+      if inRange then
       -- Fill from IterBuffs (includes timer for player via GetPlayerAuraDuration)
       -- Update frames in-place first, then hide leftovers to avoid flicker
       local buffLimit = tonumber(unit.config.bufflimit) or 32
@@ -2363,15 +2372,16 @@ function pfUI.uf:RefreshUnit(unit, component)
       -- frameIdx=0 means unit has no buffs, not that it's out of range
       -- Falling through to Blizzard fallback would show spillover debuffs as buffs
       usedIterBuffs = true
-    end
+      end -- inRange
+    end -- libdebuff.IterBuffs
 
 
 
     if not usedIterBuffs then
       -- Pre-build spillover filter: which Blizzard buff indices are actually debuffs?
       local spilloverFilter = nil
-      if unit.label ~= "player" and GetUnitField and GetUnitGUID then
-        local guid = GetUnitGUID(unitstr)
+      if unit.label ~= "player" and GetUnitField and unitGuid then
+        local guid = unitGuid
         if guid then
           local auras = GetUnitField(guid, "aura")
           if auras then
@@ -3470,8 +3480,16 @@ function pfUI.uf:GetStatusValue(unit, pos)
   local hp, hpmax, mp, mpmax, powerType = pfUI.api.GetUnitStats(unitstr, true)
   local rhp, rhpmax = hp, hpmax
 
-  -- Use libhealth for mob health estimation (overrides Nampower/Standard)
-  if pfUI.libhealth and pfUI.libhealth.enabled then
+  -- Nampower: use real HP values via GUID (most accurate)
+  local guid = GetUnitGUID and GetUnitGUID(unitstr)
+  if guid and GetUnitField then
+    local npHp = GetUnitField(guid, "health")
+    local npMaxHp = GetUnitField(guid, "maxHealth")
+    if npHp and npHp > 0 and npMaxHp and npMaxHp > 0 then
+      rhp, rhpmax = npHp, npMaxHp
+    end
+  -- libhealth fallback for mob health estimation without Nampower
+  elseif pfUI.libhealth and pfUI.libhealth.enabled then
     rhp, rhpmax = pfUI.libhealth:GetUnitHealth(unitstr)
   elseif unit.label == "target" and (MobHealth3 or MobHealthFrame) and MobHealth_GetTargetCurHP() then
     rhp, rhpmax = MobHealth_GetTargetCurHP(), MobHealth_GetTargetMaxHP()
