@@ -1,5 +1,7 @@
 pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   local rawborder, default_border = GetBorderSize("bags")
+  local borderlimit = tonumber(C.appearance.bags.borderlimit) or 1
+  local ICON_PATH = "Interface\\Icons\\"
 
   local knownInventorySpellTextures = {
     Spell_Holy_RemoveCurse = {frame="disenchant"},
@@ -99,34 +101,39 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
 
   pfUI.bag.delay = { UpdateBag = {} }
 
-  pfUI.bag:SetScript("OnUpdate", function()
-    -- update delayed ones every 0.1s
-    if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end
+  -- Separate hidden frame for OnUpdate processing (only runs when shown)
+  local bagUpdater = CreateFrame("Frame", "pfBagUpdater", UIParent)
+  bagUpdater:Hide()
 
-    if this.delay.RefreshSpells then
-      this.delay.RefreshSpells = nil
+  bagUpdater:SetScript("OnUpdate", function()
+    -- throttle to 0.1s between updates
+    if (this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + .1
+
+    local delay = pfUI.bag.delay
+
+    if delay.RefreshSpells then
+      delay.RefreshSpells = nil
       pfUI.bag:RefreshSpells()
     end
 
-    if this.delay.CheckFullUpdate then
-      this.delay.CheckFullUpdate = nil
+    if delay.CheckFullUpdate then
+      delay.CheckFullUpdate = nil
       pfUI.bag:CheckFullUpdate()
     end
 
-    if this.delay.UpdateCooldowns then
-      this.delay.UpdateCooldowns = nil
-      pfUI.bag:UpdateCooldowns()
-    end
-
-    if this.delay.UpdateItemLock then
-      this.delay.UpdateItemLock = nil
+    if delay.UpdateItemLock then
+      delay.UpdateItemLock = nil
       pfUI.bag:UpdateItemLock()
     end
 
-    for bag in pairs(this.delay.UpdateBag) do
-      this.delay.UpdateBag[bag] = nil
+    for bag in pairs(delay.UpdateBag) do
+      delay.UpdateBag[bag] = nil
       pfUI.bag:UpdateBag(bag)
     end
+
+    -- work done, disable until next event
+    this:Hide()
   end)
 
   pfUI.bag:SetScript("OnEvent", function()
@@ -144,28 +151,34 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
 
     if event == "SPELLS_CHANGED" then
       this.delay.RefreshSpells = true
+      bagUpdater:Show()
     end
 
     if event == "BAG_CLOSED" or event == "PLAYERBANKSLOTS_CHANGED" or
-       event == "PLAYERBANKBAGSLOTS_CHANGED" or event == "BAG_UPDATE" or
+       event == "PLAYERBANKBAGSLOTS_CHANGED" or
        event == "BANKFRAME_OPENED" or event == "BANKFRAME_CLOSED" then
       this.delay.CheckFullUpdate = true
+      bagUpdater:Show()
     end
 
     if event == "BAG_UPDATE_COOLDOWN" then
-      this.delay.UpdateCooldowns = true
+      pfUI.bag:UpdateCooldowns()
+      return
     end
 
     if event == "ITEM_LOCK_CHANGED" then
       this.delay.UpdateItemLock = true
+      bagUpdater:Show()
     end
 
     if event == "PLAYERBANKSLOTS_CHANGED" then
       this.delay.UpdateBag[-1] = true
+      bagUpdater:Show()
     end
 
     if event == "BAG_UPDATE" then
       this.delay.UpdateBag[arg1] = true
+      bagUpdater:Show()
     end
 
     if event == "PLAYERBANKBAGSLOTS_CHANGED" then
@@ -197,6 +210,9 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   pfUI.slots = {}
 
   function pfUI.bag:CheckFullUpdate()
+    -- invalidate snapshot so all slots get redrawn
+    for bag = 0, 4 do bagSnapshotId[bag] = nil; bagSnapshotCount[bag] = nil end
+
     local maxslots = 0
 
     for bag = -2,11 do
@@ -363,11 +379,37 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
     end)
   end
 
+  -- snapshot cache: flat arrays [bag] = {slot1_id, slot1_count, slot2_id, ...}
+  local bagSnapshotId    = {}
+  local bagSnapshotCount = {}
+
   function pfUI.bag:UpdateBag(bag)
     local bagsize = GetContainerNumSlots(bag)
     if bag == -2 and pfUI.bag.showKeyring == true then bagsize = GetKeyRingSize() end
-    for slot=1, bagsize do
-      pfUI.bag:UpdateSlot(bag, slot)
+
+    -- for bags 0-4 use GetBagItem snapshot to only update changed slots
+    if GetBagItem and bag >= 0 and bag <= 4 then
+      if not bagSnapshotId[bag] then
+        bagSnapshotId[bag]    = {}
+        bagSnapshotCount[bag] = {}
+      end
+      local snapId    = bagSnapshotId[bag]
+      local snapCount = bagSnapshotCount[bag]
+      for slot=1, bagsize do
+        local info     = GetBagItem(bag, slot)
+        local newId    = info and info.itemId    or 0
+        local newCount = info and info.stackCount or 0
+        if snapId[slot] ~= newId or snapCount[slot] ~= newCount then
+          snapId[slot]    = newId
+          snapCount[slot] = newCount
+          pfUI.bag:UpdateSlot(bag, slot)
+        end
+      end
+    else
+      -- bank/keyring: no snapshot, update all
+      for slot=1, bagsize do
+        pfUI.bag:UpdateSlot(bag, slot)
+      end
     end
   end
 
@@ -448,69 +490,106 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       end
     end
 
-    local texture, count, locked, quality = GetContainerItemInfo(bag, slot)
-    local linkstr = LinkToStr(GetContainerItemLink(bag, slot))
-    local _, _, q, _, _, _, itype = GetItemInfo(linkstr)
+    -- local alias to avoid repeated table lookups per UpdateSlot call
+    local s = pfUI.bags[bag].slots[slot]
 
-    -- running advanced item color scan
-    if C.appearance.bags.borderonlygear == "0" and texture and quality and quality < 1 then
-      if quality then quality = q end
+    -- Nampower path for regular bags 0-4
+    local texture, count, locked, quality, itype, itemId
+    local info = (GetBagItem and bag >= 0 and bag <= 4) and GetBagItem(bag, slot)
+    if info and info.itemId then
+      itemId = info.itemId
+      count = info.stackCount
+      locked = (info.flags and bit.band(info.flags, 4) ~= 0) and 1 or nil
+      quality = GetItemStatsField(itemId, "quality")
+      local itemClass = GetItemStatsField(itemId, "class")
+      itype = (itemClass == 12) and "Quest" or nil
+      local displayId = GetItemStatsField(itemId, "displayInfoID")
+      local iconName = displayId and GetItemIconTexture(displayId)
+      texture = iconName and (ICON_PATH .. iconName) or nil
+    elseif bag == -1 or (bag >= 5 and bag <= 11) then
+      -- Bank slots/bags: only called when bank is open, GetContainerItemInfo works here
+      texture, count, locked, quality = GetContainerItemInfo(bag, slot)
+      if texture then
+        local linkstr = LinkToStr(GetContainerItemLink(bag, slot))
+        local _, _, bankItemId = string.find(linkstr, "item:(%d+)")
+        bankItemId = bankItemId and tonumber(bankItemId)
+        if bankItemId then
+          local q = GetItemStatsField(bankItemId, "quality")
+          if q then quality = q end
+          local itemClass = GetItemStatsField(bankItemId, "class")
+          itype = (itemClass == 12) and "Quest" or nil
+          local displayId = GetItemStatsField(bankItemId, "displayInfoID")
+          local iconName = displayId and GetItemIconTexture(displayId)
+          if iconName then texture = ICON_PATH .. iconName end
+        end
+      end
+    else
+      -- keyring (bag == -2): vanilla only
+      texture, count, locked, quality = GetContainerItemInfo(bag, slot)
     end
 
-    SetItemButtonTexture(pfUI.bags[bag].slots[slot].frame, texture)
-    SetItemButtonCount(pfUI.bags[bag].slots[slot].frame, count)
-    SetItemButtonDesaturated(pfUI.bags[bag].slots[slot].frame, locked, 0.5, 0.5, 0.5)
+    SetItemButtonTexture(s.frame, texture)
+    SetItemButtonCount(s.frame, count)
+    SetItemButtonDesaturated(s.frame, locked, 0.5, 0.5, 0.5)
 
     local hasItem = texture and 1 or nil
-    pfUI.bags[bag].slots[slot].frame.hasItem = hasItem
-    pfUI.bags[bag].slots[slot].frame.qtext:SetText("")
+    s.frame.hasItem = hasItem
+    s.frame.qtext:SetText("")
 
-    ContainerFrame_UpdateCooldown(bag, pfUI.bags[bag].slots[slot].frame)
+    ContainerFrame_UpdateCooldown(bag, s.frame)
 
     -- detect backdrop border color
     if texture and itype == "Quest" then
-      pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(1, .8, .2, .8)
-      pfUI.bags[bag].slots[slot].frame.qtext:SetText("?")
-    elseif texture and quality and quality > tonumber(C.appearance.bags.borderlimit) then
-      pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(GetItemQualityColor(quality))
+      s.frame.backdrop:SetBackdropBorderColor(1, .8, .2, .8)
+      s.frame.qtext:SetText("?")
+    elseif texture and quality and quality > borderlimit then
+      s.frame.backdrop:SetBackdropBorderColor(GetItemQualityColor(quality))
     elseif texture and quality then
-      pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(.5,.5,.5,1)
+      s.frame.backdrop:SetBackdropBorderColor(.5,.5,.5,1)
     else
-      local bagtype = GetBagFamily(bag)
-
-      if bagtype == "QUIVER" then
-        pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(1,1,.5,.5)
-      elseif bagtype == "SOULBAG" then
-        pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(1,.5,.5,.5)
-      elseif bagtype == "SPECIAL" then
-        pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(.5,.5,1,.5)
-      elseif bagtype == "KEYRING" then
-        pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(.5,1,1,.5)
+      -- use Nampower bagFamily if available, else vanilla GetBagFamily
+      local bagFamily
+      if itemId and GetItemStatsField then
+        bagFamily = GetItemStatsField(itemId, "bagFamily")
       else
-        pfUI.bags[bag].slots[slot].frame.backdrop:SetBackdropBorderColor(1,1,1,.2)
+        bagFamily = GetBagFamily(bag)
+      end
+
+      if bagFamily == "QUIVER" or bagFamily == 256 then
+        s.frame.backdrop:SetBackdropBorderColor(1,1,.5,.5)
+      elseif bagFamily == "SOULBAG" or bagFamily == 64 then
+        s.frame.backdrop:SetBackdropBorderColor(1,.5,.5,.5)
+      elseif bagFamily == "SPECIAL" then
+        s.frame.backdrop:SetBackdropBorderColor(.5,.5,1,.5)
+      elseif bagFamily == "KEYRING" or bagFamily == 32 then
+        s.frame.backdrop:SetBackdropBorderColor(.5,1,1,.5)
+      else
+        s.frame.backdrop:SetBackdropBorderColor(1,1,1,.2)
       end
     end
 
     -- add shaguscore if we have it
-    if ShaguScore and pfUI.bags[bag].slots[slot].frame.scoreText then
+    if ShaguScore and s.frame.scoreText then
       if quality and quality > 0 then
-        local link = GetContainerItemLink(bag, slot)
         local r,g,b = GetItemQualityColor(quality)
-        local _, _, itemID = string.find(link, "item:(%d+):%d+:%d+:%d+")
-        local itemLevel = ShaguScore.Database[tonumber(itemID)] or 0
-        local score = ShaguScore:Calculate(vslot, quality, itemLevel)
-        if score and score > 0 and count and count == 1 then
-          pfUI.bags[bag].slots[slot].frame.scoreText:SetText(score)
-          pfUI.bags[bag].slots[slot].frame.scoreText:SetTextColor(r, g, b)
+        if itemId then
+          local itemLevel = ShaguScore.Database[itemId] or 0
+          local score = ShaguScore:Calculate(vslot, quality, itemLevel)
+          if score and score > 0 and count and count == 1 then
+            s.frame.scoreText:SetText(score)
+            s.frame.scoreText:SetTextColor(r, g, b)
+          else
+            s.frame.scoreText:SetText("")
+          end
         else
-          pfUI.bags[bag].slots[slot].frame.scoreText:SetText("")
+          s.frame.scoreText:SetText("")
         end
       else
-        pfUI.bags[bag].slots[slot].frame.scoreText:SetText("")
+        s.frame.scoreText:SetText("")
       end
     end
 
-    pfUI.bags[bag].slots[slot].frame:Show()
+    s.frame:Show()
   end
 
   function pfUI.bag:CreateBagSlots(frame)
@@ -672,7 +751,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       if bag == -2 and pfUI.bag.showKeyring == true then bagsize = GetKeyRingSize() end
       for slot=1, bagsize do
         frame = pfUI.bags[bag] and pfUI.bags[bag].slots[slot] and pfUI.bags[bag].slots[slot].frame
-        if frame and frame.hasItem and _G[frame:GetName() .. "Cooldown"] then
+        if frame and frame.hasItem and frame.cd then
           ContainerFrame_UpdateCooldown(bag, frame)
         end
       end
@@ -685,7 +764,14 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       if bag == -2 and pfUI.bag.showKeyring == true then bagsize = GetKeyRingSize() end
       for slot=1, bagsize do
         if pfUI.bags[bag] and pfUI.bags[bag].slots[slot] and pfUI.bags[bag].slots[slot].frame:IsShown() then
-          local _, _, locked, _ = GetContainerItemInfo(bag, slot)
+          local locked
+          if GetBagItem and bag >= 0 and bag <= 4 then
+            local info = GetBagItem(bag, slot)
+            locked = (info and info.flags and bit.band(info.flags, 4) ~= 0) and 1 or nil
+          else
+            local _, _, l, _ = GetContainerItemInfo(bag, slot)
+            locked = l
+          end
           if pfUI.bags[bag].slots[slot].locked ~= locked then
             SetItemButtonDesaturated(pfUI.bags[bag].slots[slot].frame, locked, 0.5, 0.5, 0.5)
             if pfUI.unusable then pfUI.unusable:UpdateSlot(bag, slot) end

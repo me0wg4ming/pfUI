@@ -12,6 +12,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
 
   local eventcache = { } -- contains a list of events that shall be processed later -> [event] = true
   local updatecache = { } -- contains a list of buttons slots that shall be refreshed later -> [slot] = true
+  local macrocache = { } -- contains slots that need ButtonMacroScan -> [slot] = true
   local buttoncache = { } -- contains a list of all buttons ever created -> [slot] = frame
 
   local petvisibility = "[pet] show; hide"
@@ -55,14 +56,20 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
 
   -- also abbreviate mouse buttons
   local OrigGetBindingText = GetBindingText
+  -- pre-build the lookup keys so string.format is never called per-button-update
+  local _bind_mb3  = _G["KEY_BUTTON3"]
+  local _bind_mb4  = _G["KEY_BUTTON4"]
+  local _bind_mb5  = _G["KEY_BUTTON5"]
+  local _bind_mwd  = _G["KEY_MOUSEWHEELDOWN"]
+  local _bind_mwu  = _G["KEY_MOUSEWHEELUP"]
   local function GetBindingText(msg, mod, abbrev)
     local txt = OrigGetBindingText(msg, mod, abbrev)
     if abbrev then
-      txt = string.gsub(txt, _G[string.format("%s%s", mod, "BUTTON3")], "MB3")
-      txt = string.gsub(txt, _G[string.format("%s%s", mod, "BUTTON4")], "MB4")
-      txt = string.gsub(txt, _G[string.format("%s%s", mod, "BUTTON5")], "MB5")
-      txt = string.gsub(txt, _G[string.format("%s%s", mod, "MOUSEWHEELDOWN")], "MWD")
-      txt = string.gsub(txt, _G[string.format("%s%s", mod, "MOUSEWHEELUP")], "MWU")
+      if _bind_mb3  and strfind(txt, _bind_mb3,  1, true) then txt = gsub(txt, _bind_mb3,  "MB3") end
+      if _bind_mb4  and strfind(txt, _bind_mb4,  1, true) then txt = gsub(txt, _bind_mb4,  "MB4") end
+      if _bind_mb5  and strfind(txt, _bind_mb5,  1, true) then txt = gsub(txt, _bind_mb5,  "MB5") end
+      if _bind_mwd  and strfind(txt, _bind_mwd,  1, true) then txt = gsub(txt, _bind_mwd,  "MWD") end
+      if _bind_mwu  and strfind(txt, _bind_mwu,  1, true) then txt = gsub(txt, _bind_mwu,  "MWU") end
     end
     return txt
   end
@@ -95,8 +102,6 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     ["PLAYER_ENTERING_WORLD"] = true,
     ["ACTIONBAR_SLOT_CHANGED"] = true,
     ["UPDATE_BINDINGS"] = true,
-    ["ACTIONBAR_PAGE_CHANGED"] = true,
-    ["UPDATE_BONUS_ACTIONBAR"] = true,
     ["CRAFT_SHOW"] = true,
     ["CRAFT_CLOSE"] = true,
     ["TRADE_SKILL_SHOW"] = true,
@@ -108,6 +113,17 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     -- auto repeat action
     ["START_AUTOREPEAT_SPELL"] = true,
     ["STOP_AUTOREPEAT_SPELL"] = true,
+  }
+
+  -- events that only trigger a range+usable update (no full button redraw needed)
+  local range_events = {
+    ["PLAYER_TARGET_CHANGED"] = true,
+  }
+
+  -- events that only require bar 1 (paging) buttons to update
+  local page_events = {
+    ["ACTIONBAR_PAGE_CHANGED"] = true,
+    ["UPDATE_BONUS_ACTIONBAR"] = true,
   }
 
   -- events that are used for the aura/shapeshift bar
@@ -541,13 +557,15 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     end
 
     if self.bar ~= 11 and self.bar ~= 12 then
-      -- update consumables
+      -- update consumables (cache count to avoid SetText alloc when unchanged)
       if IsConsumableAction(sid) then
-        self.count:SetText(GetActionCount(sid))
+        local c = GetActionCount(sid)
+        if c ~= self._count then self._count = c; self.count:SetText(c) end
       elseif IsReagentAction and IsReagentAction(sid) then
-        self.count:SetText(GetReagentCount(sid))
+        local c = GetReagentCount(sid)
+        if c ~= self._count then self._count = c; self.count:SetText(c) end
       else
-        self.count:SetText(nil)
+        if self._count ~= nil then self._count = nil; self.count:SetText(nil) end
       end
 
       -- equipped item
@@ -558,7 +576,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       end
 
       -- update macro text
-      if C.bars["bar"..self.bar] and C.bars["bar"..self.bar].showmacro == "1" then
+      if self._showmacro then
         self.macro:SetText(GetActionText(sid))
       else
         self.macro:SetText("")
@@ -591,11 +609,15 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       end
     end
 
-    -- keybinds
-    if not self.hide and self.bar == 1 and self.bar ~= 11 and self.bar ~= 12 then
-      self.keybind:SetText(GetBindingText(GetBindingKey("ACTIONBUTTON"..id), "KEY_", 1))
-    elseif not self.hide and buttontypes[self.bar] then
-      self.keybind:SetText(GetBindingText(GetBindingKey(buttontypes[self.bar]..id), "KEY_", 1))
+    -- keybinds: cache result, only recompute when binding key changes
+    if not self.hide and (self.bar == 1 or buttontypes[self.bar]) and self.bar ~= 11 and self.bar ~= 12 then
+      local bindkey = self.bar == 1 and self._bindkey1 or self._bindkey2
+      local rawkey = GetBindingKey(bindkey)
+      if rawkey ~= self._bindraw then
+        self._bindraw = rawkey
+        self._bindtext = rawkey and GetBindingText(rawkey, "KEY_", 1) or ""
+      end
+      self.keybind:SetText(self._bindtext or "")
     else
       self.keybind:SetText("")
     end
@@ -708,7 +730,6 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
   local function ButtonFullUpdate(button)
     if not button then return end
 
-    ButtonMacroScan(button)
     ButtonSlotUpdate(button)
     ButtonRangeUpdate(button)
     ButtonUsableUpdate(button)
@@ -716,18 +737,73 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     ButtonIsActiveUpdate(button)
   end
 
+  -- pre-declared so BarsEvent can reference them before their full definition below
+  local inCombat = UnitAffectingCombat and UnitAffectingCombat("player") or nil
+  local rangeUpdater = CreateFrame("Frame", "pfActionBarRange", UIParent)
+  rangeUpdater:Hide()
+  local bars
+
   local function BarsEvent(self)
     local self = self or this
+
+    -- manage range updater combat state
+    if event == "PLAYER_ENTER_COMBAT" then
+      inCombat = true
+      if C.bars.glowrange == "1" then rangeUpdater:Show() end
+      return
+    end
+    if event == "PLAYER_LEAVE_COMBAT" then
+      inCombat = nil
+      rangeUpdater:Hide()
+      -- clear any lingering out-of-range highlights
+      for id, button in pairs(buttoncache) do
+        if button.outofrange then
+          button.outofrange = nil
+          ButtonUsableUpdate(button)
+        end
+      end
+      return
+    end
 
     -- refresh only specific slots
     if event == "ACTIONBAR_SLOT_CHANGED" and arg1 and arg1 ~= 0 then
       updatecache[arg1] = true
+      macrocache[arg1] = true
+      bars:Show()
       return
     end
 
     -- run special refresh functions on next update
     if special_events[event] then
       eventcache[event] = true
+      bars:Show()
+      return
+    end
+
+    -- handle target change: only range+usable update needed
+    if range_events[event] then
+      for id, button in pairs(buttoncache) do
+        if button:IsShown() then
+          ButtonRangeUpdate(button)
+        end
+      end
+      eventcache["ACTIONBAR_UPDATE_USABLE"] = true
+      -- keep range updater running while we have an attackable target
+      if C.bars.glowrange == "1" then
+        if UnitExists("target") and UnitCanAttack("player", "target") then
+          rangeUpdater:Show()
+        else
+          if not inCombat then rangeUpdater:Hide() end
+          -- clear any lingering out-of-range highlights
+          for id, button in pairs(buttoncache) do
+            if button.outofrange then
+              button.outofrange = nil
+              ButtonUsableUpdate(button)
+            end
+          end
+        end
+      end
+      bars:Show()
       return
     end
 
@@ -738,6 +814,18 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
           updatecache[self[11][j].slot] = true
         end
       end
+      -- also update bar 1 for classes that swap bars on aura changes (e.g. rogue stealth)
+      if class == "ROGUE" then
+        if bars[1] then
+          for j=1,12 do
+            if bars[1][j] then
+              macrocache[bars[1][j].id] = true
+              updatecache[bars[1][j].id] = true
+            end
+          end
+        end
+      end
+      bars:Show()
       return
     end
 
@@ -748,36 +836,42 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
           updatecache[self[12][j].slot] = true
         end
       end
+      bars:Show()
+      return
+    end
+
+    -- handle page change: only bar 1 buttons need updating
+    if page_events[event] then
+      if bars[1] then
+        for j=1,12 do
+          if bars[1][j] then
+            macrocache[bars[1][j].id] = true
+            updatecache[bars[1][j].id] = true
+          end
+        end
+      end
+      bars:Show()
       return
     end
 
     -- handle global events
     for id in pairs(buttoncache) do
       updatecache[id] = true
+      macrocache[id] = true
     end
+    bars:Show()
   end
 
   local self, button, unlock
-  -- Main update loop with throttle for performance optimization
+  -- Main update loop: sleep/wake pattern - only runs when there is work to do.
+  -- Woken by BarsEvent (sets flags + calls bars:Show()), or by the range timer in combat.
   local function BarsUpdate(self)
     self = self or this
 
-    -- Throttle for performance
-    if (this.tick_main or 0) > GetTime() then return end
-    this.tick_main = GetTime() + 0.025
+    -- AssumeButtonDrag only matters while mouse is hovering a button (drag_await set)
+    if drag_await then AssumeButtonDrag() end
 
-    -- update buttons whenever a button drag is assumed
-    AssumeButtonDrag()
-
-    if pfUI.unlock then
-      -- update all bars when entering unlock
-      if pfUI.unlock:IsShown() ~= unlock then
-        pfUI.bars:UpdateConfig()
-        unlock = pfUI.unlock:IsShown()
-      end
-    end
-
-    -- run cached usable usable actions
+    -- run cached usable actions
     if eventcache["ACTIONBAR_UPDATE_USABLE"] then
       eventcache["ACTIONBAR_UPDATE_USABLE"] = nil
       for id, button in pairs(buttoncache) do
@@ -801,40 +895,66 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       end
     end
 
-    for id in pairs(updatecache) do
-      -- run updates based on slot
-      pfUI.bars.ButtonFullUpdate(buttoncache[id])
+    for id in pairs(macrocache) do
+      if buttoncache[id] then ButtonMacroScan(buttoncache[id]) end
+      macrocache[id] = nil
+    end
 
-      -- run updates on paging actionbar if required
+    for id in pairs(updatecache) do
+      pfUI.bars.ButtonFullUpdate(buttoncache[id])
       for i=1,12 do
         if pfUI.bars[1][i].id == id then
           pfUI.bars.ButtonFullUpdate(pfUI.bars[1][i])
         end
       end
-
-      -- clear update cache
       updatecache[id] = nil
     end
 
-    if ( this.tick or .2) > GetTime() then return else this.tick = GetTime() + .2 end
-
-    for id, button in pairs(buttoncache) do
-      if button:IsShown() then ButtonRangeUpdate(button) end
-    end
+    -- go back to sleep: no more pending work
+    this:Hide()
   end
 
+  -- Separate range updater: only active in combat, fires every 200ms
+  rangeUpdater:SetScript("OnUpdate", function()
+    if (this.tick or 0) > GetTime() then return end
+    this.tick = GetTime() + 0.2
+    if C.bars.glowrange == "1" then
+      for id, button in pairs(buttoncache) do
+        if button:IsShown() then ButtonRangeUpdate(button) end
+      end
+    end
+  end)
+
   -- create the main event and update handler for pfUI actionbars
-  local bars = CreateFrame("Frame", "pfActionBar", UIParent)
+  bars = CreateFrame("Frame", "pfActionBar", UIParent)
   for event in pairs(special_events) do bars:RegisterEvent(event) end
   for event in pairs(global_events) do bars:RegisterEvent(event) end
   for event in pairs(aura_events) do bars:RegisterEvent(event) end
   for event in pairs(pet_events) do bars:RegisterEvent(event) end
+  for event in pairs(page_events) do bars:RegisterEvent(event) end
+  for event in pairs(range_events) do bars:RegisterEvent(event) end
 
   -- refresh actionbar buttons on event
   bars:SetScript("OnEvent", BarsEvent)
 
-  -- update actionbar buttons
+  -- update actionbar buttons (sleeps when idle, woken by BarsEvent)
   bars:SetScript("OnUpdate", BarsUpdate)
+  bars:Hide()
+
+  -- watch pfUI.unlock state changes at 4x/sec - cheap since it only polls one bool
+  if pfUI.unlock then
+    local unlockWatcher = CreateFrame("Frame", "pfActionBarUnlock", UIParent)
+    unlockWatcher:SetScript("OnUpdate", function()
+      if (this.tick or 0) > GetTime() then return end
+      this.tick = GetTime() + 0.25
+      local shown = pfUI.unlock:IsShown()
+      if shown ~= unlock then
+        unlock = shown
+        pfUI.bars:UpdateConfig()
+        bars:Show()
+      end
+    end)
+  end
 
   -- enable bar paging via secure functions
   local function ButtonSwitch(self, att, value)
@@ -864,6 +984,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
             local id = i + (active-1)*12
             bar[i].id = id
             updatecache[i] = true
+            macrocache[i] = true
           end
         end)
       end
@@ -920,33 +1041,36 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
   end
 
   local cat, stealth
-  local inCatForm = nil  -- cached from buff scan
+  local inCatForm = nil  -- cached via GetUnitField bytes2
   local prowlActive = nil  -- tracks if prowl is active
-  
-  -- Full scan for cat form and prowl (only on login/reload)
+
+  -- Nampower: read shapeshift form directly from unit field bytes2 (byte 3, bits 16-23)
+  -- Cat Form = 3, Bear/Dire Bear = 5, Travel = 4, Aquatic = 8, Moonkin = 31
+  local SHAPESHIFT_CAT = 3
+  local function GetShapeshiftForm()
+    local bytes2 = GetUnitField("player", "bytes2")
+    if not bytes2 then return 0 end
+    return bit.band(bit.rshift(bytes2, 16), 255)
+  end
+
+  -- Full init: use Nampower for cat form, buff scan only for prowl
   local function FullScan()
     if class ~= "DRUID" then return nil end
-    
-    local foundCat, foundStealth = nil, nil
-    
-    for i = 0, 31 do
-      local texture = GetPlayerBuffTexture(i)
-      if not texture then break end
-
-      if strfind(texture, "Ability_Druid_CatForm") then
-        foundCat = true
-      end
-
-      if strfind(texture, "Ability_Ambush") then
-        foundStealth = true
+    inCatForm = (GetShapeshiftForm() == SHAPESHIFT_CAT) or nil
+    prowlActive = nil
+    if inCatForm then
+      for i = 0, 31 do
+        local texture = GetPlayerBuffTexture(i)
+        if not texture then break end
+        if strfind(texture, "Ability_Ambush") then
+          prowlActive = true
+          break
+        end
       end
     end
-    
-    inCatForm = foundCat
-    prowlActive = foundCat and foundStealth
     return prowlActive
   end
-  
+
   -- Quick scan only for prowl (when we know we're in cat form)
   local function HasProwlBuff()
     for i = 0, 31 do
@@ -1004,30 +1128,21 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
 
       -- PLAYER_AURAS_CHANGED: smart scanning
       if event == "PLAYER_AURAS_CHANGED" then
-        if prowlActive then
-          -- We were prowling, check if still prowling
-          if HasProwlBuff() then
-            prowling = true
-          else
-            -- Prowl ended
+        -- Nampower: O(1) cat form check via bytes2 unit field
+        inCatForm = (GetShapeshiftForm() == SHAPESHIFT_CAT) or nil
+
+        if not inCatForm then
+          -- Left cat form: clear prowl state
+          prowlActive = nil
+          prowling = nil
+        elseif prowlActive then
+          -- Was prowling: verify prowl buff still active
+          if not HasProwlBuff() then
             prowlActive = nil
             prowling = nil
-            -- Also check if still in cat form
-            inCatForm = nil
-            for i = 0, 31 do
-              local texture = GetPlayerBuffTexture(i)
-              if not texture then break end
-              if strfind(texture, "Ability_Druid_CatForm") then
-                inCatForm = true
-                break
-              end
-            end
           end
-        elseif not inCatForm then
-          -- Not in cat form, do a full scan (might have just shifted)
-          prowling = FullScan()
         end
-        -- If inCatForm but not prowlActive, no scan needed (wait for SPELL_GO_SELF hook)
+        -- If inCatForm but not prowlActive: wait for SPELL_GO_SELF hook (Prowl cast)
       end
     end)
 
@@ -1244,6 +1359,13 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     else
       f.scanmacro = true
     end
+
+    -- cache binding key lookup strings (avoid string concat per frame)
+    f._bindkey1 = "ACTIONBUTTON" .. f.slot
+    f._bindkey2 = buttontypes[f.bar] and (buttontypes[f.bar] .. f.slot) or f._bindkey1
+    -- cache showmacro config flag (avoid C.bars["bar"..bar] concat per frame)
+    local barconf = C.bars["bar"..bar]
+    f._showmacro = barconf and barconf.showmacro == "1" or nil
 
     -- range glow color
     f.rangeColor = { strsplit(",", C.bars.rangecolor) }
@@ -1665,34 +1787,64 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
 
   -- reagent counter
   if C.bars.reagents == "1" then
-    local reagent_slots = { }
-    local reagent_counts = { }
+    local reagent_slots = { }  -- [actionSlot] = itemName or false
+    local reagent_counts = { } -- [itemName] = count
+    local reagent_locs = { }   -- [itemName] = {bag, slot} cached via FindPlayerItemSlot
     local reagent_capture = SPELL_REAGENTS.."(.+)"
     local scanner = libtipscan:GetScanner("actionbar")
 
-    local UpdateSlot = function(slot)
-      local texture = GetActionTexture(slot)
+    -- Update count for a single reagent using cached bag location
+    -- Uses GetBagItem for direct slot access instead of GetItemCount (~56kB/call)
+    local function UpdateReagentCount(itemName)
+      local loc = reagent_locs[itemName]
+      if not loc then
+        -- first time: locate the item via FindPlayerItemSlot (Nampower API)
+        local bag, slot = FindPlayerItemSlot(itemName)
+        if bag ~= nil and slot then
+          reagent_locs[itemName] = {bag, slot}
+          loc = reagent_locs[itemName]
+        else
+          reagent_counts[itemName] = 0
+          return
+        end
+      end
+      -- direct slot read - much cheaper than GetItemCount
+      local info = GetBagItem(loc[1], loc[2])
+      if info then
+        reagent_counts[itemName] = info.stackCount or 0
+      else
+        -- item moved or used up - clear location cache so next call relocates
+        reagent_locs[itemName] = nil
+        reagent_counts[itemName] = 0
+      end
+    end
 
-      -- update buttons that previously had an reagent
+    local UpdateSlot = function(slot)
+      -- clear removed actions
       if reagent_slots[slot] and not HasAction(slot) then
         reagent_slots[slot] = nil
         updatecache[slot] = true
       end
 
-      -- search for reagent requirements
-      if HasAction(slot) then
-        scanner:SetAction(slot)
-        local _, reagents = scanner:Find(reagent_capture)
+      if not HasAction(slot) then return end
+      if reagent_slots[slot] ~= nil then return end
 
-        -- remove reagent counts if existing
-        reagents = reagents and string.gsub(reagents, " %((.+)%)", "")
+      -- consumable items and equipped items can never have spell reagents
+      if IsConsumableAction(slot) or IsEquippedAction(slot) then
+        reagent_slots[slot] = false
+        return
+      end
 
-        -- update on reagent requirement changes
-        if reagents and reagent_slots[slot] ~= reagents then
-          reagent_counts[reagents] = reagent_counts[reagents] or 0
-          reagent_slots[slot] = reagents
-          updatecache[slot] = true
-        end
+      scanner:SetAction(slot)
+      local _, reagents = scanner:Find(reagent_capture)
+      reagents = reagents and string.gsub(reagents, " %((.+)%)", "")
+
+      if reagents then
+        reagent_counts[reagents] = reagent_counts[reagents] or 0
+        reagent_slots[slot] = reagents
+        updatecache[slot] = true
+      else
+        reagent_slots[slot] = false
       end
     end
 
@@ -1702,54 +1854,87 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     reagentcounter:RegisterEvent("BAG_UPDATE")
     reagentcounter:SetScript("OnEvent", function()
       if event == "BAG_UPDATE" then
+        -- only react if we have known reagents
+        local hasReagents = false
+        for _ in pairs(reagent_counts) do hasReagents = true break end
+        if not hasReagents then return end
+        -- clear location cache for the changed bag so next update relocates
+        if arg1 then
+          for itemName, loc in pairs(reagent_locs) do
+            if loc[1] == arg1 then
+              reagent_locs[itemName] = nil
+            end
+          end
+        end
         this.event = true
+        this:Show()
+      elseif event == "ACTIONBAR_SLOT_CHANGED" and arg1 then
+        if reagent_slots[arg1] ~= false then
+          reagent_slots[arg1] = nil
+          UpdateSlot(arg1)
+          this.event = true
+          this:Show()
+        end
       else
+        -- PLAYER_ENTERING_WORLD: full rescan, clear location cache
+        reagent_locs = {}
         this.scan = 1
+        this:Show()
       end
     end)
 
-    -- Reagent counter update with throttle for performance optimization
     reagentcounter:SetScript("OnUpdate", function()
-      -- Throttle entire function to 10 FPS for smooth scanning
-      if (this.tick_update or 0) > GetTime() then return end
-      this.tick_update = GetTime() + 0.1
-      
-      -- scan one action slot per update
-      if this.scan and this.scan <= 120 then
-        UpdateSlot(this.scan)
-        this.scan = this.scan + 1
+      local now = GetTime()
+      if (this.tick_update or 0) > now then return end
+      this.tick_update = now + 0.1
+
+      if this.scan then
+        local batch = 0
+        while this.scan <= 120 and batch < 10 do
+          UpdateSlot(this.scan)
+          this.scan = this.scan + 1
+          batch = batch + 1
+        end
+        if this.scan > 120 then
+          this.event = true
+          this.scan = nil
+        end
+        return
       end
 
-      -- trigger reagent count updates after action scans
-      if this.scan and this.scan >= 120 then
-        this.event = true
-        this.scan = nil
+      if not this.event then
+        this:Hide()
+        return
+      end
+      if (this.tick or 0) > now then return else this.tick = now + 3 end
+
+      -- update counts using direct bag slot access (no GetItemCount)
+      for itemName in pairs(reagent_counts) do
+        UpdateReagentCount(itemName)
       end
 
-      -- queue events to fire only once per second
-      if not this.event then return end
-      if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + 1 end
-
-      -- scan for all reagent item counts
-      for item in pairs(reagent_counts) do
-        reagent_counts[item] = GetItemCount(item)
+      -- mark display slots for update
+      for slot, v in pairs(reagent_slots) do
+        if type(v) == "string" then
+          updatecache[slot] = true
+        end
       end
 
-      -- update all actionbar buttons
-      for slot in pairs(reagent_slots) do
-        updatecache[slot] = true
-      end
-
-      -- remove event trigger
       this.event = nil
+      this:Hide()
     end)
+
+    -- start hidden, events will Show() when needed
+    reagentcounter:Hide()
 
     function IsReagentAction(slot)
-      return reagent_slots[slot] and true or nil
+      local v = reagent_slots[slot]
+      return type(v) == "string" and v or nil
     end
 
     function GetReagentCount(slot)
-      return reagent_counts[reagent_slots[slot]]
+      local v = reagent_slots[slot]
+      if type(v) == "string" then return reagent_counts[v] end
     end
   end
 end)

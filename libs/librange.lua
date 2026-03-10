@@ -38,9 +38,13 @@ pfUI.api.librange = librange
 -- the client has dropped auto-attack, so we re-queue it via AttackTarget().
 local reattack_pending = false
 
+local _, playerClass = UnitClass("player")
+
 local function reattack_check()
   if UnitExists("target") and UnitCanAttack("player", "target") then
     if IsSpellInRange(2974, "target") == 0 then
+      -- hunters use Auto Shot outside melee range, don't override with melee attack
+      if playerClass == "HUNTER" then return end
       reattack_pending = true
     end
   end

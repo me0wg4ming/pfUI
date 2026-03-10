@@ -5,37 +5,35 @@ pfUI:RegisterModule("hunterbar", "vanilla", function ()
   -- Wing Clip (any rank) and Arcane Shot (any rank) spell IDs.
   -- IsSpellInRange(spellId) works with any spell ID via Nampower,
   -- no actionbar slot needed.
-  local WINGCLIP_ID  = 2974   -- melee range indicator (~5 yd)
-  local ARCANESHOT_ID = 3044  -- ranged range indicator (~35 yd)
-
-  -- Hysteresis: only swap TO ranged bar when Arcane Shot is actually in range.
-  -- Only swap BACK to melee bar when Wing Clip is actually in range.
-  -- This prevents rapid bar-flipping in the transition zone.
+  local WINGCLIP_ID   = 2974  -- melee range indicator (~5 yd)
+  local ARCANESHOT_ID = 3044  -- ranged range indicator (~8-41 yd)
 
   pfUI.hunterbar = CreateFrame("Frame", "pfHunterBar", UIParent)
-
-  -- track which page we last forced so we don't spam ChangeActionBarPage()
   pfUI.hunterbar.lastPage = nil
 
+  -- bar switch: throttled to 0.1s
   pfUI.hunterbar:SetScript("OnUpdate", function()
-    -- only act when there is a live, attackable target
+    local now = GetTime()
+    if (this.tick or 0) > now then return end
+    this.tick = now + 0.1
+
     if not UnitExists("target") or not UnitCanAttack("player", "target") then
+      this.lastPage = nil
       return
     end
 
-    local wingclipInRange   = IsSpellInRange(WINGCLIP_ID,   "target")
-    local arcaneshotInRange = IsSpellInRange(ARCANESHOT_ID, "target")
+    local melee  = IsSpellInRange(WINGCLIP_ID,   "target")
+    local ranged = IsSpellInRange(ARCANESHOT_ID, "target")
 
-    -- swap to ranged bar: out of melee range AND arcane shot (8yd) in range
-    if wingclipInRange == 0 and arcaneshotInRange == 1 then
+    -- swap to ranged bar: out of melee range AND arcane shot in range
+    if melee == 0 and ranged == 1 then
       if this.lastPage ~= 2 then
         this.lastPage = 2
         _G.CURRENT_ACTIONBAR_PAGE = 2
         ChangeActionBarPage()
       end
-
-    -- swap to melee bar: in melee range AND arcane shot (8yd) out of range
-    elseif wingclipInRange == 1 and arcaneshotInRange == 0 then
+    -- swap to melee bar: in melee range AND arcane shot out of range
+    elseif melee == 1 and ranged == 0 then
       if this.lastPage ~= 1 then
         this.lastPage = 1
         _G.CURRENT_ACTIONBAR_PAGE = 1
