@@ -4,7 +4,7 @@ setfenv(1, pfUI:GetEnvironment())
 if pfUI.libhealth then return end
 
 local mobdb = {}
-local target, dmg, perc, diff = nil, 0, 0, 0, 0
+local target, dmg, perc, diff = nil, 0, 0, 0
 local UnitHealth, UnitHealthMax
 local libhealth = CreateFrame("Frame")
 libhealth.enabled = true
