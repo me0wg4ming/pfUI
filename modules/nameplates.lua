@@ -143,6 +143,12 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     cfg.debufftimers = C.nameplates.debufftimers == "1"
     cfg.debuffanim = tonumber(C.nameplates.debuffanim) or 0
     cfg.debufftext = tonumber(C.nameplates.debufftext) or 1
+
+    -- Rebuild offtanks lookup table
+    offtanks = {}
+    for k, v in pairs({strsplit("#", C.nameplates.combatofftanks)}) do
+      if v ~= "" then offtanks[string.lower(v)] = true end
+    end
   end
 
   -- ============================================================================
@@ -158,37 +164,70 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- cache default border color
   local er, eg, eb, ea = GetStringColor(pfUI_config.appearance.border.color)
 
+  -- Vanilla Lua 5.0 bitwise check: math.mod(math.floor(value / flag), 2) ~= 0
+  local function HasFlag(flags, flag)
+    return math.mod(math.floor(flags / flag), 2) ~= 0
+  end
+
+  local UNIT_FLAG_IN_COMBAT = 524288  -- 0x00080000
+  local NULL_GUID           = "0x0000000000000000"
+
   local function GetCombatStateColor(guid)
-    -- PERF: Quick exit if not in combat
+    -- PERF: Quick exit if player not in combat
     if not UnitAffectingCombat("player") then return false end
-    if not UnitAffectingCombat(guid) then return false end
     if UnitCanAssist("player", guid) then return false end
+
+    local flags = GetUnitField and GetUnitField(guid, "flags")
+    if not flags then return false end
+    if not HasFlag(flags, UNIT_FLAG_IN_COMBAT) then return false end
+
+    local mobTargetGuid = GetUnitField(guid, "target")
+    local hasTarget = mobTargetGuid and mobTargetGuid ~= NULL_GUID
 
     local target = guid.."target"
     local color = false
 
     local castInfo = GetCastInfo(guid)
     local isCasting = castInfo and castInfo.endTime and frameState.now < castInfo.endTime
-    local targetingPlayer = UnitIsUnit(target, "player")
+    local targetingPlayer = hasTarget and UnitIsUnit(target, "player")
 
     -- Remember if mob targets player, clear only when targeting someone else while NOT casting
     if targetingPlayer then
       threatMemory[guid] = true
-    elseif UnitExists(target) and not isCasting then
+    elseif hasTarget and not isCasting then
       threatMemory[guid] = nil
+    end
+
+    -- OFFTANK: resolve mob's target name via GUID for reliable cross-group detection
+    local targetName = hasTarget and UnitName(target)
+    if not targetName and hasTarget then
+      for i = 1, GetNumRaidMembers() do
+        if GetUnitGUID("raid"..i) == mobTargetGuid then
+          targetName = UnitName("raid"..i)
+          break
+        end
+      end
+      if not targetName then
+        for i = 1, GetNumPartyMembers() do
+          if GetUnitGUID("party"..i) == mobTargetGuid then
+            targetName = UnitName("party"..i)
+            break
+          end
+        end
+      end
     end
 
     if cfg.ccombatcasting and isCasting then
       color = combatstate.CASTING
     elseif cfg.ccombatthreat and (targetingPlayer or threatMemory[guid]) then
       color = combatstate.THREAT
-    elseif cfg.ccombatofftank and UnitName(target) and offtanks[strlower(UnitName(target))] then
+    elseif cfg.ccombatofftank and targetName and offtanks[strlower(targetName)] then
       color = combatstate.OFFTANK
-    elseif cfg.ccombatofftank and pfUI.uf and pfUI.uf.raid and pfUI.uf.raid.tankrole[UnitName(target)] then
+    elseif cfg.ccombatofftank and pfUI.uf and pfUI.uf.raid and targetName and pfUI.uf.raid.tankrole[targetName] then
       color = combatstate.OFFTANK
-    elseif cfg.ccombatnothreat and UnitExists(target) then
+    elseif cfg.ccombatnothreat and hasTarget then
       color = combatstate.NOTHREAT
-    elseif cfg.ccombatstun and not UnitExists(target) and not UnitIsPlayer(guid) then
+    elseif cfg.ccombatstun and not hasTarget then
       color = combatstate.STUN
     end
 
@@ -504,6 +543,9 @@ nameplates:RegisterEvent("PLAYER_LOGOUT")
 nameplates:RegisterEvent("UNIT_COMBO_POINTS")
 nameplates:RegisterEvent("PLAYER_COMBO_POINTS")
 nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+if hasNampower then
+  nameplates:RegisterEvent("UNIT_FLAGS_GUID")
+end
   
   -- Cast tracking handled by libdebuff (SPELL_START/GO/FAILED events)
   -- No local event registration needed
@@ -578,6 +620,14 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
           savedHostileState = nil
           savedFriendlyState = nil
         end
+      end
+
+    elseif event == "UNIT_FLAGS_GUID" then
+      -- Nampower: fires instantly when any unit's flags change (e.g. stun, combat enter/leave)
+      -- arg1 = guid — directly flag that nameplate for immediate update, bypassing throttle
+      local plate = guidRegistry[arg1]
+      if plate and plate.nameplate then
+        plate.nameplate.eventcache = true
       end
 
     elseif event == "PLAYER_TARGET_CHANGED" then

@@ -253,7 +253,6 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
   local playerGuid = nil
 
   supercast:RegisterEvent("PLAYER_ENTERING_WORLD")
-  supercast:RegisterEvent("UNIT_CASTEVENT")
   supercast:RegisterEvent("PLAYER_LOGOUT")
   supercast:SetScript("OnEvent", function()
     -- Handle shutdown to prevent crash 132

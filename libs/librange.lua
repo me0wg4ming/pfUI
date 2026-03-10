@@ -33,14 +33,16 @@ end
 -- add librange to pfUI API
 pfUI.api.librange = librange
 
--- resume auto-attack after spell cast ends (normal or failed)
--- only call AttackTarget() if auto-attack was interrupted by the cast
+-- Resume auto-attack after spell cast ends (normal or failed).
+-- When a cast finishes and the target is out of melee range (IsSpellInRange == 0),
+-- the client has dropped auto-attack, so we re-queue it via AttackTarget().
 local reattack_pending = false
 
 local function reattack_check()
-  local _,_,_,_,_,_,autoattack = GetCurrentCastingInfo()
-  if autoattack == 0 and UnitExists("target") and UnitCanAttack("player", "target") then
-    reattack_pending = true
+  if UnitExists("target") and UnitCanAttack("player", "target") then
+    if IsSpellInRange(2974, "target") == 0 then
+      reattack_pending = true
+    end
   end
 end
 
