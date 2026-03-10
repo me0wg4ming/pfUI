@@ -209,6 +209,11 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   pfUI.bags = {}
   pfUI.slots = {}
 
+  -- snapshot cache: flat arrays [bag] = {slot1_id, slot1_count, slot2_id, ...}
+  -- declared here so both CheckFullUpdate and UpdateBag can access them
+  local bagSnapshotId    = {}
+  local bagSnapshotCount = {}
+
   function pfUI.bag:CheckFullUpdate()
     -- invalidate snapshot so all slots get redrawn
     for bag = 0, 4 do bagSnapshotId[bag] = nil; bagSnapshotCount[bag] = nil end
@@ -378,10 +383,6 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       PlaySound("INTERFACESOUND_BACKPACKCLOSE")
     end)
   end
-
-  -- snapshot cache: flat arrays [bag] = {slot1_id, slot1_count, slot2_id, ...}
-  local bagSnapshotId    = {}
-  local bagSnapshotCount = {}
 
   function pfUI.bag:UpdateBag(bag)
     local bagsize = GetContainerNumSlots(bag)
