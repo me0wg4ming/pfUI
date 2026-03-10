@@ -343,8 +343,8 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       local z = ZONES[zone]
       if not z then return end
       ri.label:SetText(z[1])
-      ri.backdrop:SetBackdropColor(z[2], z[3], z[4], 0.85)
-      ri.backdrop:SetBackdropBorderColor(z[2] * 1.5, z[3] * 1.5, z[4] * 1.5, 1)
+      ri.backdrop:SetBackdropColor(z[2], z[3], z[4], .85)
+      ri.backdrop:SetBackdropBorderColor(z[2] * 2, z[3] * 2, z[4] * 2, 1)
     end
 
     local riUpdater = CreateFrame("Frame")
