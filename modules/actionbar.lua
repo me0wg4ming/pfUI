@@ -1053,18 +1053,21 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     return bit.band(bytes1, CATFORM_BIT)
   end
 
-  -- Full init: use Nampower for cat form, buff scan only for prowl
+  local PROWL_IDS = { [5215] = true, [6783] = true, [9913] = true }
+
+  -- Full init: use Nampower for cat form and prowl via aura field
   local function FullScan()
     if class ~= "DRUID" then return nil end
     inCatForm = (GetShapeshiftForm() ~= 0) or nil
     prowlActive = nil
     if inCatForm then
-      for i = 0, 31 do
-        local texture = GetPlayerBuffTexture(i)
-        if not texture then break end
-        if strfind(texture, "Ability_Ambush") then
-          prowlActive = true
-          break
+      local auras = GetUnitField("player", "aura")
+      if auras then
+        for i = 1, 32 do
+          if PROWL_IDS[auras[i]] then
+            prowlActive = true
+            break
+          end
         end
       end
     end
@@ -1073,12 +1076,10 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
 
   -- Quick scan only for prowl (when we know we're in cat form)
   local function HasProwlBuff()
-    for i = 0, 31 do
-      local texture = GetPlayerBuffTexture(i)
-      if not texture then break end
-      if strfind(texture, "Ability_Ambush") then
-        return true
-      end
+    local auras = GetUnitField("player", "aura")
+    if not auras then return nil end
+    for i = 1, 32 do
+      if PROWL_IDS[auras[i]] then return true end
     end
     return nil
   end
@@ -1171,7 +1172,6 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     -- Prowl/CatForm detection via Nampower SPELL_GO_SELF hook (replaces UNIT_CASTEVENT)
     -- Prowl Spell IDs: 5215 (Rank 1), 6783 (Rank 2), 9913 (Rank 3)
     -- Cat Form Spell ID: 768
-    local PROWL_IDS = { [5215] = true, [6783] = true, [9913] = true }
     pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
     pfUI.libdebuff_spell_go_hooks["actionbar_prowl"] = function(spellId)
       if class ~= "DRUID" then return end
