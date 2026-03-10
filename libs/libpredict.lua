@@ -209,6 +209,13 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
   end
   local target = pendingTarget or resolveNameFromGuid(targetGuid) or senttarget or spell_queue[3]
 
+  -- Redirect heal prediction to player if target is hostile
+  -- (healing a hostile target always heals yourself in Vanilla)
+  if target then
+    if UnitName("target") == target and UnitCanAttack("player", "target") then target = player end
+    if UnitName("mouseover") == target and UnitCanAttack("player", "mouseover") then target = player end
+  end
+
 
   libpredict.sender.current_cast = spellName
   libpredict.sender.current_cast_target = target
