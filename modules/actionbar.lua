@@ -815,7 +815,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
         end
       end
       -- also update bar 1 for classes that swap bars on aura changes (e.g. rogue stealth)
-      if class == "ROGUE" then
+      if class == "ROGUE" or class == "DRUID" then
         if bars[1] then
           for j=1,12 do
             if bars[1][j] then
@@ -1046,17 +1046,17 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
 
   -- Nampower: read shapeshift form directly from unit field bytes2 (byte 3, bits 16-23)
   -- Cat Form = 3, Bear/Dire Bear = 5, Travel = 4, Aquatic = 8, Moonkin = 31
-  local SHAPESHIFT_CAT = 3
+  local CATFORM_BIT = 65536  -- bit 16 of bytes1, set only in Cat Form
   local function GetShapeshiftForm()
-    local bytes2 = GetUnitField("player", "bytes2")
-    if not bytes2 then return 0 end
-    return bit.band(bit.rshift(bytes2, 16), 255)
+    local bytes1 = GetUnitField("player", "bytes1")
+    if not bytes1 then return 0 end
+    return bit.band(bytes1, CATFORM_BIT)
   end
 
   -- Full init: use Nampower for cat form, buff scan only for prowl
   local function FullScan()
     if class ~= "DRUID" then return nil end
-    inCatForm = (GetShapeshiftForm() == SHAPESHIFT_CAT) or nil
+    inCatForm = (GetShapeshiftForm() ~= 0) or nil
     prowlActive = nil
     if inCatForm then
       for i = 0, 31 do
@@ -1129,7 +1129,24 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       -- PLAYER_AURAS_CHANGED: smart scanning
       if event == "PLAYER_AURAS_CHANGED" then
         -- Nampower: O(1) cat form check via bytes2 unit field
-        inCatForm = (GetShapeshiftForm() == SHAPESHIFT_CAT) or nil
+        -- Fallback to buff scan if bytes2 not yet updated (returns 0 during shift animation)
+        local form = GetShapeshiftForm()
+        if form ~= 0 then
+          inCatForm = true
+        elseif form == 0 then
+          -- bytes2 not yet updated, scan buffs like master does
+          inCatForm = nil
+          for i = 0, 31 do
+            local texture = GetPlayerBuffTexture(i)
+            if not texture then break end
+            if strfind(texture, "Ability_Druid_CatForm") then
+              inCatForm = true
+              break
+            end
+          end
+        else
+          inCatForm = nil
+        end
 
         if not inCatForm then
           -- Left cat form: clear prowl state
@@ -1137,10 +1154,15 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
           prowling = nil
         elseif prowlActive then
           -- Was prowling: verify prowl buff still active
-          if not HasProwlBuff() then
+          local hasBuff = HasProwlBuff()
+          if not hasBuff then
             prowlActive = nil
             prowling = nil
           end
+        elseif not prowlActive then
+          -- In cat form but prowl state unknown: full scan (e.g. just shifted)
+          local result = FullScan()
+          prowling = result
         end
         -- If inCatForm but not prowlActive: wait for SPELL_GO_SELF hook (Prowl cast)
       end
