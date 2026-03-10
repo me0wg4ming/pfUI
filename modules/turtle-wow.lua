@@ -231,12 +231,12 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
 
     -- skin title dropdown menu
     -- taken from: https://github.com/doorknob6/pfUI-turtle/blob/master/skins/turtle/character.lua
-    if TWTitles and pfUI.skin["Character"] and pfUI_config["disabled"]["skin_Character"] ~= "1" then
+    if PaperDollFrameTitlesDropdown and pfUI.skin["Character"] and pfUI_config["disabled"]["skin_Character"] ~= "1" then
       CharacterLevelText:SetPoint("TOP", CharacterNameText, "BOTTOM", 0, -2)
-      SkinDropDown(TWTitles)
-      TWTitles:SetPoint("TOP", CharacterGuildText, "BOTTOM", 0, -2)
-      TWTitlesText:SetPoint("LEFT", TWTitles.backdrop, "LEFT", 6, 2)
-      CharacterResistanceFrame:SetPoint("TOP", TWTitles, "BOTTOM", 0, 0)
+      SkinDropDown(PaperDollFrameTitlesDropdown)
+      PaperDollFrameTitlesDropdown:SetPoint("TOP", CharacterGuildText, "BOTTOM", 0, -2)
+      CharacterTitleText:SetPoint("LEFT", PaperDollFrameTitlesDropdown.backdrop, "LEFT", 6, 2)
+      CharacterResistanceFrame:SetPoint("TOP", PaperDollFrameTitlesDropdown, "BOTTOM", 0, 0)
     end
   end)
 
