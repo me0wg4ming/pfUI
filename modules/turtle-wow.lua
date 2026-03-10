@@ -303,10 +303,12 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
         -- break if theres nothing left to do
         if initialized then return end
 
+        local _, scaled_border = GetBorderSize()
+
         -- adjust ui positions
         SkinTab(InspectFrameTab3)
         InspectFrameTab3:ClearAllPoints()
-        InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", GetBorderSize()*2 + 1, 0)
+        InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", scaled_border*2 + 1, 0)
         TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
 
         -- reload text position
