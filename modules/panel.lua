@@ -201,8 +201,8 @@ pfUI:RegisterModule("panel", "vanilla:tbc", function()
         _, _, lag = GetNetStats()
 
         if C.panel.fpscolors == "1" then
-          _, _, _, fpshex = GetColorGradient(fps/60)
-          _, _, _, laghex = GetColorGradient(60/lag)
+          _, _, _, fpshex = GetColorGradient(fps > 0 and fps/60 or 0)
+          _, _, _, laghex = GetColorGradient(lag > 0 and 60/lag or 0)
           fps = fpshex .. fps .. "|r"
           lag = laghex .. lag .. "|r"
         end
