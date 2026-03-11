@@ -614,8 +614,13 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       bar:SetMinMaxValues(0, baseMaxMana)
       bar:SetValue(baseMana)
 
-      -- Always show current/max
-      bar.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
+      -- Always show current/max unless text is disabled
+      if DC.druidmanatext ~= "0" then
+        bar.text:SetText(string.format("%s/%s", Abbreviate(baseMana), Abbreviate(baseMaxMana)))
+        bar.text:Show()
+      else
+        bar.text:Hide()
+      end
 
       bar:Show()
     end

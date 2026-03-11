@@ -2113,6 +2113,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Druid Mana Bar Y-Offset"], C.unitframes, "druidmanaoffy", nil, nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Druid Mana Bar Spacing"], C.unitframes, "druidmanaspace", nil, nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Druid Mana Bar Texture"], C.unitframes, "druidmanatexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Show Druid Mana Bar Text"], C.unitframes, "druidmanatext", "checkbox", nil, nil, nil, nil, "vanilla" )
 
 
       CreateConfig(nil, T["SuperWoW Settings"], nil, nil, "header")
