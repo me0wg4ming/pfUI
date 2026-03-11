@@ -95,7 +95,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   pfUI.bag:RegisterEvent("BAG_CLOSED")
   pfUI.bag:RegisterEvent("BANKFRAME_CLOSED")
   pfUI.bag:RegisterEvent("BANKFRAME_OPENED")
-  pfUI.bag:RegisterEvent("ITEM_LOCK_CHANGED")
+  pfUI.bag:RegisterEvent("BAG_UPDATE_COOLDOWN")
   pfUI.bag:RegisterEvent("SPELLS_CHANGED")
   pfUI.bag:RegisterEvent("MERCHANT_CLOSED")
 
@@ -168,6 +168,10 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
 
     if event == "ITEM_LOCK_CHANGED" then
       this.delay.UpdateItemLock = true
+      -- also queue a slot update to catch charge changes (BAG_UPDATE doesn't fire for charges)
+      if arg1 and arg2 then
+        this.delay.UpdateBag[arg1] = true
+      end
       bagUpdater:Show()
     end
 
@@ -209,10 +213,48 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   pfUI.bags = {}
   pfUI.slots = {}
 
-  -- snapshot cache: flat arrays [bag] = {slot1_id, slot1_count, slot2_id, ...}
-  -- declared here so both CheckFullUpdate and UpdateBag can access them
+  -- snapshot cache declared here (before the hook below) so the hook closure
+  -- can access them as upvalues
   local bagSnapshotId    = {}
   local bagSnapshotCount = {}
+
+  -- SPELL_GO_SELF hook: force-update bag slots after item use (e.g. charged
+  -- consumables like oils) because BAG_UPDATE does not fire for charge changes.
+  -- GetContainerItemInfo returns ciCount per itemId on Nampower, so we wipe the
+  -- entire bag snapshot to force UpdateBag to redraw all affected slots.
+  pfUI.libdebuff_spell_go_hooks["bags_itemuse"] = function(spellId, itemId)
+    if not itemId or itemId == 0 then return end
+
+    local bagsToUpdate = {}
+    for bag = 0, 4 do
+      local bagsize = GetContainerNumSlots(bag)
+      for slot = 1, bagsize do
+        local info = GetBagItem and GetBagItem(bag, slot)
+        if info and info.itemId == itemId then
+          bagsToUpdate[bag] = true
+        end
+      end
+    end
+
+    local queued = false
+    for bag in pairs(bagsToUpdate) do
+      bagSnapshotId[bag]    = nil
+      bagSnapshotCount[bag] = nil
+      pfUI.bag.delay.UpdateBag[bag] = true
+      bagUpdater:Show()
+      queued = true
+    end
+
+    -- last charge consumed: item already gone from inventory
+    if not queued then
+      for bag = 0, 4 do
+        bagSnapshotId[bag]    = nil
+        bagSnapshotCount[bag] = nil
+        pfUI.bag.delay.UpdateBag[bag] = true
+      end
+      bagUpdater:Show()
+    end
+  end
 
   function pfUI.bag:CheckFullUpdate()
     -- invalidate snapshot so all slots get redrawn
@@ -400,7 +442,10 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
         local info     = GetBagItem(bag, slot)
         local newId    = info and info.itemId    or 0
         local _, ciCount = GetContainerItemInfo(bag, slot)
-        local newCount = (ciCount and ciCount ~= 0) and math.abs(ciCount) or (info and info.stackCount or 0)
+        -- Store raw ciCount (negative = charges, positive = stacks).
+        -- math.abs would make -5 and -4 look identical when Nampower hasn't
+        -- updated yet; raw sign lets the delayed second pass detect the change.
+        local newCount = (ciCount and ciCount ~= 0) and ciCount or (info and info.stackCount or 0)
         if snapId[slot] ~= newId or snapCount[slot] ~= newCount then
           snapId[slot]    = newId
           snapCount[slot] = newCount
@@ -500,7 +545,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
     local info = (GetBagItem and bag >= 0 and bag <= 4) and GetBagItem(bag, slot)
     if info and info.itemId then
       itemId = info.itemId
-      -- GetContainerItemInfo returns negative values for charged items (Nampower).
+      -- GetContainerItemInfo returns negative values for charged items (Nampower behaviour).
       -- Positive = real stack count, negative = charges. Use abs() for display either way.
       local _, ciCount = GetContainerItemInfo(bag, slot)
       if ciCount and ciCount ~= 0 then

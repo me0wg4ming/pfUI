@@ -765,7 +765,12 @@ function pfUI.api.LoadMovable(frame, init)
 
     for id, point in pairs(frame.posdata.pos) do
       local a, b, c, d, e = unpack(point)
-      if a and b then frame:SetPoint(a,b,c,d,e) end
+      -- skip if anchoring to itself (would cause WoW error)
+      if a and b and b ~= frame and b ~= frame:GetName() then
+        frame:SetPoint(a,b,c,d,e)
+      elseif a and (not b or b == frame or b == frame:GetName()) then
+        frame:SetPoint(a,d,e)
+      end
     end
   end
 end

@@ -1572,6 +1572,16 @@ end
       -- AoE channel spells (Hurricane, Consecration) report numHit=0 in SPELL_GO
       -- because hits arrive later via SPELL_DAMAGE_EVENT during the channel.
       -- We must register pendingAoE BEFORE the numHit guard so the caster is known.
+      -- Fire registered SPELL_GO_SELF hooks BEFORE the spellName guard.
+      -- Item-use spells (e.g. Brilliant Mana Oil) may have no entry in GetSpellRecField
+      -- so spellName comes back nil and the guard below returns early -- hooks must
+      -- fire here so bag/inventory consumers see every item-triggered SPELL_GO_SELF.
+      if event == "SPELL_GO_SELF" and pfUI.libdebuff_spell_go_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_go_hooks) do
+          fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+        end
+      end
+
       local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       local spellRankString
       if not spellName then return end
@@ -1581,14 +1591,6 @@ end
         pendingAoE[spellName] = pendingAoE[spellName] or {}
         pendingAoE[spellName][casterGuid] = { time = GetTime() }
 
-      end
-
-      -- Fire registered SPELL_GO_SELF hooks BEFORE miss guard
-      -- (Swingtimer needs to see ALL casts, even misses, for swing reset)
-      if event == "SPELL_GO_SELF" and pfUI.libdebuff_spell_go_hooks then
-        for _, fn in pairs(pfUI.libdebuff_spell_go_hooks) do
-          fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-        end
       end
 
       if numMissed > 0 or numHit == 0 then return end
