@@ -36,6 +36,7 @@
   <Include file="..\skins\blizzard\tabard.lua"/>
   <Include file="..\skins\blizzard\itemtext.lua"/>
   <Include file="..\skins\blizzard\lft.lua"/>
+  <Include file="..\skins\blizzard\turtle_shop.lua"/>
 
   <!-- TBC -->
   <Include file="..\skins\blizzard\tracking.lua"/>
