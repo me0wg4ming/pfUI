@@ -35,6 +35,7 @@
   <Include file="..\skins\blizzard\tooltips.lua"/>
   <Include file="..\skins\blizzard\tabard.lua"/>
   <Include file="..\skins\blizzard\itemtext.lua"/>
+  <Include file="..\skins\blizzard\lft.lua"/>
 
   <!-- TBC -->
   <Include file="..\skins\blizzard\tracking.lua"/>
