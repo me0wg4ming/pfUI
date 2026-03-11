@@ -819,6 +819,7 @@ function pfUI.api.SkinArrowButton(button, dir, size)
 end
 
 function pfUI.api.SkinScrollbar(frame, always)
+  if not frame then return end
   local parent = frame:GetParent()
   local name = frame:GetName()
   local up = _G[name .. "ScrollUpButton"]
