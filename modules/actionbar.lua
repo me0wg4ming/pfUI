@@ -609,15 +609,11 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       end
     end
 
-    -- keybinds: cache result, only recompute when binding key changes
-    if not self.hide and (self.bar == 1 or buttontypes[self.bar]) and self.bar ~= 11 and self.bar ~= 12 then
-      local bindkey = self.bar == 1 and self._bindkey1 or self._bindkey2
-      local rawkey = GetBindingKey(bindkey)
-      if rawkey ~= self._bindraw then
-        self._bindraw = rawkey
-        self._bindtext = rawkey and GetBindingText(rawkey, "KEY_", 1) or ""
-      end
-      self.keybind:SetText(self._bindtext or "")
+    -- keybinds
+    if not self.hide and self.bar == 1 and self.bar ~= 11 and self.bar ~= 12 then
+      self.keybind:SetText(GetBindingText(GetBindingKey("ACTIONBUTTON"..id), "KEY_", 1))
+    elseif not self.hide and buttontypes[self.bar] then
+      self.keybind:SetText(GetBindingText(GetBindingKey(buttontypes[self.bar]..id), "KEY_", 1))
     else
       self.keybind:SetText("")
     end
@@ -1382,9 +1378,6 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       f.scanmacro = true
     end
 
-    -- cache binding key lookup strings (avoid string concat per frame)
-    f._bindkey1 = "ACTIONBUTTON" .. f.slot
-    f._bindkey2 = buttontypes[f.bar] and (buttontypes[f.bar] .. f.slot) or f._bindkey1
     -- cache showmacro config flag (avoid C.bars["bar"..bar] concat per frame)
     local barconf = C.bars["bar"..bar]
     f._showmacro = barconf and barconf.showmacro == "1" or nil
