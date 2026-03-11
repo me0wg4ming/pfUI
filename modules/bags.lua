@@ -168,7 +168,6 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
 
     if event == "ITEM_LOCK_CHANGED" then
       this.delay.UpdateItemLock = true
-      -- also queue a slot update to catch charge changes (BAG_UPDATE doesn't fire for charges)
       if arg1 and arg2 then
         this.delay.UpdateBag[arg1] = true
       end
@@ -220,8 +219,8 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
 
   -- SPELL_GO_SELF hook: force-update bag slots after item use (e.g. charged
   -- consumables like oils) because BAG_UPDATE does not fire for charge changes.
-  -- GetContainerItemInfo returns ciCount per itemId on Nampower, so we wipe the
-  -- entire bag snapshot to force UpdateBag to redraw all affected slots.
+  -- GetContainerItemInfo returns ciCount per-slot (negative = charges), so we
+  -- scan for slots whose ciCount changed and wipe only those bags' snapshots.
   pfUI.libdebuff_spell_go_hooks["bags_itemuse"] = function(spellId, itemId)
     if not itemId or itemId == 0 then return end
 
