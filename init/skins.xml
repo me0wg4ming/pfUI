@@ -29,6 +29,7 @@
   <Include file="..\skins\blizzard\options-interface.lua"/>
   <Include file="..\skins\blizzard\options-sound.lua"/>
   <Include file="..\skins\blizzard\options-video.lua"/>
+  <Include file="..\skins\blizzard\options-new.lua"/>
   <Include file="..\skins\blizzard\petition.lua"/>
   <Include file="..\skins\blizzard\taxi.lua"/>
   <Include file="..\skins\blizzard\tooltips.lua"/>
