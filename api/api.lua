@@ -1391,6 +1391,7 @@ end
 -- return r,g,b and hexcolor
 local gradientcolors = {}
 function pfUI.api.GetColorGradient(perc)
+  if not perc or perc ~= perc then perc = 0 end -- NaN guard: NaN ~= NaN is true in Lua
   perc = perc > 1 and 1 or perc
   perc = perc < 0 and 0 or perc
   perc = floor(perc*100)/100
