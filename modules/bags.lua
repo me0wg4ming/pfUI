@@ -1071,8 +1071,8 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
           end
         end)
 
-        frame.search.edit:SetScript("OnLeave", function()
-          if GetMouseFocus() ~= this then
+        frame.search.edit:SetScript("OnMouseUp", function()
+          if arg1 == "RightButton" then
             this:ClearFocus()
           end
         end)
