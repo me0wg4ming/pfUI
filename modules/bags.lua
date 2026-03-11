@@ -399,7 +399,8 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       for slot=1, bagsize do
         local info     = GetBagItem(bag, slot)
         local newId    = info and info.itemId    or 0
-        local newCount = info and info.stackCount or 0
+        local _, ciCount = GetContainerItemInfo(bag, slot)
+        local newCount = (ciCount and ciCount ~= 0) and math.abs(ciCount) or (info and info.stackCount or 0)
         if snapId[slot] ~= newId or snapCount[slot] ~= newCount then
           snapId[slot]    = newId
           snapCount[slot] = newCount
@@ -499,7 +500,14 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
     local info = (GetBagItem and bag >= 0 and bag <= 4) and GetBagItem(bag, slot)
     if info and info.itemId then
       itemId = info.itemId
-      count = info.stackCount
+      -- GetContainerItemInfo returns negative values for charged items (Nampower).
+      -- Positive = real stack count, negative = charges. Use abs() for display either way.
+      local _, ciCount = GetContainerItemInfo(bag, slot)
+      if ciCount and ciCount ~= 0 then
+        count = math.abs(ciCount)
+      else
+        count = info.stackCount
+      end
       locked = (info.flags and bit.band(info.flags, 4) ~= 0) and 1 or nil
       quality = GetItemStatsField(itemId, "quality")
       local itemClass = GetItemStatsField(itemId, "class")
