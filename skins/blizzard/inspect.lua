@@ -73,15 +73,50 @@ pfUI:RegisterSkin("Inspect", "tbc", function ()
         InspectGuildText:SetText(text)
       end)
 
-      hooksecurefunc("InspectPaperDollItemSlotButton_Update", function(button)
+      local function RefreshTbcSlots()
         local unit = InspectFrame.unit
-        local link = GetInventoryItemLink(unit, button:GetID())
-        if link then
-          local quality = select(3, GetItemInfo(link))
-          button:SetBackdropBorderColor(GetItemQualityColor(quality))
-        else
-          button:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
+        local guid = unit and GetUnitGUID and GetUnitGUID(unit)
+        if not guid then return end
+        for _, slot in pairs(slots) do
+          local btn = _G["Inspect"..slot]
+          if btn then
+            local slotId = btn:GetID()
+            local npItem = GetEquippedItem and GetEquippedItem(guid, slotId)
+            if npItem and npItem.itemId and npItem.itemId > 0 then
+              local itemId = npItem.itemId
+              local displayInfoId = GetItemStatsField and GetItemStatsField(itemId, "displayInfoID")
+              local texName = displayInfoId and GetItemIconTexture and GetItemIconTexture(displayInfoId)
+              local tex = texName and ("Interface\\Icons\\" .. texName)
+              if tex then SetItemButtonTexture(btn, tex) end
+              local itemStats = GetItemStats and GetItemStats(itemId)
+              local quality = itemStats and itemStats.quality
+              if quality and quality > 0 then
+                btn:SetBackdropBorderColor(GetItemQualityColor(quality))
+              else
+                btn:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
+              end
+            else
+              btn:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
+            end
+          end
         end
+      end
+
+      local npDelayTbc = CreateFrame("Frame")
+      npDelayTbc:Hide()
+      npDelayTbc.elapsed = 0
+      npDelayTbc:SetScript("OnUpdate", function()
+        npDelayTbc.elapsed = npDelayTbc.elapsed + arg1
+        if npDelayTbc.elapsed >= 0.3 then
+          npDelayTbc:Hide()
+          npDelayTbc.elapsed = 0
+          RefreshTbcSlots()
+        end
+      end)
+
+      hooksecurefunc("InspectPaperDollItemSlotButton_Update", function(button)
+        npDelayTbc.elapsed = 0
+        npDelayTbc:Show()
       end)
     end
 
@@ -130,8 +165,6 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
   HookAddonOrVariable("Blizzard_InspectUI", function()
-    local cache = {}
-
     CreateBackdrop(InspectFrame, nil, nil, .75)
     CreateBackdropShadow(InspectFrame)
 
@@ -166,25 +199,86 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         StripTextures(frame)
         CreateBackdrop(frame)
         SetAllPointsOffset(frame.backdrop, frame, 0)
-
         HandleIcon(frame.backdrop, _G["Inspect"..slot.."IconTexture"])
 
+        -- Nampower-based tooltip via hyperlink
         local funce = frame:GetScript("OnEnter")
         frame:SetScript("OnEnter", function()
-          local bid = this:GetID()
-          if not GetInventoryItemLink(InspectFrame.unit, this:GetID()) and this.hasItem then
+          local unit = InspectFrame.unit
+          local guid = unit and GetUnitGUID and GetUnitGUID(unit)
+          local slotId = this:GetID()
+          local npItem = guid and GetEquippedItem and GetEquippedItem(guid, slotId)
+          if npItem and npItem.itemId and npItem.itemId > 0 then
+            local itemId    = npItem.itemId
+            local enchantId = npItem.permanentEnchantId or 0
             GameTooltip:SetOwner(this, "ANCHOR_TOPRIGHT")
-            GameTooltip:SetHyperlink("item:"..cache[bid]["id"])
+            GameTooltip:SetHyperlink("item:" .. itemId .. ":" .. enchantId .. ":0:0:0:0:0:0")
             GameTooltip:Show()
-          else
+          elseif funce then
             funce()
           end
         end)
+        frame:SetScript("OnLeave", function()
+          GameTooltip:Hide()
+        end)
       end
+
+      -- cache: prefetched item data per guid, keyed by slot name
+      local npCache = {}
+      local npCacheGuid = nil
+
+      local function PrefetchTarget(unit)
+        if not unit then return end
+        if not CanInspect(unit) then return end
+        local guid = GetUnitGUID and GetUnitGUID(unit)
+        if not guid then return end
+
+        npCacheGuid = guid
+        npCache = {}
+
+        for i, vslot in pairs(slots) do
+          local slotId = GetInventorySlotInfo(vslot)
+          local npItem = GetEquippedItem and GetEquippedItem(guid, slotId)
+          local itemId = npItem and npItem.itemId and npItem.itemId > 0 and npItem.itemId
+          if itemId then
+            local enchantId = npItem.permanentEnchantId or 0
+            local displayInfoId = GetItemStatsField and GetItemStatsField(itemId, "displayInfoID")
+            local texName = displayInfoId and GetItemIconTexture and GetItemIconTexture(displayInfoId)
+            local tex = texName and ("Interface\\Icons\\" .. texName)
+            local itemStats = GetItemStats and GetItemStats(itemId)
+            local quality = itemStats and itemStats.quality
+            npCache[vslot] = { itemId=itemId, enchantId=enchantId, tex=tex, quality=quality }
+          else
+            npCache[vslot] = false
+          end
+        end
+      end
+
+
+      local npDelay = CreateFrame("Frame")
+      npDelay:Hide()
+      npDelay.elapsed = 0
 
       local function UpdateSlots()
         if not InspectFrame.unit then return end
 
+        -- check if all icons are ready, retry if not
+        local allReady = true
+        for i, vslot in pairs(slots) do
+          local d = npCache[vslot]
+          if d and not d.tex then
+            allReady = false
+            break
+          end
+        end
+
+        if not allReady then
+          npDelay.elapsed = 0
+          npDelay:Show()
+          return
+        end
+
+        -- guild text
         local guild, title, rank = GetGuildInfo(InspectFrame.unit)
         if guild then
           InspectGuildText:SetPoint("TOP", InspectLevelText, "BOTTOM", 0, -1)
@@ -196,74 +290,65 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         end
 
         for i, vslot in pairs(slots) do
-          local id = GetInventorySlotInfo(vslot)
-          local link = GetInventoryItemLink(InspectFrame.unit, id)
-          local slot = _G["Inspect" .. vslot]
-          local retry = false
+          local frame = _G["Inspect" .. vslot]
+          local d = npCache[vslot]
 
-          if link and slot.hasItem then
-            local _, _, link = string.find(link, "(item:%d+:%d+:%d+:%d+)")
-            local _, _, quality = GetItemInfo(link)
-
-            if not quality then
-              retry = true
+          if d then
+            SetItemButtonTexture(frame, d.tex)
+            frame.hasItem = 1
+            if d.quality and d.quality > 0 then
+              local r, g, b = GetItemQualityColor(d.quality)
+              frame.backdrop:SetBackdropBorderColor(r, g, b, 1)
             else
-              slot.backdrop:SetBackdropBorderColor(GetItemQualityColor(quality))
-
-              if ShaguScore then
-                if not slot.scoreText then
-                  slot.scoreText = slot:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                  slot.scoreText:SetFont(pfUI.font_default, 12, "OUTLINE")
-                  slot.scoreText:SetPoint("TOPRIGHT", 0, 0)
-                end
-
-                local r,g,b = GetItemQualityColor(quality)
-                local _, _, itemID = string.find(link, "item:(%d+):%d+:%d+:%d+")
-                local itemLevel = ShaguScore.Database[tonumber(itemID)] or 0
-                local score = ShaguScore:Calculate(vslot, quality, itemLevel)
-                if score and score > 0 then
-                  slot.scoreText:SetText(score)
-                  slot.scoreText:SetTextColor(r, g, b)
-                else
-                  slot.scoreText:SetText("")
-                end
+              frame.backdrop:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
+            end
+            if ShaguScore then
+              if not frame.scoreText then
+                frame.scoreText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                frame.scoreText:SetFont(pfUI.font_default, 12, "OUTLINE")
+                frame.scoreText:SetPoint("TOPRIGHT", 0, 0)
+              end
+              local itemLevel = ShaguScore.Database[d.itemId] or 0
+              local score = d.quality and ShaguScore:Calculate(vslot, d.quality, itemLevel) or 0
+              if score and score > 0 then
+                local r, g, b = GetItemQualityColor(d.quality)
+                frame.scoreText:SetText(score)
+                frame.scoreText:SetTextColor(r, g, b)
+              else
+                frame.scoreText:SetText("")
               end
             end
-          elseif slot.hasItem then
-            retry = true
           else
-            CreateBackdrop(slot)
-            SetAllPointsOffset(slot.backdrop, slot, 0)
-            if slot.scoreText then
-              slot.scoreText:SetText("")
-            end
-          end
-
-          if retry == true and InspectFrame.unit then
-            QueueFunction(UpdateSlots)
+            CreateBackdrop(frame)
+            SetAllPointsOffset(frame.backdrop, frame, 0)
+            frame.backdrop:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
+            if frame.scoreText then frame.scoreText:SetText("") end
           end
         end
       end
 
-      hooksecurefunc("InspectPaperDollItemSlotButton_Update", function(button)
-        local bid = button:GetID()
-        local link = GetInventoryItemLink(InspectFrame.unit, bid)
-        if link then
-          local _,_,itemID = string.find(link, 'item:(%d+)')
-          cache[bid] = cache[bid] or {}
-          cache[bid]["id"] = itemID
-          cache[bid]["tex"] = GetInventoryItemTexture(InspectFrame.unit, button:GetID())
-          cache[bid]["count"] = GetInventoryItemCount(InspectFrame.unit, button:GetID())
-          cache[bid]["name"] = UnitName(InspectFrame.unit)
-        elseif cache[bid] and UnitName(InspectFrame.unit) == cache[bid].name then
-          -- restore cache information
-          SetItemButtonTexture(button, cache[bid]["tex"])
-          SetItemButtonCount(button, cache[bid]["count"])
-          button.hasItem = 1
+      npDelay:SetScript("OnUpdate", function()
+        npDelay.elapsed = npDelay.elapsed + arg1
+        if npDelay.elapsed >= 0.02 then
+          npDelay:Hide()
+          npDelay.elapsed = 0
+          PrefetchTarget(InspectFrame.unit)
+          UpdateSlots()
         end
+      end)
 
+      -- item swap during inspect: re-prefetch and re-apply
+      hooksecurefunc("InspectPaperDollItemSlotButton_Update", function(button)
+        if not npDelay:IsShown() then
+          npDelay.elapsed = 0
+          npDelay:Show()
+        end
+      end)
+
+      -- on open: prefetch and apply immediately
+      hooksecurefunc("InspectPaperDollFrame_OnShow", function()
+        PrefetchTarget(InspectFrame.unit)
         UpdateSlots()
-        QueueFunction(UpdateSlots)
       end)
     end
 
