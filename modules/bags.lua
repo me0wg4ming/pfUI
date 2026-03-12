@@ -181,6 +181,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
 
     if event == "BAG_UPDATE" then
       this.delay.UpdateBag[arg1] = true
+      this.delay.CheckFullUpdate = true
       bagUpdater:Show()
     end
 
@@ -275,6 +276,11 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
           if bag == -2 and pfUI.bag.showKeyring == true then bagsize = GetKeyRingSize() end
 
           if slot > bagsize then
+            -- Clear stale icon/count before hiding so unequipping a bag
+            -- does not leave the old item texture visible.
+            SetItemButtonTexture(pfUI.bags[bag].slots[slot].frame, nil)
+            SetItemButtonCount(pfUI.bags[bag].slots[slot].frame, 0)
+            pfUI.bags[bag].slots[slot].frame.hasItem = nil
             pfUI.bags[bag].slots[slot].frame:Hide()
           end
         end
@@ -559,6 +565,22 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       local displayId = GetItemStatsField(itemId, "displayInfoID")
       local iconName = displayId and GetItemIconTexture(displayId)
       texture = iconName and (ICON_PATH .. iconName) or nil
+      -- Fallback: if Nampower item data is not yet available (e.g. freshly
+      -- conjured items), try GetContainerItemInfo as interim texture and
+      -- always schedule a retry so the proper icon replaces any placeholder.
+      if not texture then
+        local ciTexture = GetContainerItemInfo(bag, slot)
+        -- Accept the fallback texture only if it's not the "?" placeholder
+        if ciTexture and not string.find(ciTexture, "INV_Misc_QuestionMark") then
+          texture = ciTexture
+        end
+        -- Schedule a deferred re-update so the real icon appears once the
+        -- client has finished caching the item data.
+        bagSnapshotId[bag] = nil
+        bagSnapshotCount[bag] = nil
+        pfUI.bag.delay.UpdateBag[bag] = true
+        bagUpdater:Show()
+      end
     elseif bag == -1 or (bag >= 5 and bag <= 11) then
       -- Bank slots/bags: only called when bank is open, GetContainerItemInfo works here
       texture, count, locked, quality = GetContainerItemInfo(bag, slot)
