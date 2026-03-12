@@ -33,6 +33,12 @@ local lastspell
 
 -- Nampower Support
 
+-- Minimum required Nampower version -- update this single value when requirements change
+local NAMPOWER_MIN_MAJOR = 4
+local NAMPOWER_MIN_MINOR = 1
+local NAMPOWER_MIN_PATCH = 0
+local NAMPOWER_MIN_VERSION = NAMPOWER_MIN_MAJOR .. "." .. NAMPOWER_MIN_MINOR .. "." .. NAMPOWER_MIN_PATCH
+
 -- Nampower startup check: show version info and ensure CVars are set.
 -- Runs on first OnUpdate after PLAYER_ENTERING_WORLD to give Nampower time to initialize.
 local nampowerCheckFrame = CreateFrame("Frame")
@@ -49,7 +55,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
       patch = patch or 0
       local versionString = major .. "." .. minor .. "." .. patch
 
-      if major > 3 or (major == 3 and minor > 0) or (major == 3 and minor == 0 and patch >= 0) then
+      if major > NAMPOWER_MIN_MAJOR or (major == NAMPOWER_MIN_MAJOR and minor > NAMPOWER_MIN_MINOR) or (major == NAMPOWER_MIN_MAJOR and minor == NAMPOWER_MIN_MINOR and patch >= NAMPOWER_MIN_PATCH) then
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
 
         if SetCVar and GetCVar then
@@ -90,7 +96,7 @@ nampowerCheckFrame:SetScript("OnEvent", function()
         end
 
       else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v3.0.0 or higher.|r")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v" .. NAMPOWER_MIN_VERSION .. " or higher.|r")
         StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
       end
     else
@@ -250,7 +256,7 @@ pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
 -- ============================================================================
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
-  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Update Required!\n\nYour current version: %s\nRequired version: 3.0.0+\n\nPlease update Nampower to continue using pfUI!",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Update Required!\n\nYour current version: %s\nRequired version: " .. NAMPOWER_MIN_VERSION .. "+\n\nPlease update Nampower to continue using pfUI!",
   button1 = "Show Download",
   button2 = "Dismiss",
   timeout = 0,
@@ -258,12 +264,12 @@ StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
   hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases/tag/v3.0.0")
+    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases/tag/v" .. NAMPOWER_MIN_VERSION)
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
-  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Not Found!\n\nNampower 3.0.0+ is required for pfUI to function correctly.\n\nPlease install Nampower!",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Not Found!\n\nNampower " .. NAMPOWER_MIN_VERSION .. "+ is required for pfUI to function correctly.\n\nPlease install Nampower!",
   button1 = "Show Download",
   button2 = "Dismiss",
   timeout = 0,
