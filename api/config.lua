@@ -500,6 +500,7 @@ function pfUI:LoadConfig()
     pfUI:UpdateConfig("unitframes", unit,      "debuff_ind_pos",   "CENTER")
     pfUI:UpdateConfig("unitframes", unit,      "debuff_ind_size",  ".65")
     pfUI:UpdateConfig("unitframes", unit,      "debuff_ind_class", "1")
+    pfUI:UpdateConfig("unitframes", unit,      "debuff_ind_range", "0")
 
     pfUI:UpdateConfig("unitframes", unit,      "show_buffs",       "1")
     pfUI:UpdateConfig("unitframes", unit,      "show_hots",        "0")

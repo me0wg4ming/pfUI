@@ -1,6 +1,13 @@
 -- load pfUI environment
 setfenv(1, pfUI:GetEnvironment())
 
+local pfDebuffColors = {
+  ["Magic"]   = { 0.1, 0.7, 0.8, 1 },
+  ["Poison"]  = { 0.2, 0.7, 0.3, 1 },
+  ["Curse"]   = { 0.6, 0.2, 0.6, 1 },
+  ["Disease"] = { 0.9, 0.7, 0.2, 1 }
+}
+
 pfUI.uf = CreateFrame("Frame", nil, UIParent)
 pfUI.uf:SetScript("OnUpdate", function()
   if InCombatLockdown and not InCombatLockdown() then
@@ -2253,14 +2260,31 @@ function pfUI.uf:RefreshIndicators(unit)
       unit.raidIcon:Hide()
     end
   end
-end
 
-local pfDebuffColors = {
-  ["Magic"]   = { 0.1, 0.7, 0.8, 1 },
-  ["Poison"]  = { 0.2, 0.7, 0.3, 1 },
-  ["Curse"]   = { 0.6, 0.2, 0.6, 1 },
-  ["Disease"] = { 0.9, 0.7, 0.2, 1 }
-}
+  -- Dispel indicator range border update
+  if unit.config.debuff_ind_range == "1" and unit.hp and unit.hp.bar and unit.hp.bar.debuffindicators then
+    local indicator = unit.hp.bar.debuffindicators
+    local disptype = unit.config.debuff_indicator
+    local inRange = pfUI.api.librange and pfUI.api.librange:UnitInDispelRange(unitstr)
+    for debuff, frame in pairs(indicator) do
+      if type(frame) == "table" and frame.visible then
+        if disptype == "4" and frame.tex then
+          if inRange then
+            frame.tex:SetVertexColor(unpack(pfDebuffColors[debuff]))
+          else
+            frame.tex:SetVertexColor(1, 0, 0, 1)
+          end
+        elseif disptype == "3" and frame.backdrop then
+          if inRange then
+            frame.backdrop:SetBackdropBorderColor(0, 0, 0, 0)
+          else
+            frame.backdrop:SetBackdropBorderColor(1, 0, 0, 1)
+          end
+        end
+      end
+    end
+  end
+end
 
 function pfUI.uf:RefreshUnit(unit, component)
   -- break early on misconfigured UF's
@@ -2628,6 +2652,7 @@ function pfUI.uf:RefreshUnit(unit, component)
 
     if table.getn(unit.dispellable) > 0 then
       unit.hp.bar.debuffindicators = unit.hp.bar.debuffindicators or CreateFrame("Frame", nil, unit.hp.bar)
+      unit.hp.bar.debuffindicators:SetFrameLevel(unit.hp.bar:GetFrameLevel() + 17)
 
       -- 0 = OFF, 1 = Legacy, 2 = Glow, 3 = Square, 4 = Icons
       local disptype = unit.config.debuff_indicator
@@ -2719,8 +2744,35 @@ function pfUI.uf:RefreshUnit(unit, component)
             indicator:SetAlpha(.2)
           end
 
+          -- range indicator: red tint for icons, red border for squares
+          if unit.config.debuff_ind_range == "1" then
+            if disptype == "4" then
+              -- icons: tint texture red when out of range
+              if pfUI.api.librange and pfUI.api.librange:UnitInDispelRange(unitstr) then
+                indicator[debuff].tex:SetVertexColor(unpack(pfDebuffColors[debuff]))
+              else
+                indicator[debuff].tex:SetVertexColor(1, 0, 0, 1)
+              end
+            elseif disptype == "3" then
+              if not indicator[debuff].backdrop then
+                CreateBackdrop(indicator[debuff])
+                if indicator[debuff].backdrop then
+                  indicator[debuff].backdrop:SetBackdropColor(0, 0, 0, 0)
+                  indicator[debuff].backdrop:SetBackdropBorderColor(0, 0, 0, 0)
+                end
+              end
+              if pfUI.api.librange and pfUI.api.librange:UnitInDispelRange(unitstr) then
+                indicator[debuff].backdrop:SetBackdropBorderColor(0, 0, 0, 0)
+              else
+                indicator[debuff].backdrop:SetBackdropBorderColor(1, 0, 0, 1)
+              end
+            end
+          elseif indicator[debuff].backdrop then
+            indicator[debuff].backdrop:SetBackdropBorderColor(0, 0, 0, 0)
+          end
+
           if disptype == "4" or disptype == "3" then
-            indicator[debuff]:SetPoint("LEFT", indicator, "LEFT", count*(size+1), 0)
+            indicator[debuff]:SetPoint("LEFT", indicator, "LEFT", count*(size+3), 0)
             count = count + 1
           end
         else
@@ -2729,7 +2781,7 @@ function pfUI.uf:RefreshUnit(unit, component)
       end
 
       if disptype == "4" or disptype == "3" then
-        indicator:SetWidth(count*(size+1))
+        indicator:SetWidth(count*(size+3))
       end
     elseif unit.hp.bar.debuffindicators then
       unit.hp.bar.debuffindicators:Hide()

@@ -2331,6 +2331,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Only Class Dispellable"], C.unitframes[c], "debuff_ind_class", "checkbox")
         CreateConfig(U[c], T["Indicator Position"], C.unitframes[c], "debuff_ind_pos", "dropdown", pfUI.gui.dropdowns.positions)
         CreateConfig(U[c], T["Indicator Size"], C.unitframes[c], "debuff_ind_size", "dropdown", pfUI.gui.dropdowns.uf_debuff_indicator_size)
+        CreateConfig(U[c], T["Show Out of Range"], C.unitframes[c], "debuff_ind_range", "checkbox")
 
         CreateConfig(U[c], T["Overwrite Fonts"], nil, nil, "header")
         CreateConfig(U[c], T["Use Custom Font Settings"], C.unitframes[c], "customfont", "checkbox")

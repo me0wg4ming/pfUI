@@ -8,6 +8,14 @@ setfenv(1, pfUI:GetEnvironment())
 --  librange:UnitInSpellRange(unit)
 --    Returns `1` if the unit is within 40y range, nil otherwise
 --
+--  librange:UnitInDispelRange(unit)
+--    Returns `1` if the unit is within 30y dispel range, nil otherwise
+--
+-- Spell IDs used as range proxies (work for all classes via Nampower):
+--   5185  = Healing Touch Rank 1  (~40yd)
+--   552   = Abolish Disease        (~30yd)
+--   14325 = Hunter's Mark          (~100yd)
+--
 
 -- return instantly when another librange is already active
 if pfUI.api.librange then return end
@@ -30,7 +38,17 @@ function librange:UnitInSpellRange(unit)
   return result == 1 and 1 or nil
 end
 
+-- Abolish Disease (SpellID 552) has 30yd range — used as dispel range proxy
+function librange:UnitInDispelRange(unit)
+  local result = IsSpellInRange(552, unit)
+  return result == 1 and 1 or nil
+end
+
+-- Hunter's Mark (SpellID 14325) has 100yd range — used as inspect range proxy
+function librange:UnitInInspectRange(unit)
+  local result = IsSpellInRange(14325, unit)
+  return result == 1 and 1 or nil
+end
+
 -- add librange to pfUI API
 pfUI.api.librange = librange
-
--- NOTE: reattack block removed for projectile bug testing
