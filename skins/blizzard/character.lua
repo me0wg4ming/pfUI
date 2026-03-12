@@ -88,21 +88,11 @@ pfUI:RegisterSkin("Character", "vanilla:tbc", function ()
 
     local function RefreshCharacterSlot(slot)
       local slotId = slot:GetID()
-      if slotId < 1 or slotId > 19 then return end
-      local npItem = GetEquippedItem and GetEquippedItem("player", slotId)
+      local link = GetInventoryItemLink("player", slotId)
       if slot and slot.backdrop then
-        if npItem and npItem.itemId and npItem.itemId > 0 then
-          local itemId = npItem.itemId  -- extract immediately, table is reused
-
-          -- icon via Nampower
-          local displayInfoId = GetItemStatsField and GetItemStatsField(itemId, "displayInfoID")
-          local texName = displayInfoId and GetItemIconTexture and GetItemIconTexture(displayInfoId)
-          local tex = texName and ("Interface\\Icons\\" .. texName)
-          if tex then SetItemButtonTexture(slot, tex) end
-
+        if link then
           local isBroken = GetInventoryItemBroken("player", slotId)
-          local itemStats = GetItemStats and GetItemStats(itemId)
-          local quality = itemStats and itemStats.quality
+          local quality = GetInventoryItemQuality("player", slotId)
           if isBroken then
             slot.backdrop:SetBackdropBorderColor(0.9, 0, 0, 1)
           elseif quality and quality > 0 then
@@ -111,25 +101,24 @@ pfUI:RegisterSkin("Character", "vanilla:tbc", function ()
           else
             slot.backdrop:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
           end
+        else
+          slot.backdrop:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
+        end
 
-          if ShaguScore and quality then
-            local itemLevel = ShaguScore.Database[itemId] or 0
-            local itemSlot = itemStats and itemStats.inventoryType
-            local score = ShaguScore:Calculate(itemSlot, quality, itemLevel)
-            if score and score > 0 then
-              local r, g, b = GetItemQualityColor(quality)
-              slot.scoreText:SetText(score)
-              slot.scoreText:SetTextColor(r, g, b, 1)
-            else
-              slot.scoreText:SetText("")
-              slot.scoreText:SetTextColor(1, 1, 1, 1)
-            end
+        if ShaguScore and link then
+          local _, _, itemID = string.find(GetInventoryItemLink("player", slotId), "item:(%d+):%d+:%d+:%d+")
+          local itemLevel = ShaguScore.Database[tonumber(itemID)] or 0
+          local _, _, quality, _, _, _, _, _, itemSlot, _ = GetItemInfo(itemID)
+          local score = ShaguScore:Calculate(itemSlot, quality, itemLevel)
+          if score and score > 0 and quality and quality > 0 then
+            local r,g,b = GetItemQualityColor(quality)
+            slot.scoreText:SetText(score)
+            slot.scoreText:SetTextColor(r, g, b, 1)
           else
             slot.scoreText:SetText("")
             slot.scoreText:SetTextColor(1, 1, 1, 1)
           end
         else
-          slot.backdrop:SetBackdropBorderColor(pfUI.cache.er, pfUI.cache.eg, pfUI.cache.eb, pfUI.cache.ea)
           slot.scoreText:SetText("")
           slot.scoreText:SetTextColor(1, 1, 1, 1)
         end
@@ -184,23 +173,6 @@ pfUI:RegisterSkin("Character", "vanilla:tbc", function ()
       SetAllPointsOffset(frame.backdrop, frame, 0)
 
       HandleIcon(frame.backdrop, _G["Character"..slotName.."IconTexture"])
-
-      -- Nampower-backed tooltip via hyperlink
-      frame:SetScript("OnEnter", function()
-        local slotId = this:GetID()
-        if slotId < 1 or slotId > 19 then return end
-        local npItem = GetEquippedItem and GetEquippedItem("player", slotId)
-        if npItem and npItem.itemId and npItem.itemId > 0 then
-          local itemId    = npItem.itemId
-          local enchantId = npItem.permanentEnchantId or 0
-          GameTooltip:SetOwner(this, "ANCHOR_TOPRIGHT")
-          GameTooltip:SetHyperlink("item:" .. itemId .. ":" .. enchantId .. ":0:0:0:0:0:0")
-          GameTooltip:Show()
-        end
-      end)
-      frame:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-      end)
 
       if not frame.scoreText then
         frame.scoreText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
