@@ -165,6 +165,16 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
   HookAddonOrVariable("Blizzard_InspectUI", function()
+    InspectFrame_Show = function(unit)
+      HideUIPanel(InspectFrame)
+      NotifyInspect(unit)
+      InspectFrame.unit = unit
+      ShowUIPanel(InspectFrame)
+    end
+
+    if UnitPopupButtons and UnitPopupButtons["INSPECT"] then
+      UnitPopupButtons["INSPECT"].dist = 0
+    end
     CreateBackdrop(InspectFrame, nil, nil, .75)
     CreateBackdropShadow(InspectFrame)
 
@@ -229,7 +239,6 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
 
       local function PrefetchTarget(unit)
         if not unit then return end
-        if not CanInspect(unit) then return end
         local guid = GetUnitGUID and GetUnitGUID(unit)
         if not guid then return end
 
