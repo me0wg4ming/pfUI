@@ -33,31 +33,4 @@ end
 -- add librange to pfUI API
 pfUI.api.librange = librange
 
--- Resume auto-attack after spell cast ends (normal or failed).
--- When a cast finishes and the target is out of melee range (IsSpellInRange == 0),
--- the client has dropped auto-attack, so we re-queue it via AttackTarget().
-local reattack_pending = false
-
-local _, playerClass = UnitClass("player")
-
-local function reattack_check()
-  if UnitExists("target") and UnitCanAttack("player", "target") then
-    if IsSpellInRange(2974, "target") == 0 then
-      -- hunters use Auto Shot outside melee range, don't override with melee attack
-      if playerClass == "HUNTER" then return end
-      reattack_pending = true
-    end
-  end
-end
-
-pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
-pfUI.libdebuff_spell_failed_self_hooks = pfUI.libdebuff_spell_failed_self_hooks or {}
-pfUI.libdebuff_spell_go_hooks["librange_reattack"] = reattack_check
-pfUI.libdebuff_spell_failed_self_hooks["librange_reattack"] = reattack_check
-
-local reattack = CreateFrame("Frame")
-reattack:SetScript("OnUpdate", function()
-  if not reattack_pending then return end
-  reattack_pending = false
-  AttackTarget()
-end)
+-- NOTE: reattack block removed for projectile bug testing
