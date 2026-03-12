@@ -644,6 +644,7 @@ pfUI_translation["ruRU"] = {
   ["Rested Color"] = "Опыт за отдых",
   ["Resting"] = "Отдыхающий",
   ["Reveal Unexplored Areas"] = "Показывать неисследованные области",
+  ["Switch to current zone"] = "Перейти к текущей зоне",
   ["Right"] = "Справа",
   ["Right Actionbar"] = "Правая",
   ["Right Anchor"] = nil,

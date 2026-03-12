@@ -644,6 +644,7 @@ pfUI_translation["koKR"] = {
   ["Rested Color"] = nil,
   ["Resting"] = "휴식",
   ["Reveal Unexplored Areas"] = nil,
+  ["Switch to current zone"] = nil,
   ["Right"] = "오른쪽",
   ["Right Actionbar"] = nil,
   ["Right Anchor"] = nil,

@@ -644,6 +644,7 @@ pfUI_translation["frFR"] = {
   ["Rested Color"] = "Couleur quand Reposé",
   ["Resting"] = "Au Repos",
   ["Reveal Unexplored Areas"] = "Révèle les zones non explorées",
+  ["Switch to current zone"] = "Aller à la zone actuelle",
   ["Right"] = "Droit",
   ["Right Actionbar"] = "Barre d'action droite",
   ["Right Anchor"] = nil,

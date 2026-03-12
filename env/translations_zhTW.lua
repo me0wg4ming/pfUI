@@ -644,6 +644,7 @@ pfUI_translation["zhTW"] = {
   ["Rested Color"] = nil,
   ["Resting"] = "休息中",
   ["Reveal Unexplored Areas"] = "展示未勘探的地區",
+  ["Switch to current zone"] = nil,
   ["Right"] = "右邊",
   ["Right Actionbar"] = nil,
   ["Right Anchor"] = nil,
