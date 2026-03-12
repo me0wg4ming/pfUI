@@ -1257,39 +1257,6 @@ function libdebuff:UnitOwnDebuff(unit, id)
   if GetUnitGUID then
     local guid = GetUnitGUID(unit)
     if guid and ownDebuffs[guid] then
-      -- Build a set of spellIds actually present on the unit (aura slots 33-48)
-      -- to filter out debuffs tracked by AURA_CAST that were immune/resisted.
-      local actualAuras = nil
-      if GetUnitField then
-        local auras = GetUnitField(guid, "aura")
-        if auras then
-          actualAuras = {}
-          for auraSlot = 33, 48 do
-            local sid = auras[auraSlot]
-            if sid and sid ~= 0 then
-              -- Map spellId -> spellName so we can match ownDebuffs entries
-              local sname = GetSpellRecField and GetSpellRecField(sid, "name")
-              if sname then
-                actualAuras[sname] = true
-              end
-            end
-          end
-          -- Also check buff slots 1-32 for spillover debuffs
-          local auraFlags = GetUnitField(guid, "auraFlags")
-          if auraFlags then
-            for auraSlot = 1, 32 do
-              local sid = auras[auraSlot]
-              if sid and sid ~= 0 and IsDebuffByFlag(auraFlags, auraSlot) then
-                local sname = GetSpellRecField and GetSpellRecField(sid, "name")
-                if sname then
-                  actualAuras[sname] = true
-                end
-              end
-            end
-          end
-        end
-      end
-
       -- Build sorted list of our active debuffs
       local sortedDebuffs = {}
       local now = GetTime()
@@ -1297,19 +1264,12 @@ function libdebuff:UnitOwnDebuff(unit, id)
       for spellName, data in pairs(ownDebuffs[guid]) do
         local timeleft = (data.startTime + data.duration) - now
         if timeleft > -1 then  -- Grace period
-          -- If we have actual aura data, skip debuffs not present on the unit
-          -- (immune/resisted spells tracked by AURA_CAST but never applied)
-          if actualAuras and not actualAuras[spellName] then
-            -- Debuff not on unit; clean it from ownDebuffs
-            ownDebuffs[guid][spellName] = nil
-          else
-            local count = table.getn(sortedDebuffs) + 1
-            sortedDebuffs[count] = {
-              spellName = spellName,
-              data = data,
-              timeleft = timeleft
-            }
-          end
+          local count = table.getn(sortedDebuffs) + 1
+          sortedDebuffs[count] = {
+            spellName = spellName,
+            data = data,
+            timeleft = timeleft
+          }
         end
       end
       
