@@ -164,6 +164,16 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
+  -- Nampower-based range check for Inspect dropdown button
+  if TargetFrameDropDown then
+    local origInit = TargetFrameDropDown.initialize
+    TargetFrameDropDown.initialize = function()
+      local inRange = IsSpellInRange(14325, "target") == 1
+      UnitPopupButtons["INSPECT"].dist = inRange and 0 or 1
+      if origInit then origInit() end
+    end
+  end
+
   HookAddonOrVariable("Blizzard_InspectUI", function()
     InspectFrame_Show = function(unit)
       HideUIPanel(InspectFrame)
@@ -172,9 +182,6 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
       ShowUIPanel(InspectFrame)
     end
 
-    if UnitPopupButtons and UnitPopupButtons["INSPECT"] then
-      UnitPopupButtons["INSPECT"].dist = 0
-    end
     CreateBackdrop(InspectFrame, nil, nil, .75)
     CreateBackdropShadow(InspectFrame)
 
@@ -215,6 +222,7 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         local funce = frame:GetScript("OnEnter")
         frame:SetScript("OnEnter", function()
           local unit = InspectFrame.unit
+          if not unit or IsSpellInRange(14325, unit) ~= 1 then return end
           local guid = unit and GetUnitGUID and GetUnitGUID(unit)
           local slotId = this:GetID()
           local npItem = guid and GetEquippedItem and GetEquippedItem(guid, slotId)
@@ -241,6 +249,8 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         if not unit then return end
         local guid = GetUnitGUID and GetUnitGUID(unit)
         if not guid then return end
+        -- out of range check: 41yd via Arcane Shot range (works for all classes via Nampower)
+        if IsSpellInRange(14325, unit) ~= 1 then return end
 
         npCacheGuid = guid
         npCache = {}
@@ -263,10 +273,6 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         end
       end
 
-
-      local npDelay = CreateFrame("Frame")
-      npDelay:Hide()
-      npDelay.elapsed = 0
 
       local function UpdateSlots()
         if not InspectFrame.unit then return end
@@ -336,28 +342,60 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         end
       end
 
-      npDelay:SetScript("OnUpdate", function()
-        npDelay.elapsed = npDelay.elapsed + arg1
-        if npDelay.elapsed >= 0.02 then
-          npDelay:Hide()
-          npDelay.elapsed = 0
-          PrefetchTarget(InspectFrame.unit)
-          UpdateSlots()
+      -- OnUpdate frame: 20ms prefetch delay + 0.5s range check
+      local npTick = CreateFrame("Frame")
+      npTick.delay = 0
+      npTick.range = 0
+      npTick.pending = false
+      npTick:Hide()
+      npTick:SetScript("OnUpdate", function()
+        local dt = arg1
+        -- range check throttled to 0.5s
+        npTick.range = npTick.range + dt
+        if npTick.range >= 0.5 then
+          npTick.range = 0
+          local unit = InspectFrame.unit
+          if not unit or IsSpellInRange(14325, unit) ~= 1 then
+            HideUIPanel(InspectFrame)
+            npTick:Hide()
+            return
+          end
+        end
+        -- 20ms prefetch delay on item swap
+        if npTick.pending then
+          npTick.delay = npTick.delay + dt
+          if npTick.delay >= 0.02 then
+            npTick.pending = false
+            npTick.delay = 0
+            PrefetchTarget(InspectFrame.unit)
+            UpdateSlots()
+          end
         end
       end)
+
+      local function TriggerDelay()
+        if not npTick.pending then
+          npTick.pending = true
+          npTick.delay = 0
+        end
+      end
 
       -- item swap during inspect: re-prefetch and re-apply
       hooksecurefunc("InspectPaperDollItemSlotButton_Update", function(button)
-        if not npDelay:IsShown() then
-          npDelay.elapsed = 0
-          npDelay:Show()
-        end
+        TriggerDelay()
       end)
 
-      -- on open: prefetch and apply immediately
+      -- on open: prefetch and apply immediately, start tick
       hooksecurefunc("InspectPaperDollFrame_OnShow", function()
+        npTick.range = 0
+        npTick:Show()
         PrefetchTarget(InspectFrame.unit)
         UpdateSlots()
+      end)
+
+      -- stop tick when frame closes
+      hooksecurefunc("InspectFrame_OnHide", function()
+        npTick:Hide()
       end)
     end
 
