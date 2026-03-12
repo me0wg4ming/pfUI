@@ -644,6 +644,7 @@ pfUI_translation["zhCN"] = {
   ["Rested Color"] = "精力充沛颜色",
   ["Resting"] = "休息中",
   ["Reveal Unexplored Areas"] = "展示未勘探的地区",
+  ["Switch to current zone"] = nil,
   ["Right"] = "右边",
   ["Right Actionbar"] = "右侧动作条",
   ["Right Anchor"] = "右锚点",

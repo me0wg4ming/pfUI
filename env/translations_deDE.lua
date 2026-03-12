@@ -644,6 +644,7 @@ pfUI_translation["deDE"] = {
   ["Rested Color"] = nil,
   ["Resting"] = nil,
   ["Reveal Unexplored Areas"] = nil,
+  ["Switch to current zone"] = "Zur aktuellen Zone wechseln",
   ["Right"] = nil,
   ["Right Actionbar"] = nil,
   ["Right Anchor"] = nil,

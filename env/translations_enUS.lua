@@ -644,6 +644,7 @@ pfUI_translation["enUS"] = {
   ["Rested Color"] = nil,
   ["Resting"] = nil,
   ["Reveal Unexplored Areas"] = nil,
+  ["Switch to current zone"] = nil,
   ["Right"] = nil,
   ["Right Actionbar"] = nil,
   ["Right Anchor"] = nil,

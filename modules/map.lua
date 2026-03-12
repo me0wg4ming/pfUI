@@ -14,6 +14,13 @@ pfUI:RegisterModule("map", "vanilla:tbc", function ()
     end
   end
 
+  -- hook SetMapToCurrentZone to allow suppression
+  local pfOrigSetMapToCurrentZone = _G.SetMapToCurrentZone
+  _G.SetMapToCurrentZone = function()
+    if C.appearance.worldmap.autozoneswitch == "0" then return end
+    pfOrigSetMapToCurrentZone()
+  end
+
   -- register config update handler
   pfUI.map = { UpdateConfig = UpdateTooltipScale }
 
@@ -111,6 +118,35 @@ pfUI:RegisterModule("map", "vanilla:tbc", function ()
 
     SkinButton(WorldMapZoomOutButton)
     SkinCloseButton(WorldMapFrameCloseButton, WorldMapFrame, -3, -3)
+
+    -- "Switch to current zone" toggle (left side of titlebar)
+    if not pfUI.map.autozoneswitch then
+      local btn = CreateFrame("CheckButton", "pfUI_map_autozoneswitch", WorldMapFrame, "UICheckButtonTemplate")
+      btn:SetNormalTexture("")
+      btn:SetPushedTexture("")
+      btn:SetHighlightTexture("")
+      btn.text = _G["pfUI_map_autozoneswitchText"]
+      CreateBackdrop(btn, nil, true)
+      btn:SetWidth(14)
+      btn:SetHeight(14)
+      btn:SetPoint("RIGHT", WorldMapContinentDropDown, "LEFT", -8, 2)
+      btn.text:ClearAllPoints()
+      btn.text:SetPoint("RIGHT", btn, "LEFT", -4, 1)
+      btn.text:SetJustifyH("RIGHT")
+      btn.text:SetText(T["Switch to current zone"])
+      btn:SetScript("OnShow", function()
+        this:SetChecked(C.appearance.worldmap.autozoneswitch == "1")
+      end)
+      btn:SetScript("OnClick", function()
+        if this:GetChecked() then
+          C.appearance.worldmap.autozoneswitch = "1"
+          pfOrigSetMapToCurrentZone()
+        else
+          C.appearance.worldmap.autozoneswitch = "0"
+        end
+      end)
+      pfUI.map.autozoneswitch = btn
+    end
     SkinDropDown(WorldMapContinentDropDown)
     SkinDropDown(WorldMapZoneDropDown)
     if WorldMapZoneMinimapDropDown then
