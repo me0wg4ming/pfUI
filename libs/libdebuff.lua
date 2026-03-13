@@ -155,6 +155,18 @@ local pendingApplicators = pfUI.libdebuff_pending_applicators
 pfUI.libdebuff_recent_hits = pfUI.libdebuff_recent_hits or {}
 local recentHits = pfUI.libdebuff_recent_hits
 
+-- allAuraCasts: compatibility stub for external addons (SuperCleveRoidMacros etc.)
+-- libdebuff uses slotOwnership/slotTimers instead, but keep this table so external
+-- addons that index pfUI.libdebuff_all_auras don't crash
+pfUI.libdebuff_all_auras = pfUI.libdebuff_all_auras or {}
+local allAuraCasts = pfUI.libdebuff_all_auras
+
+-- maxRankSeen: [targetGUID][spellName] = rankNum
+-- Tracks highest rank we've ever applied per target - survives slot clear/re-apply cycles
+-- Used by downrank protection so Rank 9 can't overwrite Rank 10 even after re-cast
+pfUI.libdebuff_max_rank_seen = pfUI.libdebuff_max_rank_seen or {}
+local maxRankSeen = pfUI.libdebuff_max_rank_seen
+
 -- Cached melee-refreshable spells from libspelldata (populated on first use)
 local meleeRefreshSpells = nil
 
@@ -414,6 +426,18 @@ end
 pfUI.libdebuff_slotmapcache = pfUI.libdebuff_slotmapcache or {}
 local slotMapCache = pfUI.libdebuff_slotmapcache
 
+-- auraFieldCache: stub table so cleanup code (auraFieldCache[guid] = nil) doesn't error
+-- GetUnitField returns internal buffer references that can't be safely cached across GUIDs
+local auraFieldCache = {}
+
+local function GetCachedAuraFlags(guid)
+  if not guid or not GetUnitField then return nil end
+  return GetUnitField(guid, "auraFlags")
+end
+
+-- PERF: knownUnits as upvalue (not re-created per call)
+local _knownUnits = { target=true, player=true, pet=true, focus=true, mouseover=true }
+
 -- Dispel type mapping: SpellRec.dispel index -> Blizzard DebuffTypeColor key
 local dispelTypeMap = {
   [1] = "Magic",
@@ -435,36 +459,30 @@ local function GetDebuffSlotMap(guidOrUnit)
   end
   
   -- Determine if we got a GUID or a unitToken
+  -- PERF: string.sub instead of string.find pattern matching
   local guid = guidOrUnit
-  local unitToken = nil
-  
-  local knownUnits = { target=true, player=true, pet=true, focus=true, mouseover=true }
-  if knownUnits[guidOrUnit] or (type(guidOrUnit) == "string" and not string.find(guidOrUnit, "^0x")) then
-    unitToken = guidOrUnit
-    if UnitExists and UnitExists(unitToken) then
-      local _, unitGuid = UnitExists(unitToken)
+  if _knownUnits[guidOrUnit] or (type(guidOrUnit) == "string" and string.sub(guidOrUnit, 1, 2) ~= "0x") then
+    if UnitExists and UnitExists(guidOrUnit) then
+      local _, unitGuid = UnitExists(guidOrUnit)
       guid = unitGuid
     else
       return nil
     end
-  else
-    -- It's a GUID - Nampower's GetUnitField() accepts GUID strings directly
-    unitToken = guid
   end
-  
+
   -- Check cache first (use GUID as key)
   local now = GetTime()
   local cached = slotMapCache[guid]
   if cached and cached.map and (now - cached.timestamp) < 0.05 then
     return cached.map
   end
-  
-  local auras = GetUnitField(unitToken, "aura")
-  if not auras then 
-    return nil 
+
+  local auras = GetUnitField(guid, "aura")
+  if not auras then
+    return nil
   end
   
-  local auraApps = GetUnitField(unitToken, "auraApplications")
+  local auraApps = GetUnitField(guid, "auraApplications")
   
   if debugStats.enabled then
     debugStats.getunitfield_calls = debugStats.getunitfield_calls + 1
@@ -632,6 +650,14 @@ local function CleanupUnit(guid)
 
   if recentCasts[guid] then
     recentCasts[guid] = nil
+  end
+
+  if auraFieldCache[guid] then
+    auraFieldCache[guid] = nil
+  end
+
+  if maxRankSeen[guid] then
+    maxRankSeen[guid] = nil
   end
 
   if debugStats.enabled and cleaned and IsCurrentTarget(guid) then
@@ -921,34 +947,22 @@ function libdebuff:IterDebuffs(unit, fn)
   local debuffSlotCount = 0
   local buffSlotCount = 0
 
-  -- Count occupied slots for spillover detection
-  for auraSlot = 33, 48 do
-    if auras[auraSlot] and auras[auraSlot] ~= 0 then
-      debuffSlotCount = debuffSlotCount + 1
-    end
-  end
+  -- Pre-count buff slots to know if spillover scan needed.
+  -- Spillover debuffs stay in buff slots even after debuffSlotCount drops below 16
+  -- (Nampower does not move them back), so we must scan buff slots whenever any are occupied.
   for auraSlot = 1, 32 do
     if auras[auraSlot] and auras[auraSlot] ~= 0 then
       buffSlotCount = buffSlotCount + 1
     end
   end
 
-  -- Fetch auraFlags if any buff slots occupied (spillover debuffs stay in buff slots until expiry)
-  -- Must check even when debuffSlotCount < 16 since spillover debuffs don't move back
-  local auraFlags = nil
-  if buffSlotCount > 0 or debuffSlotCount >= 16 then
-    auraFlags = GetUnitField(guid, "auraFlags")
-  end
   -- ============================================================
   -- PASS 1: Normal debuff slots (33-48)
   -- ============================================================
   for auraSlot = 33, 48 do
     local spellId = auras[auraSlot]
     if spellId and spellId ~= 0 then
-      -- If buff-spillover possible, check auraFlags: skip if NOT a debuff (bit 3 = 0)
-      if auraFlags and not IsDebuffByFlag(auraFlags, auraSlot) then
-        -- Buff spillover into debuff slot — skip for debuff display
-      else
+      debuffSlotCount = debuffSlotCount + 1
       local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
       if not isHidden then
         local texture = libdebuff:GetSpellIcon(spellId)
@@ -1000,16 +1014,17 @@ function libdebuff:IterDebuffs(unit, fn)
           fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
         end
       end
-      end -- else (not buff-spillover)
     end
   end
 
   -- ============================================================
   -- PASS 2: Spillover debuffs in buff slots (1-32)
-  -- Scan whenever auraFlags available - spillover debuffs stay in buff slots
+  -- Scan whenever buff slots are occupied - spillover debuffs stay in buff slots
   -- even after debuffSlotCount drops below 16 (Nampower does not move them back)
   -- ============================================================
-  if auraFlags then
+  if buffSlotCount > 0 or debuffSlotCount >= 16 then
+    local auraFlags = GetCachedAuraFlags(guid)
+    if auraFlags then
       for auraSlot = 1, 32 do
         local spellId = auras[auraSlot]
         if spellId and spellId ~= 0 then
@@ -1075,7 +1090,8 @@ function libdebuff:IterDebuffs(unit, fn)
           end
         end
       end
-  end
+    end -- if auraFlags
+  end -- if debuffSlotCount >= 16
 
   return count
 end
@@ -1100,34 +1116,18 @@ function libdebuff:IterBuffs(unit, fn)
   local isPlayer = (unit == "player")
   local hasPlayerAuraDuration = isPlayer and GetPlayerAuraDuration
 
-  -- Count occupied slots to detect spillover
-  local debuffSlotCount = 0
-  local buffSlotCount = 0
-  for auraSlot = 33, 48 do
-    if auras[auraSlot] and auras[auraSlot] ~= 0 then
-      debuffSlotCount = debuffSlotCount + 1
-    end
-  end
-  for auraSlot = 1, 32 do
-    if auras[auraSlot] and auras[auraSlot] ~= 0 then
-      buffSlotCount = buffSlotCount + 1
-    end
-  end
-
-  -- Fetch auraFlags whenever buff slots are occupied - spillover debuffs stay in buff slots
-  -- even after debuffSlotCount drops below 16 (Nampower does not move them back)
-  local auraFlags = nil
-  if buffSlotCount > 0 or debuffSlotCount >= 16 then
-    auraFlags = GetUnitField(guid, "auraFlags")
-  end
+  -- auraFlags needed to filter spillover debuffs from buff display
+  local auraFlags = GetCachedAuraFlags(guid)
 
   local count = 0
+  local buffSlotCount = 0
 
   -- PASS 1: Normal buff slots (1-32)
   for auraSlot = 1, 32 do
     local spellId = auras[auraSlot]
     if spellId and spellId ~= 0 then
-      -- Skip if this slot is a spillover debuff (check flag even when debuffSlotCount < 16)
+      buffSlotCount = buffSlotCount + 1
+      -- Skip if this slot is a spillover debuff
       if auraFlags and IsDebuffByFlag(auraFlags, auraSlot) then
         -- Spillover debuff — skip for buff display
       else
@@ -1460,11 +1460,16 @@ end
   frame:RegisterEvent("SPELL_GO_SELF")
   frame:RegisterEvent("SPELL_GO_OTHER")
   frame:RegisterEvent("SPELL_FAILED_SELF")
+  frame:RegisterEvent("SPELL_MISS_SELF")
   frame:RegisterEvent("SPELL_FAILED_OTHER")
   frame:RegisterEvent("UNIT_DIED")
   frame:RegisterEvent("SPELL_CAST_EVENT")
-  frame:RegisterEvent("AUTO_ATTACK_SELF")
-  frame:RegisterEvent("AUTO_ATTACK_OTHER")
+  -- AUTO_ATTACK events only needed for Paladin (Judgement melee-refresh)
+  -- In a 40-man raid AUTO_ATTACK_OTHER fires hundreds of times per second - skip for non-Paladins
+  if class == "PALADIN" then
+    frame:RegisterEvent("AUTO_ATTACK_SELF")
+    frame:RegisterEvent("AUTO_ATTACK_OTHER")
+  end
   frame:RegisterEvent("SPELL_DAMAGE_EVENT_SELF")
   frame:RegisterEvent("AURA_CAST_ON_SELF")
   frame:RegisterEvent("AURA_CAST_ON_OTHER")
@@ -1483,6 +1488,8 @@ end
       GetPlayerGUID()
       -- Clear overflow buffs (death, instance change, login)
       for k in pairs(overflowBuffs) do overflowBuffs[k] = nil end
+      -- Clear auraFieldCache
+      for k in pairs(auraFieldCache) do auraFieldCache[k] = nil end
       
     elseif event == "PLAYER_TALENT_UPDATE" then
       -- Talent changes handled dynamically (no cached talent checks needed)
@@ -1684,23 +1691,64 @@ end
         end
       end
 
+    elseif event == "SPELL_MISS_SELF" then
+      -- arg1=casterGuid, arg2=targetGuid, arg3=spellId, arg4=missType
+      local targetGuid = arg2
+      local spellId = arg3
+      if not spellId or not targetGuid then return end
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+      if not spellName then return end
+      -- Clear pendingSlotTimer so miss doesn't get committed on a future DEBUFF_ADDED
+      if pendingSlotTimer[targetGuid] and pendingSlotTimer[targetGuid][spellName] then
+        pendingSlotTimer[targetGuid][spellName] = nil
+      end
+      -- Only clear ownDebuffs/objectsByGuid if no active slot exists
+      -- (if debuff already on target, keep existing timers intact)
+      local slotExists = false
+      if slotOwnership[targetGuid] then
+        for _, ownership in pairs(slotOwnership[targetGuid]) do
+          if ownership.spellName == spellName and ownership.isOurs then
+            slotExists = true
+            break
+          end
+        end
+      end
+      if not slotExists and ownDebuffs[targetGuid] then
+        ownDebuffs[targetGuid][spellName] = nil
+      end
+      if not slotExists and objectsByGuid[targetGuid] then
+        objectsByGuid[targetGuid][spellId] = nil
+      end
+      if debugStats.enabled then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff4400[SPELL MISSED]|r %s on %s missType=%s slotExists=%s",
+          GetDebugTimestamp(), spellName, DebugGuid(targetGuid), tostring(arg4), tostring(slotExists)))
+      end
+
     elseif event == "SPELL_FAILED_SELF" then
       -- Clear captured CPs on failed cast
       capturedCP = nil
 
     elseif event == "AUTO_ATTACK_SELF" or event == "AUTO_ATTACK_OTHER" then
+      -- PERF: Early exit if no melee-refresh spells configured (avoids processing hundreds of events/sec in raids)
+      if not libspelldata then return end
+      if not meleeRefreshSpells then
+        meleeRefreshSpells = libspelldata:GetMeleeRefreshSpells()
+      end
+      if not meleeRefreshSpells or not next(meleeRefreshSpells) then return end
       -- Melee autohit: refresh Judgement debuffs from this attacker on the target
       local attackerGuid = arg1
       local targetGuid = arg2
       local victimState = arg5
-      
+
       if not targetGuid or not attackerGuid then return end
+      -- PERF: Skip if no tracked debuffs on this target at all
+      if not slotOwnership[targetGuid] then return end
       -- Only refresh on actual hits (not dodge/parry/miss)
       if victimState and (victimState == 0 or victimState == 2 or victimState == 3 or victimState == 6 or victimState == 7) then
         return  -- UNAFFECTED(miss), DODGE, PARRY, EVADE, IMMUNE
       end
-      
-      if libspelldata and slotOwnership[targetGuid] then
+
+      if slotOwnership[targetGuid] then
         if not meleeRefreshSpells then
           meleeRefreshSpells = libspelldata:GetMeleeRefreshSpells()
         end
@@ -2087,23 +2135,68 @@ end
       end
       
       -- Downrank Protection for own spells: check slotOwnership for existing higher-rank slot
-      if isOurs and rankNum > 0 and slotOwnership[targetGuid] then
-        for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
-          if ownership.spellName == spellName and ownership.isOurs then
-            local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
-            if st and st.rank and st.rank > rankNum then
-              local existingTimeleft = (st.startTime + st.duration) - GetTime()
-              if existingTimeleft > 0 then
-                if debugStats.enabled and IsCurrentTarget(targetGuid) then
-                  DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
-                    spellName, rankNum, st.rank, existingTimeleft))
+      if isOurs and rankNum > 0 then
+        -- First check: active slot with higher rank still ticking
+        if slotOwnership[targetGuid] then
+          for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+            if ownership.spellName == spellName and ownership.isOurs then
+              local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
+              if st and st.rank and st.rank > rankNum then
+                local existingTimeleft = (st.startTime + st.duration) - GetTime()
+                -- Only block if genuinely still ticking (>0.5s guards against float near-zero)
+                -- If timer is near expiry, let the cast through so DEBUFF_ADDED can update tracking
+                if existingTimeleft > 0.5 then
+                  if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
+                      spellName, rankNum, st.rank, existingTimeleft))
+                  end
+                  return
                 end
-                return
               end
+              break
             end
-            break
           end
         end
+        -- Second check: maxRankSeen - protects the brief window between slot cleared and new DEBUFF_ADDED
+        -- where slotOwnership is nil but a higher-rank debuff was just re-applied
+        if maxRankSeen[targetGuid] and maxRankSeen[targetGuid][spellName] then
+          -- Check if maxRankSeen has expired (2s after removal, no re-apply happened)
+          local clearedAt = maxRankSeen[targetGuid][spellName .. "_cleared"]
+          if clearedAt and (GetTime() - clearedAt) > 2.0 then
+            maxRankSeen[targetGuid][spellName] = nil
+            maxRankSeen[targetGuid][spellName .. "_cleared"] = nil
+          end
+        end
+        if maxRankSeen[targetGuid] and maxRankSeen[targetGuid][spellName] then
+          local seenRank = maxRankSeen[targetGuid][spellName]
+          if seenRank > rankNum then
+            local freshSlot = false
+            if slotOwnership[targetGuid] then
+              for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
+                if ownership.spellName == spellName and ownership.isOurs then
+                  local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
+                  -- Only block if the slot ACTUALLY contains the higher rank and is fresh
+                  -- If slot has a lower rank (e.g. Rank 9 just landed), don't block
+                  if st and st.rank and st.rank >= seenRank and (GetTime() - st.startTime) < 2.0 then
+                    freshSlot = true
+                    if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (fresh re-apply)",
+                        spellName, rankNum, seenRank))
+                    end
+                  end
+                  break
+                end
+              end
+            end
+            if freshSlot then return end
+          end
+        end
+      end
+
+      -- Early debug: log ALL AURA_CAST events before any gates
+      if debugStats.enabled and IsCurrentTarget(targetGuid) then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff888888[AURA_CAST RAW]|r %s rank=%d isOurs=%s dur=%.1fs caster=%s",
+          GetDebugTimestamp(), spellName, rankNum, tostring(isOurs), duration, DebugGuid(casterGuid)))
       end
 
       -- Store timer in pendingSlotTimer[targetGuid][spellName]
@@ -2118,42 +2211,98 @@ end
           time      = startTime  -- for stale-entry detection
         }
 
-        -- On refresh DEBUFF_ADDED doesn't fire - update slotTimers directly for any known slot
+        -- On refresh DEBUFF_ADDED doesn't fire - update slotTimers directly.
+        -- KEY: Match by BOTH spellName AND casterGuid so each caster only updates their own slot.
+        -- Fallback: if casterGuid is nil (SPELL_GO not correlated), match by spellName only
+        -- when there is exactly one slot for this spell (safe for single-caster debuffs).
         if slotOwnership[targetGuid] then
+          local matchSlot, matchCount = nil, 0
           for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
             if ownership.spellName == spellName then
-              -- Downrank protection: don't overwrite higher rank timer
-              local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
-              if st and st.rank and st.rank > 0 and rankNum > 0 and rankNum < st.rank then
-                local existingTimeleft = (st.startTime + st.duration) - GetTime()
-                if existingTimeleft > 0 then
-                  if debugStats.enabled and IsCurrentTarget(targetGuid) then
-                    DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
-                      spellName, rankNum, st.rank, existingTimeleft))
-                  end
-                  break
-                end
+              -- Match if: casterGuid unknown, OR ownership casterGuid unknown, OR exact match
+              if casterGuid == nil or ownership.casterGuid == nil or ownership.casterGuid == casterGuid then
+                matchSlot = auraSlot
               end
-              ownership.isOurs = isOurs
-              slotTimers[targetGuid] = slotTimers[targetGuid] or {}
-              slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration, rank = rankNum }
-              -- Also sync ownDebuffs for our refreshes
-              if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
-                ownDebuffs[targetGuid][spellName].startTime = startTime
-                ownDebuffs[targetGuid][spellName].duration = duration
-              end
-              if debugStats.enabled and IsCurrentTarget(targetGuid) then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[SLOT REFRESHED]|r aura=%d %s isOurs=%s dur=%.1f",
-                  auraSlot, spellName, tostring(isOurs), duration))
-              end
-              break
+              matchCount = matchCount + 1
             end
           end
+          -- Use match if found (exact or unknown-caster fallback)
+          if matchSlot then
+            local ownership = slotOwnership[targetGuid][matchSlot]
+            local auraSlot = matchSlot
+            -- Downrank protection: skip refresh only if a HIGHER rank is still genuinely ticking
+            local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
+            if st and st.rank and st.rank > 0 and rankNum > 0 and rankNum < st.rank then
+              local existingTimeleft = (st.startTime + st.duration) - GetTime()
+              if existingTimeleft > 0.5 then
+                if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                  DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
+                    spellName, rankNum, st.rank, existingTimeleft))
+                end
+                return -- skip refresh for this slot
+              else
+                -- Timer effectively expired (<=0.5s): proactively clear objectsByGuid now
+                -- so Conditionals doesn't wait for DEBUFF_REMOVED (can lag 100-500ms behind)
+                if spellId and objectsByGuid[targetGuid] and objectsByGuid[targetGuid][spellId] then
+                  objectsByGuid[targetGuid][spellId] = nil
+                  if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff4400[->ADDON]|r objectsByGuid[%s][%d] PRE-CLEARED (timer %.3fs, DEBUFF_REMOVED pending)",
+                      DebugGuid(targetGuid), spellId, existingTimeleft))
+                  end
+                end
+                -- Also clear by name in case spellId differs across ranks (Moonfire R9 vs R10)
+                if ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
+                  local ownRec = ownDebuffs[targetGuid][spellName]
+                  local ownSpellId = ownRec.spellId
+                  if ownSpellId and ownSpellId ~= spellId and objectsByGuid[targetGuid] and objectsByGuid[targetGuid][ownSpellId] then
+                    objectsByGuid[targetGuid][ownSpellId] = nil
+                    if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff4400[->ADDON]|r objectsByGuid[%s][%d] PRE-CLEARED by name match (%s)",
+                        DebugGuid(targetGuid), ownSpellId, spellName))
+                    end
+                  end
+                end
+              end
+            end
+            -- Refresh the slot timer (same rank, higher rank after expiry, or no existing timer)
+            ownership.isOurs = isOurs
+            slotTimers[targetGuid] = slotTimers[targetGuid] or {}
+            -- Preserve highest rank ever written to this slot
+            local existingRank = slotTimers[targetGuid][auraSlot] and slotTimers[targetGuid][auraSlot].rank or 0
+            local writeRank = (rankNum > existingRank) and rankNum or existingRank
+            slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration, rank = writeRank }
+            -- Sync ownDebuffs for our refreshes (only if entry already exists = confirmed hit)
+            if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
+              ownDebuffs[targetGuid][spellName].startTime = startTime
+              ownDebuffs[targetGuid][spellName].duration = duration
+            end
+            -- Sync objectsByGuid for CleveRoids API (slot exists = confirmed hit, not a miss)
+            if isOurs and spellId then
+              objectsByGuid[targetGuid] = objectsByGuid[targetGuid] or {}
+              objectsByGuid[targetGuid][spellId] = {
+                start    = startTime,
+                duration = duration,
+                caster   = "player",
+                stacks   = objectsByGuid[targetGuid][spellId] and objectsByGuid[targetGuid][spellId].stacks or 1
+              }
+              if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[->ADDON]|r objectsByGuid[%s][%d] REFRESHED start=%.2f dur=%.1f",
+                  DebugGuid(targetGuid), spellId, startTime, duration))
+              end
+            elseif debugStats.enabled and IsCurrentTarget(targetGuid) then
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff4400[->ADDON SKIP]|r REFRESH not written: isOurs=%s spellId=%s",
+                tostring(isOurs), tostring(spellId)))
+            end
+            if debugStats.enabled and IsCurrentTarget(targetGuid) then
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff00ff00[SLOT REFRESHED]|r aura=%d %s rank=%d caster=%s isOurs=%s dur=%.1f",
+                auraSlot, spellName, writeRank, DebugGuid(casterGuid), tostring(isOurs), duration))
+            end
+          end -- matchSlot
         end
 
         if debugStats.enabled and IsCurrentTarget(targetGuid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[AURA_CAST]|r %s target=%s isOurs=%s dur=%.1fs",
-            GetDebugTimestamp(), spellName, DebugGuid(targetGuid), tostring(isOurs), duration))
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[AURA_CAST]|r %s rank=%d target=%s isOurs=%s dur=%.1fs",
+            GetDebugTimestamp(), spellName, rankNum, DebugGuid(targetGuid), tostring(isOurs), duration))
         end
       end
       
@@ -2200,20 +2349,17 @@ end
       if not isOurs then return end
       if targetGuid == myGuid then return end  -- Skip self-buffs
       if not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000" then return end
-      
+
       -- Get texture
       local texture = libdebuff:GetSpellIcon(spellId)
-      
-      -- Store in ownDebuffs
-      ownDebuffs[targetGuid] = ownDebuffs[targetGuid] or {}
-      
-      if not ownDebuffs[targetGuid][spellName] then
-        ownDebuffs[targetGuid][spellName] = {}
-      end
-      
+
+      -- AURA_CAST fires on both hit AND miss - only update ownDebuffs if entry already exists
+      -- (meaning DEBUFF_ADDED previously confirmed a hit). Never create a new entry here.
+      if not ownDebuffs[targetGuid] or not ownDebuffs[targetGuid][spellName] then return end
+
       local data = ownDebuffs[targetGuid][spellName]
       if not data then return end  -- race condition: cleared by DEBUFF_REMOVED between init and use
-      
+
       -- Downrank Protection: Check if existing debuff is still active and has higher rank
       if data.startTime and data.duration and data.rank and rankNum > 0 then
         local existingTimeleft = (data.startTime + data.duration) - GetTime()
@@ -2222,21 +2368,21 @@ end
           if rankNum < data.rank then
             -- Lower rank cannot overwrite higher rank - block the update
             if debugStats.enabled then
-              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)", 
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
                 spellName, rankNum, data.rank, existingTimeleft))
             end
             return
           end
         end
       end
-      
+
       data.startTime = startTime
       data.duration = duration
       data.texture = texture
       data.rank = rankNum
       data.spellId = spellId
       data.stacks = data.stacks or 1
-      
+
       -- Handle variant pairs for ownDebuffs
       local ownOverwritePair = libspelldata and libspelldata:GetOverwritePair(spellName)
       if ownOverwritePair then
@@ -2244,15 +2390,8 @@ end
           ownDebuffs[targetGuid][ownOverwritePair] = nil
         end
       end
-      
-      -- Store for Cleveroids API
-      objectsByGuid[targetGuid] = objectsByGuid[targetGuid] or {}
-      objectsByGuid[targetGuid][spellId] = {
-        start = startTime,
-        duration = duration,
-        caster = "player",
-        stacks = 1
-      }
+      -- NOTE: objectsByGuid is written only in DEBUFF_ADDED (confirmed hit) and
+      -- the refresh path above (slot exists = confirmed). Never here (AURA_CAST fires on miss too).
       if event == "AURA_CAST_ON_SELF" and pfUI.libdebuff_aura_cast_on_self_hooks then
         for _, fn in pairs(pfUI.libdebuff_aura_cast_on_self_hooks) do
           fn(spellId, casterGuid, targetGuid)
@@ -2411,8 +2550,8 @@ end
       displayToAura[guid][displaySlot] = auraSlot
       
       if debugStats.enabled and IsCurrentTarget(guid) then
-        DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ff00[DEBUFF_ADDED]|r display=%d aura=%d %s caster=%s isOurs=%s", 
-          GetDebugTimestamp(), displaySlot, auraSlot, spellName, DebugGuid(casterGuid), tostring(isOurs)))
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ff00[DEBUFF_ADDED]|r display=%d aura=%d %s rank=%d caster=%s isOurs=%s",
+          GetDebugTimestamp(), displaySlot, auraSlot, spellName, (pendingSlotTimer[guid] and pendingSlotTimer[guid][spellName] and pendingSlotTimer[guid][spellName].rank or 0), DebugGuid(casterGuid), tostring(isOurs)))
       end
       
       -- Resolve pendingSlotTimer → slotTimers for this auraSlot
@@ -2421,12 +2560,32 @@ end
       slotTimers[guid] = slotTimers[guid] or {}
       local pending = pendingSlotTimer[guid] and pendingSlotTimer[guid][spellName]
       if pending and (now - pending.time) < 2.0 then
-        -- Fresh pending timer from AURA_CAST - commit to slot
-        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = pending.rank or 0 }
+        -- Fresh pending timer from AURA_CAST - commit to slot, preserving highest rank
+        local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
+        local writeRank = ((pending.rank or 0) > existingRank) and (pending.rank or 0) or existingRank
+        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = writeRank }
         pendingSlotTimer[guid][spellName] = nil
         if debugStats.enabled and IsCurrentTarget(guid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER]|r aura=%d %s start=%.2f dur=%.1f",
-            auraSlot, spellName, pending.startTime, pending.duration))
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER]|r aura=%d %s rank=%d start=%.2f dur=%.1f",
+            auraSlot, spellName, writeRank, pending.startTime, pending.duration))
+        end
+      elseif isOurs then
+        -- No pendingSlotTimer (e.g. AURA_CAST was downrank-blocked but spell still landed)
+        -- Build timer from libspelldata or spell duration DB so Conditionals tracks ownership
+        local fallbackDur = 0
+        if libspelldata then
+          fallbackDur = libspelldata:GetDuration(spellName) or 0
+        end
+        if fallbackDur == 0 then
+          fallbackDur = libdebuff:GetDuration(spellName, nil) or 0
+        end
+        if fallbackDur > 0 then
+          local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
+          slotTimers[guid][auraSlot] = { startTime = now, duration = fallbackDur, rank = existingRank }
+          if debugStats.enabled and IsCurrentTarget(guid) then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER FALLBACK]|r aura=%d %s dur=%.1f (no pending, own spell)",
+              auraSlot, spellName, fallbackDur))
+          end
         end
       elseif libspelldata and libspelldata:HasForcedDuration(spellName) then
         -- No AURA_CAST for this spell (passive proc) - create timer from libspelldata
@@ -2455,15 +2614,28 @@ end
             startTime = st.startTime,
             duration  = st.duration,
             texture   = texture,
-            rank      = 0,
+            rank      = st.rank or 0,
             spellId   = spellId,
             stacks    = stacks or 1
           }
+          -- Store for CleveRoids API - only on confirmed hit (DEBUFF_ADDED = server confirmed)
+          -- Never write on AURA_CAST (fires on miss too)
+          objectsByGuid[guid] = objectsByGuid[guid] or {}
+          objectsByGuid[guid][spellId] = {
+            start    = st.startTime,
+            duration = st.duration,
+            caster   = "player",
+            stacks   = stacks or 1
+          }
           if debugStats.enabled and IsCurrentTarget(guid) then
-            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[OWNDEBUFF SYNC]|r %s from DEBUFF_ADDED", spellName))
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[OWNDEBUFF SYNC]|r %s rank=%d from DEBUFF_ADDED", spellName, st.rank or 0))
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[->ADDON]|r objectsByGuid[%s][%d] SET start=%.2f dur=%.1f caster=player",
+              DebugGuid(guid), spellId, st.startTime, st.duration))
           end
         end
       end
+
+      auraFieldCache[guid] = nil
       
       -- Cleanup expired timers
       CleanupExpiredTimers(guid)
@@ -2576,24 +2748,46 @@ end
         end
       end
       
-      -- Remove from ownDebuffs if it was ours (but NOT if still present = stack change)
-      if not isStillPresent and wasOurs and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
-        local age = GetTime() - ownDebuffs[guid][spellName].startTime
-        -- Only delete if not recently renewed
-        if age > 1 then
+      if not isStillPresent and wasOurs then
+        -- Always clear ownDebuffs and objectsByGuid so Conditionals sees the debuff as gone
+        if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
           ownDebuffs[guid][spellName] = nil
         end
-      end
-      
-      -- Remove from slotTimers (but NOT if still present = stack change)
-      if not isStillPresent and foundAuraSlot and slotTimers[guid] and slotTimers[guid][foundAuraSlot] then
-        local st = slotTimers[guid][foundAuraSlot]
-        local age = GetTime() - st.startTime
-        -- Only delete if not recently refreshed
-        if age > 1 then
-          slotTimers[guid][foundAuraSlot] = nil
+        if spellId and objectsByGuid[guid] and objectsByGuid[guid][spellId] then
+          objectsByGuid[guid][spellId] = nil
+          if debugStats.enabled and IsCurrentTarget(guid) then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff4400[->ADDON]|r objectsByGuid[%s][%d] CLEARED (%s removed)",
+              DebugGuid(guid), spellId, spellName))
+          end
+        end
+
+        -- Clear slotTimers only if not recently refreshed (age > 1s protects against
+        -- DEBUFF_REMOVED firing during a refresh cycle before new DEBUFF_ADDED arrives)
+        if foundAuraSlot and slotTimers[guid] and slotTimers[guid][foundAuraSlot] then
+          local st = slotTimers[guid][foundAuraSlot]
+          local age = GetTime() - st.startTime
+          if age > 1 then
+            -- Save rank to maxRankSeen only briefly (for the re-apply window).
+            -- Also clear it now - it will be re-set if a higher rank truly re-applies.
+            -- This prevents stale high-rank entries from blocking lower ranks indefinitely.
+            if st.rank and st.rank > 0 then
+              maxRankSeen[guid] = maxRankSeen[guid] or {}
+              local current = maxRankSeen[guid][spellName] or 0
+              if st.rank > current then
+                maxRankSeen[guid][spellName] = st.rank
+              end
+            end
+            slotTimers[guid][foundAuraSlot] = nil
+            -- Schedule maxRankSeen clear after 2s (re-apply window expires)
+            -- We do this by storing the removal time; checked in AURA_CAST
+            if maxRankSeen[guid] and maxRankSeen[guid][spellName] then
+              maxRankSeen[guid][spellName .. "_cleared"] = GetTime()
+            end
+          end
         end
       end
+
+      auraFieldCache[guid] = nil
       
       -- Cleanup expired timers
       CleanupExpiredTimers(guid)
@@ -2620,6 +2814,7 @@ end
       if targetGuid and targetGuid ~= "" then
         -- Invalidate slot map cache on retarget
         slotMapCache[targetGuid] = nil
+        auraFieldCache[targetGuid] = nil
         -- Cleanup expired timers for new target
         CleanupExpiredTimers(targetGuid)
       end
