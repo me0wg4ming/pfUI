@@ -857,5 +857,46 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     end
   end)
 
+  -- -------------------------------------------------------------------------
+  -- Public API for external addons (e.g. SCRM)
+  -- Only available when the swingtimer module is loaded.
+  -- Usage:
+  --   if pfUI and pfUI.swingtimer and pfUI.swingtimer.api then
+  --     local api = pfUI.swingtimer.api
+  --     local mhTimer = api.GetMHTimer()
+  --   end
+  -- -------------------------------------------------------------------------
+  pfUI.swingtimer.api = {
+    -- Remaining time in seconds until next swing
+    GetMHTimer        = function() return S.mhTimer end,
+    GetOHTimer        = function() return S.ohTimer end,
+    GetRangedTimer    = function() return S.raTimer end,
+
+    -- Weapon speed (full swing duration in seconds)
+    GetMHSpeed        = function() return S.mhSpeed end,
+    GetOHSpeed        = function() return S.ohSpeed end,
+    GetRangedSpeed    = function() return S.raSpeed end,
+
+    -- Whether each timer is currently running
+    IsMHActive        = function() return S.mhActive end,
+    IsOHActive        = function() return S.ohActive end,
+    IsRangedActive    = function() return S.raActive end,
+
+    -- Swing progress 0.0 (just reset) to 1.0 (about to swing)
+    GetMHProgress     = function()
+      return S.mhActive and S.mhTimerMax > 0 and (1 - S.mhTimer / S.mhTimerMax) or 0
+    end,
+    GetOHProgress     = function()
+      return S.ohActive and S.ohTimerMax > 0 and (1 - S.ohTimer / S.ohTimerMax) or 0
+    end,
+    GetRangedProgress = function()
+      return S.raActive and S.raTimerMax > 0 and (1 - S.raTimer / S.raTimerMax) or 0
+    end,
+
+    -- Warrior HS/Cleave queue state
+    IsHSQueued        = function() return S.hsQueued end,
+    IsCleaveQueued    = function() return S.cleaveQueued end,
+  }
+
   UpdateWeaponSpeeds()
 end)
