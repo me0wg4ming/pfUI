@@ -76,10 +76,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local sw_fontsize  = tonumber(C.unitframes.swingtimerfontsize) or 12
   local sw_hsqueue   = C.unitframes.swingtimerhsqueue ~= "0"
   local sw_showspeed = C.unitframes.swingtimerattackspeed == "1"
-  local sw_rangeindicator = C.unitframes.swingtimerrangeindicator == "1"
-  local WINGCLIP_ID   = 2974  -- ~5 yd melee
-  local ARCANESHOT_ID = 3044  -- ~8-41 yd ranged (Hunter only)
-  local _, playerClass = UnitClass("player")
 
   local function ParseColor(str, dr, dg, db, da)
     if not str or str == "" then return dr, dg, db, da end
@@ -301,94 +297,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   UpdateMovable(pfUI.swingtimer.mainhand)
   UpdateMovable(pfUI.swingtimer.ranged)
 
-  -- -------------------------------------------------------------------------
-  -- Range indicator frame
-  -- -------------------------------------------------------------------------
-  -- Hunter: Melee / Dead Zone / In Range / Out of Range
-  -- Others: Melee / Dead Zone only (no ranged zone distinction)
-  if sw_rangeindicator then
-    local ZONES_HUNTER = {
-      melee    = { "Melee",     0.13, 0.55, 0.13 },
-      range    = { "In Range",  0.10, 0.30, 0.60 },
-      deadzone = { "Dead Zone", 0.45, 0.25, 0.05 },
-      outrange = { "Out of Range", 0.55, 0.10, 0.10 },
-    }
-    local ZONES_DEFAULT = {
-      melee    = { "Melee",     0.13, 0.55, 0.13 },
-      deadzone = { "Dead Zone", 0.45, 0.25, 0.05 },
-    }
-    local ZONES = playerClass == "HUNTER" and ZONES_HUNTER or ZONES_DEFAULT
-
-    pfUI.swingtimer.rangeindicator = CreateFrame("Frame", "pfSwingTimerRangeIndicator", UIParent)
-    pfUI.swingtimer.rangeindicator:SetWidth(120)
-    pfUI.swingtimer.rangeindicator:SetHeight(20)
-    pfUI.swingtimer.rangeindicator:SetPoint("CENTER", UIParent, "CENTER", 0, -140)
-    pfUI.swingtimer.rangeindicator:Hide()
-
-    CreateBackdrop(pfUI.swingtimer.rangeindicator)
-    CreateBackdropShadow(pfUI.swingtimer.rangeindicator)
-
-    pfUI.swingtimer.rangeindicator.label = pfUI.swingtimer.rangeindicator:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    pfUI.swingtimer.rangeindicator.label:SetAllPoints()
-    pfUI.swingtimer.rangeindicator.label:SetFont(pfUI.font_default, sw_fontsize, "OUTLINE")
-    pfUI.swingtimer.rangeindicator.label:SetJustifyH("CENTER")
-    pfUI.swingtimer.rangeindicator.label:SetJustifyV("MIDDLE")
-
-    UpdateMovable(pfUI.swingtimer.rangeindicator)
-
-    local ri = pfUI.swingtimer.rangeindicator
-    local function SetRangeZone(zone)
-      if ri.zone == zone then return end
-      ri.zone = zone
-      local z = ZONES[zone]
-      if not z then return end
-      ri.label:SetText(z[1])
-      ri.backdrop:SetBackdropColor(z[2], z[3], z[4], .85)
-      ri.backdrop:SetBackdropBorderColor(z[2] * 2, z[3] * 2, z[4] * 2, 1)
-    end
-
-    local riUpdater = CreateFrame("Frame")
-    riUpdater:SetScript("OnUpdate", function()
-      local now = GetTime()
-      if (this.tick or 0) > now then return end
-      this.tick = now + 0.1
-
-      local hasTarget = UnitExists("target")
-        and UnitCanAttack("player", "target")
-        and not UnitIsDead("target")
-
-      if not hasTarget then
-        ri:Hide()
-        return
-      end
-
-      ri:Show()
-
-      local melee = IsSpellInRange(WINGCLIP_ID, "target")
-
-      if playerClass == "HUNTER" then
-        local ranged = IsSpellInRange(ARCANESHOT_ID, "target")
-        if melee == 1 then
-          SetRangeZone("melee")
-        elseif ranged == 1 then
-          SetRangeZone("range")
-        elseif CheckInteractDistance("target", 4) then
-          SetRangeZone("deadzone")
-        else
-          SetRangeZone("outrange")
-        end
-      else
-        local ranged = IsSpellInRange(ARCANESHOT_ID, "target")
-        if melee == 1 then
-          SetRangeZone("melee")
-        elseif ranged == 0 and melee == 0 then
-          SetRangeZone("deadzone")
-        else
-          ri:Hide()
-        end
-      end
-    end)
-  end
+  -- OH weapon detection
   local OH_WEAPON_TYPES = { [13]=true, [21]=true }
   local function HasOffhandWeapon()
     local l = GetInventoryItemLink("player", 17)
@@ -947,47 +856,6 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       end
     end
   end)
-
-  -- -------------------------------------------------------------------------
-  -- Public API for external addons (e.g. SCRM)
-  -- Only available when the swingtimer module is loaded.
-  -- Usage:
-  --   if pfUI and pfUI.swingtimer and pfUI.swingtimer.api then
-  --     local api = pfUI.swingtimer.api
-  --     local mhTimer = api.GetMHTimer()
-  --   end
-  -- -------------------------------------------------------------------------
-  pfUI.swingtimer.api = {
-    -- Remaining time in seconds until next swing
-    GetMHTimer        = function() return S.mhTimer end,
-    GetOHTimer        = function() return S.ohTimer end,
-    GetRangedTimer    = function() return S.raTimer end,
-
-    -- Weapon speed (full swing duration in seconds)
-    GetMHSpeed        = function() return S.mhSpeed end,
-    GetOHSpeed        = function() return S.ohSpeed end,
-    GetRangedSpeed    = function() return S.raSpeed end,
-
-    -- Whether each timer is currently running
-    IsMHActive        = function() return S.mhActive end,
-    IsOHActive        = function() return S.ohActive end,
-    IsRangedActive    = function() return S.raActive end,
-
-    -- Swing progress 0.0 (just reset) to 1.0 (about to swing)
-    GetMHProgress     = function()
-      return S.mhActive and S.mhTimerMax > 0 and (1 - S.mhTimer / S.mhTimerMax) or 0
-    end,
-    GetOHProgress     = function()
-      return S.ohActive and S.ohTimerMax > 0 and (1 - S.ohTimer / S.ohTimerMax) or 0
-    end,
-    GetRangedProgress = function()
-      return S.raActive and S.raTimerMax > 0 and (1 - S.raTimer / S.raTimerMax) or 0
-    end,
-
-    -- Warrior HS/Cleave queue state
-    IsHSQueued        = function() return S.hsQueued end,
-    IsCleaveQueued    = function() return S.cleaveQueued end,
-  }
 
   UpdateWeaponSpeeds()
 end)
