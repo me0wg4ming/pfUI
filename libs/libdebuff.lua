@@ -1059,6 +1059,23 @@ function libdebuff:IterDebuffs(unit, fn)
                   if remaining > -1 then
                     duration = st.duration
                     timeleft = remaining > 0 and remaining or 0
+                    isOurs = st.isOurs or false
+                  end
+                end
+
+                -- isOurs: check pendingSlotTimer (first-cast: scan runs before slotTimers committed)
+                if not isOurs and pendingSlotTimer[guid] and pendingSlotTimer[guid][spellName] then
+                  local pending = pendingSlotTimer[guid][spellName]
+                  if pending.isOurs and (now - pending.time) < 2.0 then
+                    isOurs = true
+                    -- Also grab timer from pending if slotTimers had nothing
+                    if not duration and pending.duration and pending.duration > 0 then
+                      local remaining = (pending.startTime + pending.duration) - now
+                      if remaining > -1 then
+                        duration = pending.duration
+                        timeleft = remaining > 0 and remaining or 0
+                      end
+                    end
                   end
                 end
 
@@ -1080,8 +1097,9 @@ function libdebuff:IterDebuffs(unit, fn)
                   spilloverLogged[guid] = spilloverLogged[guid] or {}
                   if spilloverLogged[guid][auraSlot] ~= spellId then
                     spilloverLogged[guid][auraSlot] = spellId
-                    DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff6600[SPILLOVER]|r display=%d aura=%d %s caster=%s isOurs=%s",
-                      GetDebugTimestamp(), count, auraSlot, spellName, caster or "nil", tostring(isOurs)))
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff6600[SPILLOVER]|r display=%d aura=%d %s caster=%s isOurs=%s dur=%s",
+                      GetDebugTimestamp(), count, auraSlot, spellName, caster or "nil", tostring(isOurs),
+                      duration and string.format("%.1f", duration) or "nil"))
                   end
                 end
                 fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
@@ -2270,7 +2288,7 @@ end
             -- Preserve highest rank ever written to this slot
             local existingRank = slotTimers[targetGuid][auraSlot] and slotTimers[targetGuid][auraSlot].rank or 0
             local writeRank = (rankNum > existingRank) and rankNum or existingRank
-            slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration, rank = writeRank }
+            slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration, rank = writeRank, isOurs = isOurs }
             -- Sync ownDebuffs for our refreshes (only if entry already exists = confirmed hit)
             if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
               ownDebuffs[targetGuid][spellName].startTime = startTime
@@ -2563,7 +2581,7 @@ end
         -- Fresh pending timer from AURA_CAST - commit to slot, preserving highest rank
         local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
         local writeRank = ((pending.rank or 0) > existingRank) and (pending.rank or 0) or existingRank
-        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = writeRank }
+        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = writeRank, isOurs = pending.isOurs or false }
         pendingSlotTimer[guid][spellName] = nil
         if debugStats.enabled and IsCurrentTarget(guid) then
           DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER]|r aura=%d %s rank=%d start=%.2f dur=%.1f",
@@ -2581,7 +2599,7 @@ end
         end
         if fallbackDur > 0 then
           local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
-          slotTimers[guid][auraSlot] = { startTime = now, duration = fallbackDur, rank = existingRank }
+          slotTimers[guid][auraSlot] = { startTime = now, duration = fallbackDur, rank = existingRank, isOurs = true }
           if debugStats.enabled and IsCurrentTarget(guid) then
             DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER FALLBACK]|r aura=%d %s dur=%.1f (no pending, own spell)",
               auraSlot, spellName, fallbackDur))
@@ -2594,7 +2612,7 @@ end
         if not hasExistingTimer then
           local forcedDur = libspelldata:GetDuration(spellName)
           if forcedDur and forcedDur > 0 then
-            slotTimers[guid][auraSlot] = { startTime = now, duration = forcedDur, rank = 0 }
+            slotTimers[guid][auraSlot] = { startTime = now, duration = forcedDur, rank = 0, isOurs = isOurs }
             if debugStats.enabled and IsCurrentTarget(guid) then
               DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[FORCED TIMER]|r aura=%d %s dur=%.1f",
                 auraSlot, spellName, forcedDur))
