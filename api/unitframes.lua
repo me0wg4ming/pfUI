@@ -1996,6 +1996,19 @@ function pfUI.uf:EnableScripts()
 
   -- add frame to visibility refresh handler
   visibilityscan.frames[f] = true
+
+  -- Hook into libdebuff timer signal for GUID-based aura updates
+  -- Only for frames that track a specific unit (target, player, focus etc.)
+  if f.label and f.label ~= "" then
+    pfUI.libdebuff_on_unit_updated = pfUI.libdebuff_on_unit_updated or {}
+    table.insert(pfUI.libdebuff_on_unit_updated, function(guid)
+      if not guid or not GetUnitGUID then return end
+      local unitstr = f.label .. (f.id or "")
+      if GetUnitGUID(unitstr) == guid then
+        f.update_aura = true
+      end
+    end)
+  end
 end
 
 function pfUI.uf:CreateUnitFrame(unit, id, config, tick)

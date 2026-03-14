@@ -575,6 +575,15 @@ end
     end
   end
 
+  -- Hook into libdebuff timer signal (fires when slotTimers written or cleared)
+  pfUI.libdebuff_on_unit_updated = pfUI.libdebuff_on_unit_updated or {}
+  table.insert(pfUI.libdebuff_on_unit_updated, function(guid)
+    local plate = guidRegistry[guid]
+    if plate and plate.nameplate then
+      plate.nameplate.auraUpdate = true
+    end
+  end)
+
   nameplates:SetScript("OnEvent", function()
     -- Stop event handling during logout to prevent crash 132
     if event == "PLAYER_LOGOUT" then

@@ -39,7 +39,7 @@ local lib = pfUI.libspelldata
 -- ============================================================================
 
 
-local selfOverwriteDebuffs = {
+local sharedOverwriteDebuffs = {
   ["Faerie Fire"] = true,
   ["Faerie Fire (Feral)"] = true,
   ["Demoralizing Shout"] = true,
@@ -214,9 +214,9 @@ end)
 -- API: SPELL QUERIES
 -- ============================================================================
 
-function lib:IsSelfOverwrite(spellName)
+function lib:IsSharedOverwrite(spellName)
   if not spellName then return false end
-  return selfOverwriteDebuffs[spellName] == true
+  return sharedOverwriteDebuffs[spellName] == true
 end
 
 function lib:GetOverwritePair(spellName)
@@ -259,6 +259,25 @@ function lib:IsAnyApplicatorSpell(spellName)
     end
   end
   return false
+end
+
+-- Returns a list of debuff names that the given spell applies as a passive proc.
+-- e.g. GetDebuffsForApplicator("Scorch") -> {"Fire Vulnerability"}
+function lib:GetDebuffsForApplicator(spellName)
+  if not spellName then return nil end
+  local result = nil
+  for debuffName, data in pairs(forcedDurations) do
+    if data.applicatorSpells then
+      for _, applicator in ipairs(data.applicatorSpells) do
+        if applicator == spellName then
+          result = result or {}
+          result[table.getn(result) + 1] = debuffName
+          break
+        end
+      end
+    end
+  end
+  return result
 end
 
 function lib:IsApplicatorSpell(debuffName, spellName)

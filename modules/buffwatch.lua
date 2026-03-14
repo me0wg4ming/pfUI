@@ -499,13 +499,6 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       end
     end)
 
-    -- Fallback heartbeat: every 2s for out-of-range / missed events
-    frame:SetScript("OnUpdate", function()
-      if (this.tick or 1) > GetTime() then return else this.tick = GetTime() + 2 end
-      RefreshBuffBarFrame(this)
-      this:RefreshPosition()
-    end)
-
     return frame
   end
 
@@ -601,26 +594,11 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     pfUI.uf.target.debuffbar:SetPoint("BOTTOM", pfUI.uf.target, "TOP", 0, border*2+1)
     UpdateMovable(pfUI.uf.target.debuffbar)
 
-    -- Refresh via libdebuff hooks (UNIT_AURA doesn't fire on enemy target refreshes)
+    -- Refresh via libdebuff timer signal
     local tdebuffbar = pfUI.uf.target.debuffbar
 
-    pfUI.libdebuff_aura_cast_on_other_hooks = pfUI.libdebuff_aura_cast_on_other_hooks or {}
-    table.insert(pfUI.libdebuff_aura_cast_on_other_hooks, function(spellId, casterGuid, targetGuid)
-      if not targetGuid or not GetUnitGUID then return end
-      if GetUnitGUID("target") == targetGuid then
-        RefreshBuffBarFrame(tdebuffbar)
-        tdebuffbar:RefreshPosition()
-      end
-    end)
-
-    pfUI.libdebuff_melee_refresh_hooks = pfUI.libdebuff_melee_refresh_hooks or {}
-    table.insert(pfUI.libdebuff_melee_refresh_hooks, function(targetGuid)
-      RefreshBuffBarFrame(tdebuffbar)
-      tdebuffbar:RefreshPosition()
-    end)
-
-    pfUI.libdebuff_debuff_added_other_hooks = pfUI.libdebuff_debuff_added_other_hooks or {}
-    table.insert(pfUI.libdebuff_debuff_added_other_hooks, function(guid, luaSlot, spellId, stackCount)
+    pfUI.libdebuff_on_unit_updated = pfUI.libdebuff_on_unit_updated or {}
+    table.insert(pfUI.libdebuff_on_unit_updated, function(guid)
       if not guid or not GetUnitGUID then return end
       if GetUnitGUID("target") == guid then
         RefreshBuffBarFrame(tdebuffbar)

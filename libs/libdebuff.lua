@@ -125,6 +125,11 @@ local slotTimers = pfUI.libdebuff_slot_timers
 pfUI.libdebuff_pending_slot_timer = pfUI.libdebuff_pending_slot_timer or {}
 local pendingSlotTimer = pfUI.libdebuff_pending_slot_timer
 
+-- pfUI.libdebuff_sharedoverwrite_timers: [targetGUID][spellName] = {startTime, duration}
+-- Persistent timer for sharedOverwrite debuffs in spillover slots (no DEBUFF_ADDED fires)
+-- Written by AURA_CAST, read by IterDebuffs PASS 2, cleared by DEBUFF_REMOVED
+pfUI.libdebuff_sharedoverwrite_timers = pfUI.libdebuff_sharedoverwrite_timers or {}
+
 -- slotOwnership: [targetGUID][auraSlot] = {casterGuid, spellName, spellId}
 -- Maps REAL aura slots (33-48) to caster info - NO SHIFTING NEEDED!
 pfUI.libdebuff_slot_ownership = pfUI.libdebuff_slot_ownership or {}
@@ -167,7 +172,7 @@ local allAuraCasts = pfUI.libdebuff_all_auras
 pfUI.libdebuff_max_rank_seen = pfUI.libdebuff_max_rank_seen or {}
 local maxRankSeen = pfUI.libdebuff_max_rank_seen
 
--- Cached melee-refreshable spells from libspelldata (populated on first use)
+-- Cached melee-refreshable spells from libspelldata() (populated on first use)
 local meleeRefreshSpells = nil
 
 -- Spell Icon Cache: [spellId] = texture
@@ -222,6 +227,14 @@ pfUI.libdebuff_melee_refresh_hooks = pfUI.libdebuff_melee_refresh_hooks or {}
 -- Callbacks fired after DEBUFF_REMOVED_OTHER is processed: fn(guid, luaSlot, spellId, stackCount)
 pfUI.libdebuff_debuff_removed_other_hooks = pfUI.libdebuff_debuff_removed_other_hooks or {}
 
+-- Generic signal: fired when target debuff state changes (AURA_CAST, DEBUFF_ADDED, DEBUFF_REMOVED, melee refresh)
+-- fn(guid)
+pfUI.libdebuff_target_updated_hooks = pfUI.libdebuff_target_updated_hooks or {}
+
+-- Generic signal: fired specifically when timer data for a unit changes (slotTimers written or cleared)
+-- fn(guid) - consumers: buffwatch, nameplates, unitframes
+pfUI.libdebuff_on_unit_updated = pfUI.libdebuff_on_unit_updated or {}
+
 -- Multi-tracking: Slot-to-caster mapping for accurate timer display
 -- [guid][displaySlot] = { spellName, casterGuid }
 -- Rebuilt on DEBUFF_ADDED/DEBUFF_REMOVED from Blizzard UnitDebuff + allAuraCasts
@@ -248,10 +261,6 @@ pfUI.libdebuff_forced_no_timer = pfUI.libdebuff_forced_no_timer or {
   [30200] = true,  -- Scythe of the Unborn (item equip buff, server stores wrong duration)
 }
 local forcedNoTimer = pfUI.libdebuff_forced_no_timer
-
--- Dedup cache for [SPILLOVER] debug output: guid -> auraSlot -> spellId
--- Only logs when a new spell appears in a slot, not every IterDebuffs call
-local spilloverLogCache = {}
 
 -- Captured combo points from SPELL_CAST_EVENT (before client consumes them)
 -- SPELL_CAST_EVENT fires BEFORE UnitAura updates, so GetComboPoints() still works
@@ -294,30 +303,34 @@ StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
 }
 
 -- ============================================================================
--- SPELL DATA (via libspelldata)
+-- SPELL DATA (via libspelldata())
 -- ============================================================================
 
--- All spell knowledge tables (selfOverwrite, overwritePairs, combopointAbilities,
--- forcedDurations, applicators) are now centralized in libspelldata.lua.
--- libdebuff queries libspelldata via its API methods.
-local libspelldata = pfUI.libspelldata
+-- All spell knowledge tables (sharedOverwrite, overwritePairs, combopointAbilities,
+-- forcedDurations, applicators) are now centralized in libspelldata().lua.
+-- libdebuff queries libspelldata() via its API methods.
+local _libspelldata = nil
+local function libspelldata()
+  if not _libspelldata then _libspelldata = pfUI.libspelldata end
+  return _libspelldata
+end
 
 -- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
 
--- Check if spell is a combo-point ability (delegates to libspelldata)
+-- Check if spell is a combo-point ability (delegates to libspelldata())
 local function IsComboPointAbility(spellName)
-  if libspelldata then
-    return libspelldata:IsComboPointAbility(spellName)
+  if libspelldata() then
+    return libspelldata():IsComboPointAbility(spellName)
   end
   return false
 end
 
--- Get combo-point spell data (delegates to libspelldata)
+-- Get combo-point spell data (delegates to libspelldata())
 local function GetComboPointData(spellName)
-  if libspelldata then
-    return libspelldata:GetComboPointData(spellName)
+  if libspelldata() then
+    return libspelldata():GetComboPointData(spellName)
   end
   return nil, nil
 end
@@ -342,9 +355,6 @@ pfUI.libdebuff_debugstats = pfUI.libdebuff_debugstats or {
   getunitfield_calls = 0,
 }
 local debugStats = pfUI.libdebuff_debugstats
--- Dedup table for [SPILLOVER] debug output: guid -> auraSlot -> caster
-local spilloverLogged = {}
-
 local function DebugGuid(guid)
   if not guid then return "nil" end
   local str = tostring(guid)
@@ -359,6 +369,13 @@ local function IsCurrentTarget(guid)
   if not guid or not GetUnitGUID then return false end
   local targetGuid = GetUnitGUID("target")
   return targetGuid == guid
+end
+
+pfUI.libdebuff_fire_unit_updated = function(guid)
+  if not guid or not pfUI.libdebuff_on_unit_updated then return end
+  for _, fn in pairs(pfUI.libdebuff_on_unit_updated) do
+    fn(guid)
+  end
 end
 
 local function GetDebugTimestamp()
@@ -590,9 +607,9 @@ local function CleanupUnit(guid)
   
   local cleaned = false
   
-  -- Notify libspelldata
-  if libspelldata then
-    libspelldata:CleanupUnit(guid)
+  -- Notify libspelldata()
+  if libspelldata() then
+    libspelldata():CleanupUnit(guid)
   end
   
   if ownDebuffs[guid] then
@@ -605,10 +622,6 @@ local function CleanupUnit(guid)
     cleaned = true
   end
 
-  if spilloverLogged[guid] then
-    spilloverLogged[guid] = nil
-  end
-  
   if slotTimers[guid] then
     slotTimers[guid] = nil
     cleaned = true
@@ -644,8 +657,8 @@ local function CleanupUnit(guid)
     pendingApplicators[guid] = nil
   end
 
-  if spilloverLogCache[guid] then
-    spilloverLogCache[guid] = nil
+  if pfUI.libdebuff_sharedoverwrite_timers[guid] then
+    pfUI.libdebuff_sharedoverwrite_timers[guid] = nil
   end
 
   if recentCasts[guid] then
@@ -777,7 +790,7 @@ end
 
 -- Refresh passive proc debuffs when applicator spells hit
 local function RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
-  if not libspelldata or not slotOwnership[targetGuid] or not targetGuid or not spellName or not myGuid then
+  if not libspelldata() or not slotOwnership[targetGuid] or not targetGuid or not spellName or not myGuid then
     return false
   end
 
@@ -787,11 +800,11 @@ local function RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
   -- Iterate all owned slots to find applicator targets
   for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
     local debuffName = ownership.spellName
-    if debuffName and libspelldata:IsApplicatorSpell(debuffName, spellName) then
-      local isShared = libspelldata:IsSelfOverwrite(debuffName)
+    if debuffName and libspelldata():IsApplicatorSpell(debuffName, spellName) then
+      local isShared = libspelldata():IsSharedOverwrite(debuffName)
       local isOurs = ownership.isOurs
       if isOurs or isShared then
-        local duration = libspelldata:GetDuration(debuffName)
+        local duration = libspelldata():GetDuration(debuffName)
         if duration and slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot] then
           local data = slotTimers[targetGuid][auraSlot]
           -- Deduplication: skip if refreshed very recently
@@ -814,13 +827,10 @@ local function RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
   end
 
   if refreshed then
-    if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-      pfUI.nameplates:OnAuraUpdate(targetGuid, true)
-    end
+    pfUI.libdebuff_fire_unit_updated(targetGuid)
     if GetUnitGUID("target") then
       local currentTargetGuid = GetUnitGUID("target")
       if currentTargetGuid == targetGuid then
-        if pfTarget then pfTarget.update_aura = true end
         libdebuff:UpdateUnits()
       end
     end
@@ -878,11 +888,8 @@ end
 local updateUnitsTimer = nil
 local updateUnitsPending = false
 function libdebuff:UpdateUnits()
-  if not pfUI.uf or not pfUI.uf.target then return end
-  -- Debounce: batch rapid successive aura events into single update (50ms window)
-  if pfUI.uf.target then
-    pfUI.uf.target.update_aura = true
-  end
+  -- Replaced by pfUI.libdebuff_fire_unit_updated hook system
+  -- Kept as stub for external compat
 end
 
 -- libdebuff.objects kept as empty stub for external compat
@@ -922,18 +929,12 @@ function libdebuff:IterDebuffs(unit, fn)
   if not fn or not GetUnitGUID or not GetUnitField then return 0 end
 
   local guid = GetUnitGUID(unit)
-  if not guid or guid == "" or guid == "0x0000000000000000" then
+  if not guid then
     if debugStats.enabled then
-      local cacheKey = "noguid_" .. (unit or "nil")
-      if not spilloverLogCache[cacheKey] then
-        spilloverLogCache[cacheKey] = true
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO GUID for: "..(unit or "nil").."|r")
-      end
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[IterDebuffs] NO GUID for: "..(unit or "nil").."|r")
     end
     return 0
   end
-  -- clear no-guid cache once we have a valid guid
-  spilloverLogCache["noguid_" .. (unit or "nil")] = nil
 
   local auras = GetUnitField(guid, "aura")
   if not auras then
@@ -1001,7 +1002,9 @@ function libdebuff:IterDebuffs(unit, fn)
           end
 
           -- Fallback: ownDebuffs for own spells when slotTimers missing
-          if not duration and isOurs and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+          -- For sharedOverwrite debuffs: also use ownDebuffs even if not ours (only 1 instance exists)
+          local isSelfOverwrite = libspelldata() and libspelldata():IsSharedOverwrite(spellName)
+          if not duration and (isOurs or isSelfOverwrite) and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
             local d = ownDebuffs[guid][spellName]
             local remaining = (d.startTime + d.duration) - now
             if remaining > -1 then
@@ -1019,8 +1022,7 @@ function libdebuff:IterDebuffs(unit, fn)
 
   -- ============================================================
   -- PASS 2: Spillover debuffs in buff slots (1-32)
-  -- Scan whenever buff slots are occupied - spillover debuffs stay in buff slots
-  -- even after debuffSlotCount drops below 16 (Nampower does not move them back)
+  -- Icon + tooltip only, no timer except for sharedOverwrite debuffs
   -- ============================================================
   if buffSlotCount > 0 or debuffSlotCount >= 16 then
     local auraFlags = GetCachedAuraFlags(guid)
@@ -1028,7 +1030,6 @@ function libdebuff:IterDebuffs(unit, fn)
       for auraSlot = 1, 32 do
         local spellId = auras[auraSlot]
         if spellId and spellId ~= 0 then
-          -- Check auraFlags bit 3: is this a debuff in a buff slot?
           if IsDebuffByFlag(auraFlags, auraSlot) then
             local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
             if not isHidden then
@@ -1038,78 +1039,54 @@ function libdebuff:IterDebuffs(unit, fn)
                 if not spellName or spellName == "" then
                   spellName = GetSpellNameAndRank and GetSpellNameAndRank(spellId) or "Unknown"
                 end
-
                 local rawStacks = auraApps and auraApps[auraSlot]
                 local stacks = rawStacks and (rawStacks + 1) or 1
 
-                local dtype = nil
-                if GetSpellRecField then
-                  local dispelId = GetSpellRecField(spellId, "dispel")
-                  if dispelId and dispelId > 0 then
-                    dtype = dispelTypeMap[dispelId]
+                -- sharedOverwrite: show timer regardless of caster
+                local duration, timeleft = nil, -1
+                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                  local st = slotTimers[guid] and slotTimers[guid][auraSlot]
+                  if st and st.duration and st.duration > 0 then
+                    local remaining = (st.startTime + st.duration) - now
+                    if remaining > -1 then
+                      duration = st.duration
+                      timeleft = remaining > 0 and remaining or 0
+                    end
                   end
-                end
-
-                -- Timer lookup for spillover: use slotTimers (auraSlot 1-32)
-                local duration, timeleft, caster, isOurs = nil, -1, nil, false
-
-                local st = slotTimers[guid] and slotTimers[guid][auraSlot]
-                if st and st.duration and st.duration > 0 then
-                  local remaining = (st.startTime + st.duration) - now
-                  if remaining > -1 then
-                    duration = st.duration
-                    timeleft = remaining > 0 and remaining or 0
-                    isOurs = st.isOurs or false
+                  -- pfUI.libdebuff_sharedoverwrite_timers: persistent, written by AURA_CAST, no expiry
+                  if not duration and pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName] then
+                    local d = pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
+                    local remaining = (d.startTime + d.duration) - now
+                    if remaining > -1 then
+                      duration = d.duration
+                      timeleft = remaining > 0 and remaining or 0
+                    end
                   end
-                end
-
-                -- isOurs: check pendingSlotTimer (first-cast: scan runs before slotTimers committed)
-                if not isOurs and pendingSlotTimer[guid] and pendingSlotTimer[guid][spellName] then
-                  local pending = pendingSlotTimer[guid][spellName]
-                  if pending.isOurs and (now - pending.time) < 2.0 then
-                    isOurs = true
-                    -- Also grab timer from pending if slotTimers had nothing
-                    if not duration and pending.duration and pending.duration > 0 then
-                      local remaining = (pending.startTime + pending.duration) - now
-                      if remaining > -1 then
-                        duration = pending.duration
-                        timeleft = remaining > 0 and remaining or 0
-                      end
+                  if not duration and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+                    local d = ownDebuffs[guid][spellName]
+                    local remaining = (d.startTime + d.duration) - now
+                    if remaining > -1 then
+                      duration = d.duration
+                      timeleft = remaining > 0 and remaining or 0
                     end
                   end
                 end
 
-                -- Fallback: ownDebuffs for own spillover spells
-                if not duration and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
-                  local d = ownDebuffs[guid][spellName]
-                  local remaining = (d.startTime + d.duration) - now
-                  if remaining > -1 then
-                    duration = d.duration
-                    timeleft = remaining > 0 and remaining or 0
-                    isOurs = true
-                  end
+                local isOursSpillover = false
+                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                  local sot = pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
+                  isOursSpillover = sot and sot.isOurs or false
                 end
-                caster = isOurs and "player" or "other"
 
                 count = count + 1
-
-                if debugStats.enabled and IsCurrentTarget(guid) then
-                  spilloverLogged[guid] = spilloverLogged[guid] or {}
-                  if spilloverLogged[guid][auraSlot] ~= spellId then
-                    spilloverLogged[guid][auraSlot] = spellId
-                    DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff6600[SPILLOVER]|r display=%d aura=%d %s caster=%s isOurs=%s dur=%s",
-                      GetDebugTimestamp(), count, auraSlot, spellName, caster or "nil", tostring(isOurs),
-                      duration and string.format("%.1f", duration) or "nil"))
-                  end
-                end
-                fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
+                fn(auraSlot, spellId, spellName, texture, stacks, nil, duration, timeleft, isOursSpillover and "player" or nil, isOursSpillover)
               end
             end
           end
         end
       end
     end -- if auraFlags
-  end -- if debuffSlotCount >= 16
+  end -- if buffSlotCount > 0 or debuffSlotCount >= 16
 
   return count
 end
@@ -1125,7 +1102,7 @@ function libdebuff:IterBuffs(unit, fn)
   if not fn or not GetUnitGUID or not GetUnitField then return 0 end
 
   local guid = GetUnitGUID(unit)
-  if not guid or guid == "" or guid == "0x0000000000000000" then return 0 end
+  if not guid then return 0 end
 
   local auras = GetUnitField(guid, "aura")
   if not auras then return 0 end
@@ -1389,9 +1366,9 @@ end
 -- NAMPOWER EVENT HANDLING
 -- ============================================================================
 
-  -- Register Carnage callback with libspelldata
-  if libspelldata then
-    libspelldata:SetCarnageCallback(function(targetGuid, affectedSpells)
+  -- Register Carnage callback with libspelldata()
+  if libspelldata() then
+    libspelldata():SetCarnageCallback(function(targetGuid, affectedSpells)
       local refreshTime = GetTime()
       local myGuid = GetPlayerGUID()
       
@@ -1444,14 +1421,11 @@ end
         end
       end
       
-      if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-        pfUI.nameplates:OnAuraUpdate(targetGuid, true)
-      end
+      pfUI.libdebuff_fire_unit_updated(targetGuid)
       
       if GetUnitGUID("target") then
         local currentTargetGuid = GetUnitGUID("target")
         if currentTargetGuid == targetGuid then
-          if pfTarget then pfTarget.update_aura = true end
           libdebuff:UpdateUnits()
           -- One-shot snapshot of all active slots after Carnage
           if debugStats.enabled then
@@ -1618,7 +1592,7 @@ end
       if not spellName then return end
 
       local isNullTarget = (not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000")
-      if isNullTarget and casterGuid and libspelldata and libspelldata:HasForcedDuration(spellName) then
+      if isNullTarget and casterGuid and libspelldata() and libspelldata():HasForcedDuration(spellName) then
         pendingAoE[spellName] = pendingAoE[spellName] or {}
         pendingAoE[spellName][casterGuid] = { time = GetTime() }
 
@@ -1656,27 +1630,27 @@ end
       end
       if casterGuid == myGuid then
         -- Track pending applicator (Judgement etc.) for passive proc correlation
-        if targetGuid and libspelldata then
+        if targetGuid and libspelldata() then
           pendingApplicators[targetGuid] = { spell = spellName, time = GetTime(), casterGuid = casterGuid }
-          libspelldata:OnSpellGo(spellId, spellName, casterGuid, targetGuid)
+          libspelldata():OnSpellGo(spellId, spellName, casterGuid, targetGuid)
 
           -- Refresh shared debuffs on SPELL_GO for own casts too
           -- AURA_CAST only fires on new application, not server-side refresh (e.g. max stacks)
-          if libspelldata:IsAnyApplicatorSpell(spellName) then
+          if libspelldata():IsAnyApplicatorSpell(spellName) then
             RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
           end
         end
       end
       
-      -- CARNAGE TALENT via libspelldata
-      if libspelldata and libspelldata:ShouldCheckCarnage(spellName, casterGuid, targetGuid, numHit) then
-        libspelldata:ScheduleCarnageCheck(targetGuid)
+      -- CARNAGE TALENT via libspelldata()
+      if libspelldata() and libspelldata():ShouldCheckCarnage(spellName, casterGuid, targetGuid, numHit) then
+        libspelldata():ScheduleCarnageCheck(targetGuid)
       end
 
       -- Track pending applicator for OTHER players (e.g. Judgement from other Paladins)
-      -- Ensures DEBUFF_ADDED can resolve real casterGuid via libspelldata:OnDebuffAdded
-      if event == "SPELL_GO_OTHER" and targetGuid and casterGuid and libspelldata then
-        libspelldata:OnSpellGo(spellId, spellName, casterGuid, targetGuid)
+      -- Ensures DEBUFF_ADDED can resolve real casterGuid via libspelldata():OnDebuffAdded
+      if event == "SPELL_GO_OTHER" and targetGuid and casterGuid and libspelldata() then
+        libspelldata():OnSpellGo(spellId, spellName, casterGuid, targetGuid)
       end
 
       -- Fire registered SPELL_GO_OTHER hooks
@@ -1748,9 +1722,9 @@ end
 
     elseif event == "AUTO_ATTACK_SELF" or event == "AUTO_ATTACK_OTHER" then
       -- PERF: Early exit if no melee-refresh spells configured (avoids processing hundreds of events/sec in raids)
-      if not libspelldata then return end
+      if not libspelldata() then return end
       if not meleeRefreshSpells then
-        meleeRefreshSpells = libspelldata:GetMeleeRefreshSpells()
+        meleeRefreshSpells = libspelldata():GetMeleeRefreshSpells()
       end
       if not meleeRefreshSpells or not next(meleeRefreshSpells) then return end
       -- Melee autohit: refresh Judgement debuffs from this attacker on the target
@@ -1768,7 +1742,7 @@ end
 
       if slotOwnership[targetGuid] then
         if not meleeRefreshSpells then
-          meleeRefreshSpells = libspelldata:GetMeleeRefreshSpells()
+          meleeRefreshSpells = libspelldata():GetMeleeRefreshSpells()
         end
         local now = GetTime()
         local myGuid = GetPlayerGUID()
@@ -1798,17 +1772,19 @@ end
         end
         
         if refreshed then
-          if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-            pfUI.nameplates:OnAuraUpdate(targetGuid, true)
-          end
+          pfUI.libdebuff_fire_unit_updated(targetGuid)
           if GetUnitGUID("target") then
             local currentTargetGuid = GetUnitGUID("target")
             if currentTargetGuid == targetGuid then
-              if pfTarget then pfTarget.update_aura = true end
               libdebuff:UpdateUnits()
               -- Notify buffwatch (UNIT_AURA doesn't fire on melee refresh)
               if pfUI.libdebuff_melee_refresh_hooks then
                 for _, fn in pairs(pfUI.libdebuff_melee_refresh_hooks) do
+                  fn(targetGuid)
+                end
+              end
+              if pfUI.libdebuff_target_updated_hooks then
+                for _, fn in pairs(pfUI.libdebuff_target_updated_hooks) do
                   fn(targetGuid)
                 end
               end
@@ -1867,15 +1843,15 @@ end
       local isCrit = (tonumber(hitInfo) == 2)
       if not isCrit then return end
       
-      if libspelldata and slotOwnership[targetGuid] then
+      if libspelldata() and slotOwnership[targetGuid] then
         local now = GetTime()
         local refreshed = false
 
         for auraSlot, ownership in pairs(slotOwnership[targetGuid]) do
           if ownership.isOurs then
             local debuffName = ownership.spellName
-            if debuffName and libspelldata:RequiresCritForRefresh(debuffName, spellName) then
-              local duration = libspelldata:GetDuration(debuffName)
+            if debuffName and libspelldata():RequiresCritForRefresh(debuffName, spellName) then
+              local duration = libspelldata():GetDuration(debuffName)
               if duration then
                 local st = slotTimers[targetGuid] and slotTimers[targetGuid][auraSlot]
                 if st then
@@ -1899,13 +1875,10 @@ end
         end
         
         if refreshed then
-          if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-            pfUI.nameplates:OnAuraUpdate(targetGuid, true)
-          end
+          pfUI.libdebuff_fire_unit_updated(targetGuid)
           if GetUnitGUID("target") then
             local currentTargetGuid = GetUnitGUID("target")
             if currentTargetGuid == targetGuid then
-              if pfTarget then pfTarget.update_aura = true end
               libdebuff:UpdateUnits()
             end
           end
@@ -2013,8 +1986,9 @@ end
             spellName, tostring(auraCapStatus), duration))
         end
         
+        local buffCapped = false
         if auraCapStatus then
-          local buffCapped = bit.band(auraCapStatus, 1) ~= 0
+          buffCapped = bit.band(auraCapStatus, 1) ~= 0
           if debugStats.enabled then
             DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[OVF DBG]|r buffCapped=%s", tostring(buffCapped)))
           end
@@ -2064,24 +2038,17 @@ end
                 if pfUI.buff and pfUI.buff:GetScript("OnEvent") then
                   pfUI.buff:GetScript("OnEvent")()
                 end
-                -- Also notify player unitframe
-                if pfPlayer then
-                  pfPlayer.update_aura = true
-                end
-              end
-            else
-              if debugStats.enabled then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[OVF DBG]|r %s is a debuff, skip", spellName))
+                -- Also notify player unitframe via libdebuff_on_unit_updated
               end
             end
-          elseif not auraCapStatus then
+          else
             if debugStats.enabled then
-              DEFAULT_CHAT_FRAME:AddMessage("|cffaaaaaa[OVF DBG]|r auraCapStatus is nil")
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaa[OVF DBG]|r %s is a debuff, skip", spellName))
             end
           end
         else
           if debugStats.enabled then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffaaaaaa[OVF DBG]|r no auraCapStatus")
+            DEFAULT_CHAT_FRAME:AddMessage("|cffaaaaaa[OVF DBG]|r auraCapStatus is nil")
           end
         end
         
@@ -2140,9 +2107,9 @@ end
           end
         end
       elseif duration == 0 then
-        -- Non-CP managed spells: check libspelldata first, then spell duration database
-        if libspelldata then
-          local spellDuration = libspelldata:GetDuration(spellName, nil, casterGuid)
+        -- Non-CP managed spells: check libspelldata() first, then spell duration database
+        if libspelldata() then
+          local spellDuration = libspelldata():GetDuration(spellName, nil, casterGuid)
           if spellDuration then
             duration = spellDuration
           end
@@ -2229,6 +2196,28 @@ end
           time      = startTime  -- for stale-entry detection
         }
 
+        -- sharedOverwrite: also store persistently for spillover display (no DEBUFF_ADDED fires in buff slots)
+        if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+          pfUI.libdebuff_sharedoverwrite_timers[targetGuid] = pfUI.libdebuff_sharedoverwrite_timers[targetGuid] or {}
+          local existing = pfUI.libdebuff_sharedoverwrite_timers[targetGuid][spellName]
+          -- Downrank check: don't overwrite a higher-rank timer that is still ticking
+          local blocked = false
+          if existing and existing.rank and rankNum > 0 and existing.rank > rankNum then
+            local existingTimeleft = (existing.startTime + existing.duration) - GetTime()
+            if existingTimeleft > 0.5 then
+              blocked = true
+              if debugStats.enabled and IsCurrentTarget(targetGuid) then
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff0000[SPILLOVER DOWNRANK BLOCKED]|r %s: Rank %d cannot overwrite Rank %d (%.1fs left)",
+                  spellName, rankNum, existing.rank, existingTimeleft))
+              end
+            end
+          end
+          if not blocked then
+            pfUI.libdebuff_sharedoverwrite_timers[targetGuid][spellName] = { startTime = startTime, duration = duration, isOurs = isOurs, rank = rankNum }
+            pfUI.libdebuff_fire_unit_updated(targetGuid)
+          end
+        end
+
         -- On refresh DEBUFF_ADDED doesn't fire - update slotTimers directly.
         -- KEY: Match by BOTH spellName AND casterGuid so each caster only updates their own slot.
         -- Fallback: if casterGuid is nil (SPELL_GO not correlated), match by spellName only
@@ -2289,6 +2278,7 @@ end
             local existingRank = slotTimers[targetGuid][auraSlot] and slotTimers[targetGuid][auraSlot].rank or 0
             local writeRank = (rankNum > existingRank) and rankNum or existingRank
             slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration, rank = writeRank, isOurs = isOurs }
+            pfUI.libdebuff_fire_unit_updated(targetGuid)
             -- Sync ownDebuffs for our refreshes (only if entry already exists = confirmed hit)
             if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
               ownDebuffs[targetGuid][spellName].startTime = startTime
@@ -2322,35 +2312,12 @@ end
           DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[AURA_CAST]|r %s rank=%d target=%s isOurs=%s dur=%.1fs",
             GetDebugTimestamp(), spellName, rankNum, DebugGuid(targetGuid), tostring(isOurs), duration))
         end
-      end
-      
-      -- Notify nameplates
-        if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-          pfUI.nameplates:OnAuraUpdate(targetGuid)
-        end
-        
-        -- Notify unitframes of debuff updates (UNIT_AURA doesn't fire on refreshes!)
-        -- Check player
-        if GetUnitGUID("player") then
-          local playerGuid = GetUnitGUID("player")
-          if playerGuid == targetGuid and pfPlayer then
-            pfPlayer.update_aura = true
-          end
-        end
-        
-        -- Check target
-        if GetUnitGUID("target") then
-          local targetUnitGuid = GetUnitGUID("target")
-          if targetUnitGuid == targetGuid then
-            if pfTarget then pfTarget.update_aura = true end
-            libdebuff:UpdateUnits()
-          end
-        end
-      
+      end -- if targetGuid and duration > 0
+
       -- APPLICATOR REFRESH: Refresh passive proc debuffs when applicator spells hit
       -- Run for ALL casters (not just isOurs) - RefreshApplicatorDebuffs internally
       -- filters to only refresh debuffs that belong to us (myGuid or shared)
-      if targetGuid and libspelldata then
+      if targetGuid and libspelldata() then
         local now = GetTime()
         local hasRecentHit = false
         if recentHits[targetGuid] and recentHits[targetGuid][spellName] then
@@ -2402,7 +2369,7 @@ end
       data.stacks = data.stacks or 1
 
       -- Handle variant pairs for ownDebuffs
-      local ownOverwritePair = libspelldata and libspelldata:GetOverwritePair(spellName)
+      local ownOverwritePair = libspelldata() and libspelldata():GetOverwritePair(spellName)
       if ownOverwritePair then
         if ownDebuffs[targetGuid][ownOverwritePair] then
           ownDebuffs[targetGuid][ownOverwritePair] = nil
@@ -2417,6 +2384,11 @@ end
       elseif event == "AURA_CAST_ON_OTHER" and pfUI.libdebuff_aura_cast_on_other_hooks then
         for _, fn in pairs(pfUI.libdebuff_aura_cast_on_other_hooks) do
           fn(spellId, casterGuid, targetGuid)
+        end
+      end
+      if targetGuid and pfUI.libdebuff_target_updated_hooks then
+        for _, fn in pairs(pfUI.libdebuff_target_updated_hooks) do
+          fn(targetGuid)
         end
       end
 
@@ -2499,21 +2471,21 @@ end
       -- Fallback for forced-duration spells: Check if we already have a timer
       -- Skip for AoE spells: pendingAoE is the only reliable source for those.
       -- Using allAuraCasts here would pick up stale entries from previous casts by us.
-      local isAoESpell = libspelldata and libspelldata:IsAoEChannel(spellName)
+      local isAoESpell = libspelldata() and libspelldata():IsAoEChannel(spellName)
 
       -- forcedDuration casterGuid fallback no longer needed:
       -- slotTimers are keyed by auraSlot, not casterGuid
       
 
       
-      -- libspelldata: Check applicator tracking (e.g. Judgement → JoW caster)
-      if not casterGuid and libspelldata then
-        casterGuid = libspelldata:OnDebuffAdded(guid, spellId, spellName)
+      -- libspelldata(): Check applicator tracking (e.g. Judgement → JoW caster)
+      if not casterGuid and libspelldata() then
+        casterGuid = libspelldata():OnDebuffAdded(guid, spellId, spellName)
       end
       
       -- pendingApplicators: Track passive proc debuffs (e.g., Scorch → Fire Vulnerability, Frostbolt → Winter's Chill)
       -- Only assigns ownership if PLAYER cast the applicator spell recently
-      if not casterGuid and libspelldata and libspelldata:HasForcedDuration(spellName) then
+      if not casterGuid and libspelldata() and libspelldata():HasForcedDuration(spellName) then
         if pendingApplicators[guid] then
           local timeSinceCast = GetTime() - pendingApplicators[guid].time
           if timeSinceCast < 0.5 then
@@ -2545,8 +2517,8 @@ end
       -- For forced-duration spells: If still no caster, assume ours (passive talent procs)
       -- IMPORTANT: Skip this fallback for AoE spells (pendingAoE key present means spell has a known caster
       -- that just missed the timing window -- do NOT falsely claim ownership)
-      local isAoESpell2 = libspelldata and libspelldata:IsAoEChannel(spellName)
-      if not casterGuid and not isAoESpell2 and libspelldata and libspelldata:HasForcedDuration(spellName) then
+      local isAoESpell2 = libspelldata() and libspelldata():IsAoEChannel(spellName)
+      if not casterGuid and not isAoESpell2 and libspelldata() and libspelldata():HasForcedDuration(spellName) then
         casterGuid = GetPlayerGUID()
         isOurs = true
         if debugStats.enabled and IsCurrentTarget(guid) then
@@ -2582,6 +2554,7 @@ end
         local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
         local writeRank = ((pending.rank or 0) > existingRank) and (pending.rank or 0) or existingRank
         slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = writeRank, isOurs = pending.isOurs or false }
+        pfUI.libdebuff_fire_unit_updated(guid)
         pendingSlotTimer[guid][spellName] = nil
         if debugStats.enabled and IsCurrentTarget(guid) then
           DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER]|r aura=%d %s rank=%d start=%.2f dur=%.1f",
@@ -2589,10 +2562,10 @@ end
         end
       elseif isOurs then
         -- No pendingSlotTimer (e.g. AURA_CAST was downrank-blocked but spell still landed)
-        -- Build timer from libspelldata or spell duration DB so Conditionals tracks ownership
+        -- Build timer from libspelldata() or spell duration DB so Conditionals tracks ownership
         local fallbackDur = 0
-        if libspelldata then
-          fallbackDur = libspelldata:GetDuration(spellName) or 0
+        if libspelldata() then
+          fallbackDur = libspelldata():GetDuration(spellName) or 0
         end
         if fallbackDur == 0 then
           fallbackDur = libdebuff:GetDuration(spellName, nil) or 0
@@ -2600,19 +2573,21 @@ end
         if fallbackDur > 0 then
           local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
           slotTimers[guid][auraSlot] = { startTime = now, duration = fallbackDur, rank = existingRank, isOurs = true }
+          pfUI.libdebuff_fire_unit_updated(guid)
           if debugStats.enabled and IsCurrentTarget(guid) then
             DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER FALLBACK]|r aura=%d %s dur=%.1f (no pending, own spell)",
               auraSlot, spellName, fallbackDur))
           end
         end
-      elseif libspelldata and libspelldata:HasForcedDuration(spellName) then
-        -- No AURA_CAST for this spell (passive proc) - create timer from libspelldata
+      elseif libspelldata() and libspelldata():HasForcedDuration(spellName) then
+        -- No AURA_CAST for this spell (passive proc) - create timer from libspelldata()
         local existingST = slotTimers[guid][auraSlot]
         local hasExistingTimer = existingST and ((existingST.startTime + existingST.duration) - now) > 0
         if not hasExistingTimer then
-          local forcedDur = libspelldata:GetDuration(spellName)
+          local forcedDur = libspelldata():GetDuration(spellName)
           if forcedDur and forcedDur > 0 then
             slotTimers[guid][auraSlot] = { startTime = now, duration = forcedDur, rank = 0, isOurs = isOurs }
+            pfUI.libdebuff_fire_unit_updated(guid)
             if debugStats.enabled and IsCurrentTarget(guid) then
               DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[FORCED TIMER]|r aura=%d %s dur=%.1f",
                 auraSlot, spellName, forcedDur))
@@ -2663,13 +2638,14 @@ end
       if currentTargetGuid and currentTargetGuid == guid then
       end
       
-      -- Notify nameplates
-      if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-        pfUI.nameplates:OnAuraUpdate(guid)
-      end
       if pfUI.libdebuff_debuff_added_other_hooks then
         for _, fn in pairs(pfUI.libdebuff_debuff_added_other_hooks) do
           fn(arg1, arg2, arg3, arg4)
+        end
+      end
+      if guid and pfUI.libdebuff_target_updated_hooks then
+        for _, fn in pairs(pfUI.libdebuff_target_updated_hooks) do
+          fn(guid)
         end
       end
 
@@ -2687,9 +2663,9 @@ end
       
       local spellName = (GetSpellRecField and GetSpellRecField(spellId, "name")) or "?"
       
-      -- Notify libspelldata
-      if libspelldata then
-        libspelldata:OnDebuffRemoved(guid, spellId, spellName)
+      -- Notify libspelldata()
+      if libspelldata() then
+        libspelldata():OnDebuffRemoved(guid, spellId, spellName)
       end
       
       if debugStats.enabled then
@@ -2766,6 +2742,11 @@ end
         end
       end
       
+      -- sharedOverwrite: clear persistent timer on removal (fires regardless of wasOurs)
+      if not isStillPresent and pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName] then
+        pfUI.libdebuff_sharedoverwrite_timers[guid][spellName] = nil
+      end
+
       if not isStillPresent and wasOurs then
         -- Always clear ownDebuffs and objectsByGuid so Conditionals sees the debuff as gone
         if ownDebuffs[guid] and ownDebuffs[guid][spellName] then
@@ -2796,6 +2777,7 @@ end
               end
             end
             slotTimers[guid][foundAuraSlot] = nil
+            pfUI.libdebuff_fire_unit_updated(guid)
             -- Schedule maxRankSeen clear after 2s (re-apply window expires)
             -- We do this by storing the removal time; checked in AURA_CAST
             if maxRankSeen[guid] and maxRankSeen[guid][spellName] then
@@ -2816,14 +2798,17 @@ end
       end
       
       -- Notify nameplates
-      if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
-        pfUI.nameplates:OnAuraUpdate(guid)
-      end
       if pfUI.libdebuff_debuff_removed_other_hooks then
         for _, fn in pairs(pfUI.libdebuff_debuff_removed_other_hooks) do
           fn(arg1, arg2, arg3, arg4)
         end
       end
+      if guid and pfUI.libdebuff_target_updated_hooks then
+        for _, fn in pairs(pfUI.libdebuff_target_updated_hooks) do
+          fn(guid)
+        end
+      end
+      pfUI.libdebuff_fire_unit_updated(guid)
 
     elseif event == "PLAYER_TARGET_CHANGED" then
       if not GetUnitGUID then return end
