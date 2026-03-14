@@ -252,6 +252,8 @@ end)
 
 -- Hook CastSpell to store pending name/icon per slot
 hooksecurefunc("CastSpell", function(id, bookType)
+  if not id or not bookType then return end
+  if bookType ~= BOOKTYPE_SPELL and bookType ~= BOOKTYPE_PET then return end
   local name, rank, icon, _, _, _, spellId = libspell.GetSpellInfo(id, bookType)
   if not name then return end
   libtotem:CheckAddQueue(name, rank, icon, spellId)
