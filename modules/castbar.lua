@@ -224,7 +224,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         if this.showtimer then
           if this.delay and this.delay > 0 then
             local delay = "|cffffaaaa" .. (channel and "-" or "+") .. FormatCastbarTime(this.delay, C.unitframes.castbardecimalscur) .. " |r "
-            this.bar.right:SetText(delay .. FormatCastbarTime(cur, C.unitframes.castbardecimalscur) .. " / " .. FormatCastbarTime(maxC.unitframes.castbardecimals))
+            this.bar.right:SetText(delay .. FormatCastbarTime(cur, C.unitframes.castbardecimalscur) .. " / " .. FormatCastbarTime(max, C.unitframes.castbardecimals))
           else
             this.bar.right:SetText(FormatCastbarTime(cur, C.unitframes.castbardecimalscur) .. " / " .. FormatCastbarTime(max, C.unitframes.castbardecimals))
           end
