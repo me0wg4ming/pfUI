@@ -108,6 +108,9 @@ function libspell.GetSpellInfo(index, bookType)
       name = GetSpellName(id, bookType)
     end
   else
+    if not bookType or (bookType ~= BOOKTYPE_SPELL and bookType ~= BOOKTYPE_PET) then
+      return nil
+    end
     name, rank = GetSpellName(index, bookType)
     id, bookType = libspell.GetSpellIndex(name, rank)
   end

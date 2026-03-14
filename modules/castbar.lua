@@ -1,5 +1,4 @@
 pfUI:RegisterModule("castbar", "vanilla", function ()
-  local superwow_active = HasSuperWoW()
 
   local font = C.castbar.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
   local font_size = C.castbar.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
@@ -9,8 +8,8 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
   -- Helper function for castbar timer formatting
   local function FormatCastbarTime(value)
     if C.unitframes.castbardecimals == "1" then
-      -- 1 decimal, always floor
-      return string.format("%.1f", floor(value * 10) / 10)
+      -- 1 decimal, round half up (matches Blizzard spellbook display)
+      return string.format("%.1f", floor(value * 10 + 0.5) / 10)
     else
       -- 2 decimals (default)
       return string.format("%.2f", value)
@@ -81,8 +80,8 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
     cb:SetScript("OnUpdate", function()
       -- Throttle for performance
       if (this.tick or 0) > GetTime() then return end
-      this.tick = GetTime() + 0.020 -- ~60 FPS for smooth castbar
-      
+      this.tick = GetTime() + 0.020 -- ~50 FPS for smooth castbar
+
       if this.drag and this.drag:IsShown() then
         this:SetAlpha(1)
         return
@@ -108,44 +107,42 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       local focusGuid = nil
       if this.unitstr and string.find(this.unitstr, "^0x") then
         focusGuid = this.unitstr
+      elseif this.unitstr and this.unitstr ~= "player" then
+        local guid = GetUnitGUID(this.unitstr)
+        if guid then focusGuid = guid end
       end
 
       -- Try libdebuff_casts first for GUID-based units (works with Turtle GUID + Nampower events)
       local cast, nameSubtext, text, texture, startTime, endTime
+      local castBlocked = false
       if focusGuid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[focusGuid] then
         local castData = pfUI.libdebuff_casts[focusGuid]
-        if castData.event == "START" and castData.endTime and castData.endTime > GetTime() then
+        if castData.event == "CAST" or castData.event == "FAIL" then
+          castBlocked = true
+          pfUI.libdebuff_casts[focusGuid] = nil
+        elseif castData.event == "START" and castData.endTime and castData.endTime > GetTime() then
           cast = castData.spellName
           texture = castData.icon
-          startTime = castData.startTime * 1000  -- libdebuff uses seconds, castbar expects milliseconds
+          startTime = castData.startTime * 1000
           endTime = castData.endTime * 1000
-          nameSubtext = ""  -- Rank info not available in libdebuff_casts
+          nameSubtext = ""
         end
       end
 
-      -- Fallback: transform unitstrings to unit guids when SuperWoW is active
-      -- SuperWoW stores cast data by GUID for all units INCLUDING player
-      -- BUT: For player casts, we need to use libcast data because it handles pushback correctly
       local useLibcastForPlayer = this.unitstr == "player"
-      
-      if not cast and superwow_active and this.unitstr and not useLibcastForPlayer then
-        local _, guid = UnitExists(this.unitstr)
-        query = guid or query
-      end
-      
+
       -- For player: use player name to query libcast.db directly
       if not cast and useLibcastForPlayer then
         query = UnitName("player")
       end
 
-      -- Fallback: Try UnitCastingInfo if we haven't found cast data yet
-      if not cast and UnitCastingInfo then
+      -- Fallback: UnitCastingInfo only when no focusGuid (Nampower not available for this unit)
+      if not cast and not castBlocked and not focusGuid and UnitCastingInfo then
         cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
       end
-      
-      if not cast and UnitChannelInfo then
-        -- scan for channel spells if no cast was found
-        channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(query)
+
+      if not cast and not castBlocked and not focusGuid and UnitChannelInfo then
+        channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(this.unitstr or this.unitname)
         cast = channel
       end
 
@@ -179,7 +176,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
             if pfUI.libdebuff_casts or pfUI.libdebuff_item_icons then
               local castGuid = nil
               if this.unitstr and UnitExists then
-                local _, guid = UnitExists(this.unitstr)
+                local guid = GetUnitGUID(this.unitstr)
                 castGuid = guid
               end
               if castGuid then

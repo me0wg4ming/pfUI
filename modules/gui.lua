@@ -943,6 +943,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "8:" .. T["Slow"],
         "16:" .. T["Very Slow"],
       },
+      ["uf_rangecheck_mode"] = {
+        "vanilla:" .. T["Vanilla (Spellbook)"],
+        "unitxp:" .. T["UnitXP (Precise)"],
+      },
       ["uf_raidlayout"] = {
         "1x40:" .. "1x40",
         "2x20:" .. "2x20",
@@ -1036,6 +1040,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       ["uf_layout"] = {
         "default:" .. T["Default"],
         "tukui:TukUI"
+      },
+      ["raidmarker_grow"] = {
+        "down:Down",
+        "up:Up",
       },
       ["uf_color"] = {
         "0:" .. T["Class"],
@@ -1945,6 +1953,67 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       end, true)
     end)
 
+    CreateGUIEntry(T["Throttling"], T["Swing Timer"], function()
+      local swingCustom
+
+      CreateConfig(function()
+        if swingCustom and swingCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("swingtimer")
+          if not isCustom then
+            swingCustom.input:EnableMouse(false)
+            swingCustom.input:EnableKeyboard(false)
+            swingCustom.input:ClearFocus()
+            swingCustom.input:SetTextColor(.5,.5,.5,1)
+            swingCustom.input:SetText(tostring(pfUI.throttle:GetFps("swingtimer")))
+          else
+            swingCustom.input:EnableMouse(true)
+            swingCustom.input:EnableKeyboard(true)
+            swingCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.swingtimer_custom then
+              swingCustom.input:SetText(_G.pfUI_throttle.swingtimer_custom)
+            end
+          end
+        end
+      end, T["Swing Timer Update Rate"], _G.pfUI_throttle, "swingtimer", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+
+      swingCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "swingtimer_custom")
+
+      local isCustom = pfUI.throttle:IsCustom("swingtimer")
+      if not isCustom then
+        swingCustom.input:EnableMouse(false)
+        swingCustom.input:EnableKeyboard(false)
+        swingCustom.input:SetTextColor(.5,.5,.5,1)
+        swingCustom.input:SetText(tostring(pfUI.throttle:GetFps("swingtimer")))
+      else
+        swingCustom.input:EnableMouse(true)
+        swingCustom.input:EnableKeyboard(true)
+        swingCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.swingtimer_custom then
+          swingCustom.input:SetText(_G.pfUI_throttle.swingtimer_custom)
+        end
+      end
+
+      -- Spacer before reset button
+      local spacer = CreateConfig(nil, " ", nil, nil, "header")
+      spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
+      spacer:SetHeight(10)
+
+      -- Reset to defaults button
+      CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
+        pfUI.throttle:ResetToDefault("swingtimer")
+        _G.pfUI_throttle.swingtimer_custom = "50"
+        Reload()
+      end, true)
+    end)
+
     CreateGUIEntry(T["Unit Frames"], T["General"], function()
       CreateConfig(nil, T["Disable pfUI Unit Frames"], C.unitframes, "disable", "checkbox")
       CreateConfig(nil, T["Healthbar Animation Speed"], C.unitframes, "animation_speed", "dropdown", pfUI.gui.dropdowns.uf_animationspeed)
@@ -1973,6 +2042,25 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Ranged Bar Color"], C.unitframes, "swingtimerrangedcolor", "color")
       CreateConfig(nil, T["Ranged Warn Color (Hunter)"], C.unitframes, "swingtimerrangedwarncolor", "color")
       CreateConfig(nil, T["Show HS/Cleave Queue Color (Warrior)"], C.unitframes, "swingtimerhsqueue", "checkbox")
+      CreateConfig(nil, T["Show Attack Speed"], C.unitframes, "swingtimerattackspeed", "checkbox")
+
+      CreateConfig(nil, "Mark Tracking", nil, nil, "header")
+      CreateConfig(nil, "Raid Marker Width", C.unitframes, "raidmarkerwidth")
+      CreateConfig(nil, "Raid Marker Height", C.unitframes, "raidmarkerheight")
+      CreateConfig(nil, "Raid Marker Grow", C.unitframes, "raidmarkergrow", "dropdown", pfUI.gui.dropdowns.raidmarker_grow)
+      CreateConfig(nil, "Raid Marker Texture", C.unitframes, "raidmarkertexture", "dropdown", pfUI.gui.dropdowns.uf_bartexture)
+      CreateConfig(nil, "Raid Marker Font Size", C.unitframes, "raidmarkerfontsize")
+      CreateConfig(nil, "Show Name", C.unitframes, "raidmarkershowname", "checkbox")
+      CreateConfig(nil, "Show Percent HP", C.unitframes, "raidmarkershowpct", "checkbox")
+      CreateConfig(nil, "Show Portrait", C.unitframes, "raidmarkershowportrait", "checkbox")
+      CreateConfig(nil, "Star Color", C.unitframes, "raidmarkercolor_star", "color")
+      CreateConfig(nil, "Circle Color", C.unitframes, "raidmarkercolor_circle", "color")
+      CreateConfig(nil, "Diamond Color", C.unitframes, "raidmarkercolor_diamond", "color")
+      CreateConfig(nil, "Triangle Color", C.unitframes, "raidmarkercolor_triangle", "color")
+      CreateConfig(nil, "Moon Color", C.unitframes, "raidmarkercolor_moon", "color")
+      CreateConfig(nil, "Square Color", C.unitframes, "raidmarkercolor_square", "color")
+      CreateConfig(nil, "Cross Color", C.unitframes, "raidmarkercolor_cross", "color")
+      CreateConfig(nil, "Skull Color", C.unitframes, "raidmarkercolor_skull", "color")
 
       CreateConfig(U[c], T["Font Options"], nil, nil, "header")
       CreateConfig(nil, T["Unit Frame Text Font"], C.global, "font_unit", "dropdown", pfUI.gui.dropdowns.fonts)
@@ -1981,6 +2069,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
       CreateConfig(U[c], T["Group Options"], nil, nil, "header")
       CreateConfig(nil, T["Enable 40y-Range Check"], C.unitframes, "rangecheck", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Range Check Mode"], C.unitframes, "rangecheck_mode", "dropdown", pfUI.gui.dropdowns.uf_rangecheck_mode, nil, nil, nil, "vanilla")
+      CreateConfig(nil, T["UnitXP Range Threshold (yards)"], C.unitframes, "rangecheck_distance", nil, nil, nil, nil, nil, "vanilla")
       CreateConfig(nil, T["Range Check Interval"], C.unitframes, "rangechecki", "dropdown", pfUI.gui.dropdowns.uf_rangecheckinterval, nil, nil, nil, "vanilla")
       CreateConfig(nil, T["Use Raid Frames To Display Group Members"], C.unitframes, "raidforgroup", "checkbox")
       CreateConfig(nil, T["Always Show Self In Raid Frames"], C.unitframes, "selfinraid", "checkbox")
@@ -2025,6 +2115,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["UnitXP Settings"], nil, nil, "header")
       CreateConfig(nil, T["Show Line of Sight Indicator"], C.unitframes, "los_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Show Behind Indicator"], C.unitframes, "behind_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Show Distance of Target"], C.unitframes, "distance_indicator", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Hook Distance to Portrait Frame"], C.unitframes, "distance_hook_portrait", "checkbox", nil, nil, nil, nil, "vanilla" )
       CreateConfig(nil, T["Enable OS Notifications"], C.unitframes, "unitxp_notify", "checkbox", nil, nil, nil, nil, "vanilla" )
     end)
 
@@ -2247,6 +2339,19 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Rage Color"], C.unitframes[c], "ragecolor", "color")
         CreateConfig(U[c], T["Energy Color"], C.unitframes[c], "energycolor", "color")
         CreateConfig(U[c], T["Focus Color"], C.unitframes[c], "focuscolor", "color")
+
+        if c == "player" then
+          CreateConfig(U[c], T["Player SP/Haste Display"], nil, nil, "header")
+          CreateConfig(U[c], T["Haste Display"], C.unitframes[c], "display_haste", "dropdown", {
+            "0:"..T["None"],
+            "1:"..T["Haste (cast speed increase)"],
+            "2:"..T["Effective Haste (Haste * cast time reduction)"], -- Only affects mages/warlocks I believe
+          })
+          CreateConfig(U[c], T["Haste Display Color"], C.unitframes[c], "display_haste_color", "color")
+          CreateConfig(U[c], T["Display Spell Power"], C.unitframes[c], "display_spellpower", "checkbox")
+          CreateConfig(U[c], T["Use Custom Spell Power Color (unchecked = biggest school color)"], C.unitframes[c], "display_sp_color_override", "checkbox")
+          CreateConfig(U[c], T["Spell Power Color"], C.unitframes[c], "display_sp_color", "color")
+        end
       end)
     end
 
@@ -2703,6 +2808,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
       CreateConfig(nil, T["Debuffs"], nil, nil, "header")
       CreateConfig(U["nameplates"], T["Enable Debuffs"], C.nameplates, "showdebuffs", "checkbox")
+      CreateConfig(U["nameplates"], T["Show Debuffs on Hostile"], C.nameplates, "showdebuffs_hostile", "checkbox")
+      CreateConfig(U["nameplates"], T["Show Debuffs on Friendly"], C.nameplates, "showdebuffs_friendly", "checkbox")
       CreateConfig(U["nameplates"], T["Debuff Position"], C.nameplates.debuffs, "position", "dropdown", pfUI.gui.dropdowns.debuffposition)
       CreateConfig(U["nameplates"], T["Debuff Icon Offset"], C.nameplates, "debuffoffset")
       CreateConfig(U["nameplates"], T["Debuff Icon Size"], C.nameplates, "debuffsize")

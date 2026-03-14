@@ -247,7 +247,7 @@ end)
 -- GetUnitStats - Nampower Integration for Health + Power
 -- Returns: hp, maxHp, power, maxPower, powerType
 -- IMPORTANT: Uses _G.UnitExists directly to avoid conflicts with Nampower's
---            extended UnitExists that returns (exists, guid)
+--            use GetUnitGUID(unit) for GUID lookup (Nampower 3.0.0+)
 -- ============================================================================
 
 -- Cache für Stats-Tracking (nur Änderungen zählen)
@@ -464,6 +464,28 @@ function pfUI.uf:DetectBuff(name, id)
     -- try to find the spell icon in caches
     for icon, name in pairs(pfUI_cache.buff_icons) do
       if name == detect_name then return icon, 1 end
+    end
+
+    -- try GetUnitField spellId -> libdebuff icon (Nampower, for custom spells)
+    if GetUnitField and GetUnitGUID and pfUI.libdebuff_GetSpellIcon then
+      local guid = GetUnitGUID(name)
+      if guid then
+        local auras = GetUnitField(guid, "aura")
+        if auras then
+          for _, spellId in pairs(auras) do
+            if type(spellId) == "number" and spellId > 0 then
+              local sname = GetSpellRecField and GetSpellRecField(spellId, "name")
+              if sname == detect_name then
+                local tex = pfUI.libdebuff_GetSpellIcon(spellId)
+                if tex and not string.find(tex, "QuestionMark") then
+                  pfUI_cache.buff_icons[tex] = detect_name
+                  return tex, 1
+                end
+              end
+            end
+          end
+        end
+      end
     end
 
     -- return fallback image
@@ -1168,7 +1190,7 @@ function pfUI.uf.OnEvent()
     -- Smart update: check if THIS frame's unit actually changed
     if pfUI.uf.guidTracker and this.id then
       local unit = this.label == "player" and "player" or (this.label .. this.id)
-      local _, newGuid = UnitExists(unit)
+      local newGuid = GetUnitGUID(unit)
       local oldGuid = pfUI.uf.guidTracker.frameToGuid[this]
       if newGuid ~= oldGuid then
         pfUI.uf.guidTracker.frameToGuid[this] = newGuid
@@ -1455,7 +1477,7 @@ function pfUI.uf.OnUpdate()
         -- O(1) Nampower lookup via GUID (same pattern as nameplates.lua)
         local health, maxHealth
         if GetUnitField then
-          local _, guid = UnitExists(unit)
+          local guid = GetUnitGUID(unit)
           if guid then
             health = GetUnitField(guid, "health")
             maxHealth = GetUnitField(guid, "maxHealth")
@@ -1703,7 +1725,7 @@ end
 function pfUI.uf.OnEnter()
   if not this.label then return end
 
-  -- Nampower/SuperWoW: Set native mouseover unit for macro/addon compatibility
+  -- Nampower: Set native mouseover unit for macro/addon compatibility
   if SetMouseoverUnit then
     local unitstr = this.label .. this.id
     -- For GUID-based frames (focus), use the GUID directly
@@ -1721,7 +1743,7 @@ function pfUI.uf.OnEnter()
 end
 
 function pfUI.uf.OnLeave()
-  -- Nampower/SuperWoW: Clear native mouseover unit
+  -- Nampower: Clear native mouseover unit
   if SetMouseoverUnit then
     SetMouseoverUnit()
   end
@@ -1885,8 +1907,16 @@ function pfUI.uf:CreateUnitFrame(unit, id, config, tick)
   f.powerCenterText = f.texts:CreateFontString("Status", "OVERLAY", "GameFontNormalSmall")
 
   f.incHeal = CreateFrame("Frame", nil, f.hp)
-  f.incHeal.texture = f.incHeal:CreateTexture(nil, "BACKGROUND")
-  f.incHeal.texture:SetAllPoints()
+  -- Texture lives on hp.bar for correct draw order:
+  -- hp.bar.bg (BACKGROUND) < incHeal (BORDER) < hp.bar.bar (NORMAL)
+  f.incHeal.texture = f.hp.bar:CreateTexture(nil, "BORDER")
+  f.incHeal.texture:SetAllPoints(f.incHeal)
+  -- Override Show/Hide since texture lives on hp.bar, not incHeal
+  f.incHeal._Show = f.incHeal.Show
+  f.incHeal._Hide = f.incHeal.Hide
+  f.incHeal.Show = function(self) self:_Show() self.texture:Show() end
+  f.incHeal.Hide = function(self) self:_Hide() self.texture:Hide() end
+  f.incHeal.texture:Hide()
 
   f.ressIcon = CreateFrame("Frame", nil, f.hp.bar)
   f.ressIcon.texture = f.ressIcon:CreateTexture(nil,"BACKGROUND")
@@ -2370,9 +2400,9 @@ function pfUI.uf:RefreshUnit(unit, component)
     if table.getn(unit.indicators) > 0 then
       for i=1,32 do
         local texture, count = UnitBuff(unitstr, i)
-        local timeleft, _
+        local timeleft, buffName, _
         if pfUI.client > 11200 then
-          _, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
+          buffName, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
         end
 
         if texture then
@@ -2380,6 +2410,13 @@ function pfUI.uf:RefreshUnit(unit, component)
           for _, filter in pairs(unit.indicators) do
             if filter == string.lower(texture) then
               if string.lower(texture) == "interface\\icons\\spell_nature_rejuvenation" then
+                -- Also verify spell name to avoid false matches from spells sharing this icon
+                if not buffName then
+                  scanner = scanner or libtipscan:GetScanner("unitframes")
+                  scanner:SetUnitBuff(unitstr, i)
+                  buffName = scanner:Line(1) or ""
+                end
+                if string.lower(buffName) ~= "rejuvenation" then break end
                 local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Reju")
                 pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
                 pos = pos + 1
@@ -2390,6 +2427,13 @@ function pfUI.uf:RefreshUnit(unit, component)
                 pos = pos + 1
                 break
               elseif string.lower(texture) == "interface\\icons\\spell_nature_resistnature" then
+                -- Also verify spell name to avoid false matches from spells sharing this icon
+                if not buffName then
+                  scanner = scanner or libtipscan:GetScanner("unitframes")
+                  scanner:SetUnitBuff(unitstr, i)
+                  buffName = scanner:Line(1) or ""
+                end
+                if string.lower(buffName) ~= "regrowth" then break end
                 local start, duration, prediction = libpredict:GetHotDuration(unitstr, "Regr")
                 pfUI.uf:AddIcon(unit, pos, texture, timeleft or prediction, count, tonumber(start), tonumber(duration))
                 pos = pos + 1
@@ -2731,20 +2775,16 @@ function pfUI.uf:ClickAction(button)
       -- run click cast action
       local is_macro = string.find(this.clickactions[modstring], "^%/(.+)")
 
-      if superwow_active and not is_macro then
-        CastSpellByName(this.clickactions[modstring], unitstr)
+      local tswitch = UnitIsUnit(unitstr, "target")
+      TargetUnit(unitstr)
+
+      if is_macro then
+        RunMacroText(this.clickactions[modstring])
       else
-        local tswitch = UnitIsUnit(unitstr, "target")
-        TargetUnit(unitstr)
-
-        if is_macro then
-          RunMacroText(this.clickactions[modstring])
-        else
-          CastSpellByName(this.clickactions[modstring])
-        end
-
-        if not tswitch then TargetLastTarget() end
+        CastSpellByName(this.clickactions[modstring])
       end
+
+      if not tswitch then TargetLastTarget() end
 
       return
     end
@@ -3270,7 +3310,7 @@ function pfUI.uf.GetColor(self, preset)
     -- O(1) Nampower lookup for health gradient color
     local hp, hpmax
     if GetUnitField then
-      local _, guid = UnitExists(unitstr)
+      local guid = GetUnitGUID(unitstr)
       if guid then
         hp = GetUnitField(guid, "health")
         hpmax = GetUnitField(guid, "maxHealth")

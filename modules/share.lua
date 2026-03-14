@@ -15,7 +15,9 @@ pfUI:RegisterModule("share", "vanilla:tbc", function ()
           end
         elseif type(v) == "string" then
           match = true
-          str = str .. spacing .. "  [\""..k.."\"] = \"".. string.gsub(v, "\\", "\\\\") .."\",\n"
+          local escaped = string.gsub(v, "\\", "\\\\")
+          escaped = string.gsub(escaped, "\"", "\\\"")
+          str = str .. spacing .. "  [\""..k.."\"] = \"".. escaped .."\",\n"
         elseif type(v) == "number" then
           match = true
           str = str .. spacing .. "  [\""..k.."\"] = ".. string.gsub(v, "\\", "\\\\") ..",\n"

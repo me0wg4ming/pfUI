@@ -6,7 +6,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
   -- Only load if Nampower is available
   if not GetNampowerVersion then return end
 
-  -- Safe wrapper for SuperWoW's GetSpellNameAndRankForId (may not be available)
+  -- Safe wrapper for GetSpellNameAndRankForId (may not be available)
   local function SafeGetSpellNameAndRank(spellId)
     if not GetSpellNameAndRankForId then return nil, nil end
     local success, name, rank = pcall(GetSpellNameAndRankForId, spellId)
@@ -67,14 +67,11 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
       local spellId = arg2
 
       if eventCode == NORMAL_QUEUED or eventCode == NON_GCD_QUEUED or eventCode == ON_SWING_QUEUED then
-        -- Get spell texture from GetSpellRec (Nampower) or SpellInfo (SuperWoW fallback)
+        -- Get spell texture from GetSpellRec (Nampower)
         local texture
         if GetSpellRec then
           local rec = GetSpellRec(spellId)
           texture = rec and rec.spellIconID and GetSpellIconTexture(rec.spellIconID) or nil
-        elseif SpellInfo then
-          local _, _, tex = SpellInfo(spellId)
-          texture = tex
         end
 
         if texture then
@@ -112,8 +109,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
               local iconID = rec.spellIconID
               texture = iconID and GetSpellIconTexture(iconID) or nil
             end
-          elseif SpellInfo then
-            name, rank, texture = SpellInfo(spellId)
+
           end
           if not name then
             name, rank = SafeGetSpellNameAndRank(spellId)
@@ -494,9 +490,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
   -- Shows base mana when druid is in shapeshift form (Bear/Cat uses Rage/Energy)
   -- Uses Nampower's GetUnitField to get base mana values
   -- Fully self-contained: uses its own config settings from C.unitframes.druidmana*
-  local _, playerClass = UnitClass("player")
-  
-  if GetUnitField and pfUI.uf and playerClass == "DRUID" and pfUI_config.unitframes.druidmanabar == "1" then
+    if GetUnitField and pfUI.uf and pfUI_config.unitframes.druidmanabar == "1" then
     local rawborder, default_border = GetBorderSize("unitframes")
     local DC = C.unitframes -- druid mana config lives here as druidmana* keys
 
@@ -581,6 +575,15 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
         return
       end
 
+      -- For non-player units, only show if the target is a Druid
+      if unit ~= "player" then
+        local _, unitClass = UnitClass(unit)
+        if unitClass ~= "DRUID" then
+          bar:Hide()
+          return
+        end
+      end
+
       local powerType = UnitPowerType(unit)
 
       -- Only show when NOT using mana (i.e., in Bear/Cat form)
@@ -591,7 +594,7 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
 
       -- Get base mana using Nampower's GetUnitField
       local baseMana, baseMaxMana
-      local _, guid = UnitExists(unit)
+      local guid = GetUnitGUID(unit)
 
       if guid then
         baseMana = GetUnitField(guid, "power1")
@@ -618,7 +621,8 @@ pfUI:RegisterModule("nampower", "vanilla", function ()
     end
 
     -- ===== Player Druid Mana Bar =====
-    if pfUI.uf.player then
+    local _, playerClass = UnitClass("player")
+    if pfUI.uf.player and playerClass == "DRUID" then
       local playerMana = CreateDruidManaBar(pfUI.uf.player, "player")
 
       if playerMana then

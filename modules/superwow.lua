@@ -266,7 +266,7 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     if event == "PLAYER_ENTERING_WORLD" then
       -- Cache player GUID
       if UnitExists then
-        local _, guid = UnitExists("player")
+        local guid = GetUnitGUID("player")
         playerGuid = guid
       end
       return

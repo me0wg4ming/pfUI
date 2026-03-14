@@ -130,7 +130,7 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
         local frame = pfUI.uf.raid[i]
         if frame and frame.id and frame.id > 0 then
           local unit = "raid" .. frame.id
-          local _, newGuid = UnitExists(unit)
+          local newGuid = GetUnitGUID(unit)
           local oldGuid = tracker.frameToGuid[frame]
           
           if newGuid ~= oldGuid then
@@ -160,7 +160,8 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
   end
 
   hooksecurefunc("UnitPopup_OnClick", function()
-    local dropdownFrame = _G[UIDROPDOWNMENU_INIT_MENU]
+    local dropdownFrame = UIDROPDOWNMENU_INIT_MENU and _G[UIDROPDOWNMENU_INIT_MENU]
+    if not dropdownFrame then return end
     local button = this.value
     local unit = dropdownFrame.unit
     local name = dropdownFrame.name

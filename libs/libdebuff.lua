@@ -38,101 +38,75 @@ local hasNampower = false
 if GetNampowerVersion then
   local major, minor, patch = GetNampowerVersion()
   patch = patch or 0
-  -- Minimum required version: 2.38.0 (CastSpellByName unitStr support, SetMouseoverUnit)
-  if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
+  -- Minimum required version: 3.0.0 (GetUnitGUID support)
+  if major > 3 or (major == 3 and minor > 0) or (major == 3 and minor == 0 and patch >= 0) then
     hasNampower = true
   end
 end
 
--- Delayed Nampower version check (5 seconds after PLAYER_ENTERING_WORLD)
+-- Nampower startup check: show version info and ensure CVars are set.
+-- Runs on first OnUpdate after PLAYER_ENTERING_WORLD to give Nampower time to initialize.
 local nampowerCheckFrame = CreateFrame("Frame")
-local nampowerCheckTimer = 0
-local nampowerCheckDone = false
 nampowerCheckFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-nampowerCheckFrame:RegisterEvent("PLAYER_LOGOUT")
 nampowerCheckFrame:SetScript("OnEvent", function()
-  -- Handle shutdown to prevent crash 132
-  if event == "PLAYER_LOGOUT" then
+  -- Defer to next frame so Nampower is fully initialized
+  this:SetScript("OnUpdate", function()
+    this:SetScript("OnUpdate", nil)
     this:UnregisterAllEvents()
     this:SetScript("OnEvent", nil)
-    this:SetScript("OnUpdate", nil)
-    return
-  end
-  
-  nampowerCheckFrame:SetScript("OnUpdate", function()
-    nampowerCheckTimer = nampowerCheckTimer + arg1
-    if nampowerCheckTimer >= 5 and not nampowerCheckDone then
-      nampowerCheckDone = true
-      
-      if GetNampowerVersion then
-        local major, minor, patch = GetNampowerVersion()
-        patch = patch or 0
-        local versionString = major .. "." .. minor .. "." .. patch
-        
-        if major > 2 or (major == 2 and minor > 38) or (major == 2 and minor == 38 and patch >= 0) then
-          DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
-          
-          -- Enable required Nampower CVars
-          if SetCVar and GetCVar then
-            local cvarsToEnable = {
-              "NP_EnableSpellStartEvents",
-              "NP_EnableSpellGoEvents", 
-              "NP_EnableAuraCastEvents",
-              "NP_EnableAutoAttackEvents"
-            }
-            
-            local totalCvars = table.getn(cvarsToEnable)
-            local enabledCount = 0
-            local alreadyEnabledCount = 0
-            local failedCount = 0
-            
-            for _, cvar in ipairs(cvarsToEnable) do
-              local success, currentValue = pcall(GetCVar, cvar)
-              if success and currentValue then
-                if currentValue == "1" then
-                  alreadyEnabledCount = alreadyEnabledCount + 1
-                else
-                  local setSuccess = pcall(SetCVar, cvar, "1")
-                  if setSuccess then
-                    enabledCount = enabledCount + 1
-                  else
-                    failedCount = failedCount + 1
-                  end
-                end
+
+    if GetNampowerVersion then
+      local major, minor, patch = GetNampowerVersion()
+      patch = patch or 0
+      local versionString = major .. "." .. minor .. "." .. patch
+
+      if major > 3 or (major == 3 and minor > 0) or (major == 3 and minor == 0 and patch >= 0) then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Nampower v" .. versionString .. " detected - GetUnitField mode enabled!")
+
+        if SetCVar and GetCVar then
+          local cvarsToEnable = {
+            "NP_EnableSpellStartEvents",
+            "NP_EnableSpellGoEvents",
+            "NP_EnableAuraCastEvents",
+            "NP_EnableAutoAttackEvents",
+            "NP_EnableSpellHealEvents", 
+          }
+          local enabledCount = 0
+          local alreadyEnabledCount = 0
+          local failedCount = 0
+
+          for _, cvar in ipairs(cvarsToEnable) do
+            local success, currentValue = pcall(GetCVar, cvar)
+            if success and currentValue then
+              if currentValue == "1" then
+                alreadyEnabledCount = alreadyEnabledCount + 1
               else
-                failedCount = failedCount + 1
+                local setSuccess = pcall(SetCVar, cvar, "1")
+                if setSuccess then enabledCount = enabledCount + 1
+                else failedCount = failedCount + 1 end
               end
-            end
-            
-            if enabledCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Enabled " .. enabledCount .. " Nampower CVars")
-            end
-            
-            if alreadyEnabledCount == totalCvars then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r All required Nampower CVars already enabled")
-            elseif alreadyEnabledCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r " .. alreadyEnabledCount .. " CVars were already enabled")
-            end
-            
-            if failedCount > 0 then
-              DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff]|r Warning: Could not check/set " .. failedCount .. " CVars")
+            else
+              failedCount = failedCount + 1
             end
           end
-          
-        elseif major == 2 and minor == 38 and patch == 0 then
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] WARNING: Nampower v2.38.0 detected!|r")
-          DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff] Please update to v2.38.0 or higher!|r")
-          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
-        else
-          DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v2.38.0 or higher.|r")
-          StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
+
+          if enabledCount > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Enabled " .. enabledCount .. " Nampower CVars")
+          elseif alreadyEnabledCount == table.getn(cvarsToEnable) then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r All required Nampower CVars already enabled")
+          end
+          if failedCount > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[libdebuff]|r Warning: Could not check/set " .. failedCount .. " CVars")
+          end
         end
+
       else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Nampower not found! Debuff tracking disabled.|r")
-        StaticPopup_Show("LIBDEBUFF_NAMPOWER_MISSING")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Debuff tracking disabled! Please update Nampower to v3.0.0 or higher.|r")
+        StaticPopup_Show("LIBDEBUFF_NAMPOWER_UPDATE", versionString)
       end
-      
-      nampowerCheckFrame:SetScript("OnUpdate", nil)
+    else
+      DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff] Nampower not found! Debuff tracking disabled.|r")
+      StaticPopup_Show("LIBDEBUFF_NAMPOWER_MISSING")
     end
   end)
 end)
@@ -187,6 +161,45 @@ pfUI.libdebuff_all_slots = pfUI.libdebuff_all_slots or {}
 -- [targetGuid][spellName][casterGuid] = timestamp
 pfUI.libdebuff_recent_casts = pfUI.libdebuff_recent_casts or {}
 local recentCasts = pfUI.libdebuff_recent_casts
+
+-- Callbacks fired after SPELL_GO_SELF is processed: fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
+
+-- Callbacks fired after SPELL_GO_OTHER is processed: fn(spellId, casterGuid, targetGuid)
+pfUI.libdebuff_spell_go_other_hooks = pfUI.libdebuff_spell_go_other_hooks or {}
+
+-- Callbacks fired after SPELL_START_SELF is processed: fn(spellId, casterGuid, targetGuid, castTime)
+pfUI.libdebuff_spell_start_self_hooks = pfUI.libdebuff_spell_start_self_hooks or {}
+
+-- Callbacks fired after SPELL_START_OTHER is processed: fn(spellId, casterGuid, targetGuid, castTime)
+pfUI.libdebuff_spell_start_other_hooks = pfUI.libdebuff_spell_start_other_hooks or {}
+
+-- Callbacks fired after SPELL_FAILED_OTHER is processed: fn(casterGuid, spellId)
+pfUI.libdebuff_spell_failed_other_hooks = pfUI.libdebuff_spell_failed_other_hooks or {}
+
+-- Callbacks fired after AURA_CAST_ON_SELF is processed: fn(spellId, casterGuid, targetGuid)
+pfUI.libdebuff_aura_cast_on_self_hooks = pfUI.libdebuff_aura_cast_on_self_hooks or {}
+
+-- Callbacks fired after AURA_CAST_ON_OTHER is processed: fn(spellId, casterGuid, targetGuid)
+pfUI.libdebuff_aura_cast_on_other_hooks = pfUI.libdebuff_aura_cast_on_other_hooks or {}
+
+-- Callbacks fired after DEBUFF_ADDED_OTHER is processed: fn(guid, luaSlot, spellId, stackCount)
+pfUI.libdebuff_debuff_added_other_hooks = pfUI.libdebuff_debuff_added_other_hooks or {}
+
+-- Callbacks fired after DEBUFF_REMOVED_OTHER is processed: fn(guid, luaSlot, spellId, stackCount)
+pfUI.libdebuff_debuff_removed_other_hooks = pfUI.libdebuff_debuff_removed_other_hooks or {}
+
+-- Callbacks fired after UNIT_HEALTH is processed: fn(unitToken)
+pfUI.libdebuff_unit_health_hooks = pfUI.libdebuff_unit_health_hooks or {}
+
+-- Callbacks fired after PLAYER_TARGET_CHANGED is processed: fn()
+pfUI.libdebuff_player_target_changed_hooks = pfUI.libdebuff_player_target_changed_hooks or {}
+
+-- Callbacks fired after UNIT_DIED is processed: fn(guid)
+pfUI.libdebuff_unit_died_hooks = pfUI.libdebuff_unit_died_hooks or {}
+
+-- Callbacks fired after SPELL_CAST_EVENT is processed: fn(success, spellId, castType, targetGuid)
+pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
 local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
 
 -- Captured combo points from SPELL_CAST_EVENT (before client consumes them)
@@ -204,24 +217,29 @@ pfUI.libpredict_pending_cast = pfUI.libpredict_pending_cast or {}
 -- ============================================================================
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
-  text = "Nampower Update Required!\n\nYour current version: %s\nRequired version: 2.38.0+\n\nPlease update Nampower!",
-  button1 = "OK",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Update Required!\n\nYour current version: %s\nRequired version: 3.0.0+\n\nPlease update Nampower to continue using pfUI!",
+  button1 = "Show Download",
+  button2 = "Dismiss",
   timeout = 0,
   whileDead = 1,
-  hideOnEscape = 1,
+  hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[libdebuff]|r Download: https://gitea.com/avitasia/nampower/releases/tag/v2.38.0")
+    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases/tag/v3.0.0")
   end,
 }
 
 StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
-  text = "Nampower Not Found!\n\nNampower 2.38.0+ is required for pfUI Enhanced debuff tracking.\n\nPlease install Nampower.",
-  button1 = "OK",
+  text = "|cffff0000!!!WARNING!!!|r\n\nNampower Not Found!\n\nNampower 3.0.0+ is required for pfUI to function correctly.\n\nPlease install Nampower!",
+  button1 = "Show Download",
+  button2 = "Dismiss",
   timeout = 0,
   whileDead = 1,
-  hideOnEscape = 1,
+  hideOnEscape = 0,
   preferredIndex = 3,
+  OnAccept = function()
+    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases")
+  end,
 }
 
 -- ============================================================================
@@ -297,8 +315,8 @@ end
 -- Player GUID Cache
 local playerGUID = nil
 local function GetPlayerGUID()
-  if not playerGUID and UnitExists then
-    local _, guid = UnitExists("player")
+  if not playerGUID and GetUnitGUID then
+    local guid = GetUnitGUID("player")
     playerGUID = guid
   end
   return playerGUID
@@ -326,8 +344,8 @@ end
 
 local function IsCurrentTarget(guid)
   if debugStats.trackAllUnits then return true end
-  if not guid or not UnitExists then return false end
-  local _, targetGuid = UnitExists("target")
+  if not guid or not GetUnitGUID then return false end
+  local targetGuid = GetUnitGUID("target")
   return targetGuid == guid
 end
 
@@ -364,11 +382,6 @@ function libdebuff:GetSpellIcon(spellId)
         texture = "Interface\\Icons\\" .. texture
       end
     end
-  end
-  
-  if not texture and SpellInfo then
-    local _, _, spellTexture = SpellInfo(spellId)
-    texture = spellTexture
   end
   
   if not texture then
@@ -412,14 +425,14 @@ local dispelTypeMap = {
 -- Get current debuff state directly from WoW via GetUnitField
 -- Returns: { [displaySlot] = {auraSlot, spellId, spellName, stacks, texture, dtype} }
 local function GetDebuffSlotMap(guid)
-  if not guid or not GetUnitField or not SpellInfo then
+  if not guid or not GetUnitField then
     return nil
   end
   
   -- Check cache first
   local now = GetTime()
   local cached = slotMapCache[guid]
-  if cached and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
+  if cached and cached.map and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
     return cached.map
   end
   
@@ -441,12 +454,11 @@ local function GetDebuffSlotMap(guid)
     local spellId = auras[auraSlot]
     if spellId and spellId > 0 then
       displaySlot = displaySlot + 1
-      local spellName = SpellInfo(spellId)
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       local texture = libdebuff:GetSpellIcon(spellId)
       
-      -- Get stacks from auraApplications (extract immediately - reusable table)
-      local stacks = auraApps and auraApps[auraSlot] or 0
-      if stacks == 0 then stacks = 1 end  -- 0 means 1 stack (no stacking)
+      -- Get stacks from auraApplications (0-indexed, so +1 for display)
+      local stacks = (auraApps and auraApps[auraSlot] or 0) + 1
       
       -- Get debuff type from SpellRec DBC
       local dtype = nil
@@ -468,11 +480,12 @@ local function GetDebuffSlotMap(guid)
     end
   end
   
-  -- Cache the result
-  slotMapCache[guid] = {
-    map = map,
-    timestamp = now
-  }
+  -- Cache the result (separate from buffMap to avoid cross-invalidation)
+  if not slotMapCache[guid] then
+    slotMapCache[guid] = { timestamp = now }
+  end
+  slotMapCache[guid].map = map
+  slotMapCache[guid].timestamp = now
   
   return map
 end
@@ -816,8 +829,8 @@ function libdebuff:UnitDebuff(unit, displaySlot)
   local dtype = nil
 
   -- Nampower: Use GetUnitField for ALL debuff data (no Blizzard UnitDebuff needed)
-  if hasNampower and UnitExists then
-    local _, guid = UnitExists(unit)
+  if hasNampower and GetUnitGUID then
+    local guid = GetUnitGUID(unit)
     if not guid then
       -- Safety fallback: no GUID available (should not happen with Nampower)
       local bTexture, bStacks, bDtype = UnitDebuff(unit, displaySlot)
@@ -939,8 +952,8 @@ local _ownDebuffSortFunc = function(a, b)
 end
 
 function libdebuff:UnitOwnDebuff(unit, id)
-  if hasNampower and UnitExists then
-    local _, guid = UnitExists(unit)
+  if hasNampower and GetUnitGUID then
+    local guid = GetUnitGUID(unit)
     if guid and ownDebuffs[guid] then
       -- Build sorted list of our active debuffs
       local sortedDebuffs = {}
@@ -1125,8 +1138,8 @@ if hasNampower then
       end
       
       -- Trigger UI updates
-      if pfTarget and UnitExists("target") then
-        local _, currentTargetGuid = UnitExists("target")
+      if pfTarget and GetUnitGUID("target") then
+        local currentTargetGuid = GetUnitGUID("target")
         if currentTargetGuid == guid then
           pfTarget.update_aura = true
         end
@@ -1150,6 +1163,7 @@ if hasNampower then
   frame:RegisterEvent("SPELL_GO_SELF")
   frame:RegisterEvent("SPELL_GO_OTHER")
   frame:RegisterEvent("SPELL_FAILED_OTHER")
+  frame:RegisterEvent("UNIT_DIED")
   frame:RegisterEvent("SPELL_CAST_EVENT")
   frame:RegisterEvent("AURA_CAST_ON_SELF")
   frame:RegisterEvent("AURA_CAST_ON_OTHER")
@@ -1176,7 +1190,12 @@ if hasNampower then
       if guid and UnitIsDead and UnitIsDead(guid) then
         CleanupUnit(guid)
       end
-      
+      if pfUI.libdebuff_unit_health_hooks then
+        for _, fn in pairs(pfUI.libdebuff_unit_health_hooks) do
+          fn(arg1)
+        end
+      end
+
     elseif event == "SPELL_START_SELF" or event == "SPELL_START_OTHER" then
       local itemId = arg1
       local spellId = arg2
@@ -1185,15 +1204,13 @@ if hasNampower then
       
       if not casterGuid or not spellId then return end
       
-      -- Get spell name - try Nampower first, then SuperWoW
+      -- Get spell name via Nampower
       local spellName = nil
       if GetSpellRec then
         local rec = GetSpellRec(spellId)
         spellName = rec and rec.name or nil
       end
-      if not spellName and SpellInfo then
-        spellName = SpellInfo(spellId)
-      end
+
       
       local icon = libdebuff:GetSpellIcon(spellId)
       
@@ -1229,7 +1246,17 @@ if hasNampower then
         endTime = castTime and (GetTime() + castTime / 1000) or nil,
         event = "START"
       }
-      
+
+      if event == "SPELL_START_SELF" and pfUI.libdebuff_spell_start_self_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_start_self_hooks) do
+          fn(spellId, casterGuid, arg4, castTime)
+        end
+      elseif event == "SPELL_START_OTHER" and pfUI.libdebuff_spell_start_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_start_other_hooks) do
+          fn(spellId, casterGuid, arg4, castTime)
+        end
+      end
+
     elseif event == "SPELL_GO_SELF" or event == "SPELL_GO_OTHER" then
       local itemId = arg1
       local spellId = arg2
@@ -1246,10 +1273,18 @@ if hasNampower then
         end
       end
       
+      -- Fire registered SPELL_GO_SELF hooks BEFORE miss guard
+      -- (Swingtimer needs to see ALL casts, even misses, for swing reset)
+      if event == "SPELL_GO_SELF" and pfUI.libdebuff_spell_go_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_go_hooks) do
+          fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+        end
+      end
+
       if numMissed > 0 or numHit == 0 then return end
-      if not SpellInfo then return end
-      
-      local spellName, spellRankString = SpellInfo(spellId)
+
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+      local spellRankString
       if not spellName then return end
       
       local castRank = 0
@@ -1289,14 +1324,33 @@ if hasNampower then
           carnageCheckFrame:Show()
         end
       end
-      
+
+      -- Fire registered SPELL_GO_OTHER hooks
+      if event == "SPELL_GO_OTHER" and pfUI.libdebuff_spell_go_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_go_other_hooks) do
+          fn(spellId, casterGuid, targetGuid)
+        end
+      end
+
+    elseif event == "UNIT_DIED" then
+      if pfUI.libdebuff_unit_died_hooks then
+        for _, fn in pairs(pfUI.libdebuff_unit_died_hooks) do
+          fn(arg1)
+        end
+      end
+
     elseif event == "SPELL_FAILED_OTHER" then
       local casterGuid = arg1
       
       if casterGuid and pfUI.libdebuff_casts[casterGuid] then
         pfUI.libdebuff_casts[casterGuid] = nil
       end
-      
+      if pfUI.libdebuff_spell_failed_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_failed_other_hooks) do
+          fn(casterGuid, arg2)
+        end
+      end
+
     elseif event == "SPELL_CAST_EVENT" then
       -- Capture combo points BEFORE they're consumed
       -- This event fires when YOU cast a spell (before server processes it)
@@ -1313,9 +1367,7 @@ if hasNampower then
         local rec = GetSpellRec(spellId)
         spellName = rec and rec.name or nil
       end
-      if not spellName and SpellInfo then
-        spellName = SpellInfo(spellId)
-      end
+
       
       -- Store pending cast info for libpredict (heal prediction target tracking)
       -- This allows libpredict to resolve the correct target for Nampower queued casts,
@@ -1338,6 +1390,13 @@ if hasNampower then
       if spellName and IsComboPointAbility(spellName) then
         capturedCP = GetComboPoints() or 0
       end
+
+      -- Fire registered SPELL_CAST_EVENT hooks
+      if pfUI.libdebuff_spell_cast_hooks then
+        for _, fn in pairs(pfUI.libdebuff_spell_cast_hooks) do
+          fn(success, spellId, castType, targetGuid)
+        end
+      end
       
     elseif event == "AURA_CAST_ON_SELF" or event == "AURA_CAST_ON_OTHER" then
       local spellId = arg1
@@ -1350,10 +1409,10 @@ if hasNampower then
       local durationMs = arg8
       local auraCapStatus = arg9
       
-      if not SpellInfo or not spellId then return end
+      if not spellId then return end
       if not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000" then return end
       
-      local spellName = SpellInfo(spellId)
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       if not spellName then return end
       
       -- Deduplicate: Ignore if we processed this exact cast recently (within 100ms)
@@ -1515,16 +1574,16 @@ if hasNampower then
         
         -- Notify unitframes of debuff updates (UNIT_AURA doesn't fire on refreshes!)
         -- Check player
-        if UnitExists("player") then
-          local _, playerGuid = UnitExists("player")
+        if GetUnitGUID("player") then
+          local playerGuid = GetUnitGUID("player")
           if playerGuid == targetGuid and pfPlayer then
             pfPlayer.update_aura = true
           end
         end
         
         -- Check target
-        if UnitExists("target") then
-          local _, targetUnitGuid = UnitExists("target")
+        if GetUnitGUID("target") then
+          local targetUnitGuid = GetUnitGUID("target")
           if targetUnitGuid == targetGuid and pfTarget then
             pfTarget.update_aura = true
           end
@@ -1546,6 +1605,7 @@ if hasNampower then
       end
       
       local data = ownDebuffs[targetGuid][spellName]
+      if not data then return end  -- race condition: cleared by DEBUFF_REMOVED between init and use
       
       -- Downrank Protection: Check if existing debuff is still active and has higher rank
       if data.startTime and data.duration and data.rank and rankNum > 0 then
@@ -1585,17 +1645,30 @@ if hasNampower then
         caster = "player",
         stacks = 1
       }
-      
+      if event == "AURA_CAST_ON_SELF" and pfUI.libdebuff_aura_cast_on_self_hooks then
+        for _, fn in pairs(pfUI.libdebuff_aura_cast_on_self_hooks) do
+          fn(spellId, casterGuid, targetGuid)
+        end
+      elseif event == "AURA_CAST_ON_OTHER" and pfUI.libdebuff_aura_cast_on_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_aura_cast_on_other_hooks) do
+          fn(spellId, casterGuid, targetGuid)
+        end
+      end
+
     elseif event == "DEBUFF_ADDED_OTHER" then
       local guid = arg1
-      local displaySlot = arg2  -- This is DISPLAY slot (1-16), NOT aura slot!
+      local displaySlot = arg2  -- Display slot (1-16), compacted
       local spellId = arg3
       local stacks = arg4
-      
+      local auraSlot_0based = arg6  -- Nampower 2.29+: raw slot 0-based (32-47)
+
+      -- Convert 0-based (Nampower event) to 1-based (Lua GetUnitField array)
+      local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
+
       -- Invalidate slot map cache for this GUID
       slotMapCache[guid] = nil
       
-      local spellName = SpellInfo and SpellInfo(spellId)
+      local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       if not spellName then return end
       
       if debugStats.enabled then
@@ -1608,11 +1681,13 @@ if hasNampower then
         return
       end
       
-      -- Find the REAL aura slot (33-48) via GetUnitField
-      local auraSlot = nil
-      local slotMap = GetDebuffSlotMap(guid)
-      if slotMap and slotMap[displaySlot] then
-        auraSlot = slotMap[displaySlot].auraSlot
+      -- Get auraSlot from event parameter (Nampower 2.29+)
+      -- Fallback to GetUnitField lookup if not available
+      if not auraSlot then
+        local slotMap = GetDebuffSlotMap(guid)
+        if slotMap and slotMap[displaySlot] then
+          auraSlot = slotMap[displaySlot].auraSlot
+        end
       end
       
       -- Fallback: Calculate aura slot if GetUnitField didn't work
@@ -1711,22 +1786,31 @@ if hasNampower then
       if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
         pfUI.nameplates:OnAuraUpdate(guid)
       end
-      
+      if pfUI.libdebuff_debuff_added_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_debuff_added_other_hooks) do
+          fn(arg1, arg2, arg3, arg4)
+        end
+      end
+
     elseif event == "DEBUFF_REMOVED_OTHER" then
       local guid = arg1
-      local displaySlot = arg2  -- This is DISPLAY slot (1-16), NOT aura slot!
+      local displaySlot = arg2  -- Display slot (1-16), compacted
       local spellId = arg3
-      
+      local auraSlot_0based = arg6  -- Nampower 2.29+: raw slot 0-based (32-47)
+
+      -- Convert 0-based (Nampower event) to 1-based (Lua GetUnitField array)
+      local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
+
       -- Invalidate slot map cache for this GUID
       slotMapCache[guid] = nil
       
-      local spellName = SpellInfo and SpellInfo(spellId) or "?"
+      local spellName = (GetSpellRecField and GetSpellRecField(spellId, "name")) or "?"
       
       if debugStats.enabled then
         debugStats.debuff_removed = debugStats.debuff_removed + 1
         if IsCurrentTarget(guid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[DEBUFF_REMOVED]|r display=%d %s", 
-            GetDebugTimestamp(), displaySlot, spellName))
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[DEBUFF_REMOVED]|r display=%d aura=%d (0based=%d) %s", 
+            GetDebugTimestamp(), displaySlot, auraSlot or -1, auraSlot_0based or -1, spellName))
         end
       end
       
@@ -1736,15 +1820,17 @@ if hasNampower then
         return
       end
       
-      -- Find the auraSlot using displaySlot mapping
+      -- Get auraSlot from event parameter (Nampower 2.29+)
+      -- Fallback to displayToAura mapping if not available
+      local foundAuraSlot = auraSlot
+      if not foundAuraSlot and displayToAura[guid] and displayToAura[guid][displaySlot] then
+        foundAuraSlot = displayToAura[guid][displaySlot]
+      end
+
       local wasOurs = false
       local removedCasterGuid = nil
-      local foundAuraSlot = nil
-      
-      -- Use displayToAura mapping to find the correct auraSlot
-      if displayToAura[guid] and displayToAura[guid][displaySlot] then
-        foundAuraSlot = displayToAura[guid][displaySlot]
-        
+
+      if foundAuraSlot then
         -- Get ownership info for this specific slot
         if slotOwnership[guid] and slotOwnership[guid][foundAuraSlot] then
           local ownership = slotOwnership[guid][foundAuraSlot]
@@ -1761,7 +1847,7 @@ if hasNampower then
         end
         
         if debugStats.enabled and IsCurrentTarget(guid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d %s wasOurs=%s caster=%s", 
+          DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cffff9900[SLOT CLEARED]|r aura=%d [arg6] %s wasOurs=%s caster=%s", 
             GetDebugTimestamp(), foundAuraSlot, spellName, tostring(wasOurs), DebugGuid(removedCasterGuid)))
         end
       end
@@ -1794,15 +1880,27 @@ if hasNampower then
       if pfUI.nameplates and pfUI.nameplates.OnAuraUpdate then
         pfUI.nameplates:OnAuraUpdate(guid)
       end
-      
+      if pfUI.libdebuff_debuff_removed_other_hooks then
+        for _, fn in pairs(pfUI.libdebuff_debuff_removed_other_hooks) do
+          fn(arg1, arg2, arg3, arg4)
+        end
+      end
+
     elseif event == "PLAYER_TARGET_CHANGED" then
-      -- Nothing special needed - GetUnitField will get fresh data on next query
-      if not UnitExists then return end
-      local _, targetGuid = UnitExists("target")
+      if not GetUnitGUID then return end
+      local targetGuid = GetUnitGUID("target")
       
       if targetGuid and targetGuid ~= "" then
+        -- Invalidate slot map cache on retarget
+        -- Prevents stale slot mappings after untarget/retarget cycles
+        slotMapCache[targetGuid] = nil
         -- Cleanup expired timers for new target
         CleanupExpiredTimers(targetGuid)
+      end
+      if pfUI.libdebuff_player_target_changed_hooks then
+        for _, fn in pairs(pfUI.libdebuff_player_target_changed_hooks) do
+          fn()
+        end
       end
     end
     
@@ -1853,12 +1951,12 @@ _G.SlashCmdList["LIBDEBUGSTATS"] = function(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00No manual slot shifting needed!|r")
     
   elseif msg == "target" then
-    if not UnitExists("target") then
+    if not GetUnitGUID("target") then
       DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[libdebuff]|r No target!")
       return
     end
     
-    local _, guid = UnitExists("target")
+    local guid = GetUnitGUID("target")
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff=== TARGET DEBUFF STATE ===|r")
     DEFAULT_CHAT_FRAME:AddMessage(string.format("GUID: %s", tostring(guid)))
     

@@ -51,7 +51,7 @@ function SlashCmdList.PFFOCUS(msg)
   if msg ~= "" then
     -- Try to resolve GUID via short target swap
     if UnitExists then
-      local _, prevGUID = UnitExists("target")
+      local prevGUID = GetUnitGUID("target")
       local prevPlayer = UnitIsUnit("target", "player")
 
       -- Suppress "Unknown unit" errors during targeting attempts (fired async)
@@ -59,7 +59,7 @@ function SlashCmdList.PFFOCUS(msg)
 
       -- Try exact match first, then prefix match via /tar
       TargetByName(msg, true)
-      local _, guid = UnitExists("target")
+      local guid = GetUnitGUID("target")
 
       if not guid or guid == "0x0000000000000000" then
         -- Fallback: prefix match (like /tar storm -> Stormwind Guard)
@@ -94,7 +94,7 @@ function SlashCmdList.PFFOCUS(msg)
   else
     -- No msg: use current target
     if UnitExists then
-      local _, guid = UnitExists("target")
+      local guid = GetUnitGUID("target")
       if guid and guid ~= "0x0000000000000000" then
         SetFocusByGUID(guid)
         return
@@ -143,11 +143,11 @@ function SlashCmdList.PFCASTFOCUS(msg)
 
   -- For lua functions with GUID: short target swap via GUID
   if hasGUID and func then
-    local _, currentGUID = UnitExists("target")
+    local currentGUID = GetUnitGUID("target")
     local isPlayer = UnitIsUnit("target", "player")
 
     TargetUnit(focusGUID)
-    local _, newGUID = UnitExists("target")
+    local newGUID = GetUnitGUID("target")
 
     if newGUID ~= focusGUID then
       -- Could not target focus, restore and fail

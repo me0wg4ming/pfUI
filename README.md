@@ -1,8 +1,8 @@
 # pfUI - Turtle WoW Edition
 
-[![Version](https://img.shields.io/badge/version-7.6.2-blue.svg)](https://github.com/me0wg4ming/pfUI)
+[![Version](https://img.shields.io/badge/version-8.1.0-blue.svg)](https://github.com/me0wg4ming/pfUI)
 [![Turtle WoW](https://img.shields.io/badge/Turtle%20WoW-1.18.0-brightgreen.svg)](https://turtlecraft.gg/)
-[![SuperWoW](https://img.shields.io/badge/SuperWoW-Required-purple.svg)](https://github.com/balakethelock/SuperWoW)
+[![SuperWoW](https://img.shields.io/badge/SuperWoW-Optional-yellow.svg)](https://github.com/balakethelock/SuperWoW)
 [![Nampower](https://img.shields.io/badge/Nampower-Required-purple.svg)](https://gitea.com/avitasia/nampower)
 [![UnitXP](https://img.shields.io/badge/UnitXP__SP3-Optional-yellow.svg)](https://codeberg.org/konaka/UnitXP_SP3)
 
@@ -11,6 +11,182 @@
 This version includes significant performance improvements, DLL-enhanced features, and TBC spell indicators that work with Turtle WoW's expanded spell library.
 
 > **Looking for TBC support?** Visit the original pfUI by Shagu: [https://github.com/shagu/pfUI](https://github.com/shagu/pfUI)
+
+---
+
+## 🎯 What's New in Version 8.1.0 (March 03, 2026)
+🗡️ Swing Timer Bug Fixes (swingtimer.lua)
+
+Extra attack detection — Sword Specialization, Windfury, Hand of Justice and other extra attacks no longer double the swing timer. Added fallback detection for servers that don't set HITINFO_NOACTION correctly: if AUTO_ATTACK_SELF fires while more than 20% of the current swing remains, it's treated as an extra attack and ignored
+Parry reset — Now uses correct Vanilla mechanic: resets timer to exactly 60% of weapon speed instead of incorrectly subtracting 40% from remaining time
+Slam — Now hard-resets the swing timer from now instead of chaining from the previous nextSwing, which caused inflated swing times (e.g. 3.76s showing as 4.3s)
+
+📏 UnitXP Distance Display (unitxp.lua)
+Two new options under Unit Frames → General → UnitXP Settings:
+
+Show Distance of Target — Displays live distance to target with color-coded thresholds (blue = melee, green = mid range, yellow = 35–41y, red = out of range)
+Hook Distance to Portrait Frame — When enabled, shows the distance text directly on the target frame alongside the existing Behind and LOS indicators, proportionally spaced based on frame height. When disabled, shows as a free-floating movable frame
+
+🎯 Precise Range Check via UnitXP (api.lua, librange.lua, gui.lua, config.lua)
+New options under Unit Frames → General → Group Options:
+
+Range Check Mode dropdown — Vanilla (Spellbook) keeps existing behavior; UnitXP (Precise) bypasses librange entirely and queries UnitXP("distanceBetween") directly
+UnitXP Range Threshold (yards) — Configurable yard value for the UnitXP mode (default: 40). Works for all classes, no spellbook scan required
+When UnitXP mode is active, the librange scan loop is fully disabled — no TargetUnit cycling, no combat interruption, no class restriction
+Fixed UnitInRange referencing librange as an undefined local instead of pfUI.api.librange
+
+<img width="588" height="323" alt="grafik" src="https://github.com/user-attachments/assets/62796696-d117-481b-bd88-4e1e301c6287" />
+
+🔧 Share Module Fix (share.lua)
+
+Fixed import failures for configs containing double quotes (e.g. clickcast macros with CastSpellByName("Nature's Swiftness")). The serialize() function now correctly escapes " in addition to \
+
+---
+
+## 🎯 What's New in Version 8.0.0 (March 02, 2026)
+
+* **Nampower 3.0.0+ now required** — minimum version bumped from 2.41.0
+* **SuperWoW dependency fully removed** — all SuperWoW-specific code paths eliminated:
+  * `UNIT_CASTEVENT` replaced with `SPELL_GO_SELF` hook for Druid Prowl detection
+  * `UnitCastingInfo`/`UnitChannelInfo` SuperWoW fallbacks removed from libcast
+  * `SpellInfo()` (SuperWoW) replaced with `GetSpellRecField()` (Nampower) throughout
+  * `SPELL_HEAL_BY_SELF` CVar (`NP_EnableSpellHealEvents`) now auto-enabled by libdebuff
+* **`GetUnitGUID()` migration** — replaced all `local _, guid = UnitExists(unit)` with `GetUnitGUID(unit)` across 11 files (Nampower 3.0.0 API)
+* **Player castbar icon fix** — icons for custom Turtle WoW spells (e.g. Swift Travel Form) now correctly resolved via `GetSpellRecField`/`GetSpellIconTexture` instead of falling back to the previous spell's icon
+* **Castbar timer rounding** — 1-decimal mode now rounds correctly to match the Blizzard spellbook display (e.g. 2798ms → 2.8s instead of 2.7s)
+* **Nampower warning popup** — updated to be more prominent (`!!!WARNING!!!` in red, non-dismissable via Escape, uses pfUI URL copy frame for download link)
+
+---
+
+## 🎯 What's New in Version 7.8.0 (February 28, 2026)
+
+### 🔗 libdebuff External Hook System (libs/libdebuff.lua)
+
+Full event hook system exposed on `pfUI` global.
+This is for external addons from other creators that want to register callbacks for all events processed by libdebuff without registering duplicate event listeners.
+(always make sure to do this as an optional variant if you want your addon to still work without libdebuff from pfui)
+
+**Usage:**
+```lua
+-- Register a hook (key = your addon name, value = callback function)
+pfUI.libdebuff_spell_go_other_hooks["myaddon"] = function(spellId, casterGuid, targetGuid)
+  -- fired when any other unit completes a spell cast
+end
+
+-- Unregister
+pfUI.libdebuff_spell_go_other_hooks["myaddon"] = nil
+```
+
+**Available Hooks:**
+
+| Hook Table | Callback Signature | Fired When |
+|---|---|---|
+| `pfUI.libdebuff_spell_go_hooks` | `fn(spellId, arg1..arg7)` | `SPELL_GO_SELF` processed (your own casts) |
+| `pfUI.libdebuff_spell_go_other_hooks` | `fn(spellId, casterGuid, targetGuid)` | `SPELL_GO_OTHER` processed |
+| `pfUI.libdebuff_spell_start_self_hooks` | `fn(spellId, casterGuid, targetGuid, castTime)` | `SPELL_START_SELF` processed |
+| `pfUI.libdebuff_spell_start_other_hooks` | `fn(spellId, casterGuid, targetGuid, castTime)` | `SPELL_START_OTHER` processed |
+| `pfUI.libdebuff_spell_failed_other_hooks` | `fn(casterGuid, spellId)` | `SPELL_FAILED_OTHER` processed |
+| `pfUI.libdebuff_spell_cast_hooks` | `fn(success, spellId, castType, targetGuid)` | `SPELL_CAST_EVENT` processed (your own casts) |
+| `pfUI.libdebuff_aura_cast_on_self_hooks` | `fn(spellId, casterGuid, targetGuid)` | `AURA_CAST_ON_SELF` processed |
+| `pfUI.libdebuff_aura_cast_on_other_hooks` | `fn(spellId, casterGuid, targetGuid)` | `AURA_CAST_ON_OTHER` processed |
+| `pfUI.libdebuff_debuff_added_other_hooks` | `fn(guid, luaSlot, spellId, stackCount)` | `DEBUFF_ADDED_OTHER` processed |
+| `pfUI.libdebuff_debuff_removed_other_hooks` | `fn(guid, luaSlot, spellId, stackCount)` | `DEBUFF_REMOVED_OTHER` processed |
+| `pfUI.libdebuff_unit_health_hooks` | `fn(unitToken)` | `UNIT_HEALTH` processed |
+| `pfUI.libdebuff_unit_died_hooks` | `fn(guid)` | `UNIT_DIED` processed (real death only, not Feign Death) |
+| `pfUI.libdebuff_player_target_changed_hooks` | `fn()` | `PLAYER_TARGET_CHANGED` processed |
+
+### 📖 libdebuff Public API (pfUI.api.libdebuff)
+
+For direct data access, `pfUI.api.libdebuff` exposes the following methods:
+
+```lua
+local libdebuff = pfUI.api.libdebuff
+
+-- Get debuff info for a unit by display slot (equivalent to UnitDebuff)
+-- Returns: texture, stacks, debuffType, duration, timeleft, caster, spellId
+libdebuff:UnitDebuff(unit, displaySlot)
+
+-- Check if you have a specific debuff on a unit (by name or spellId)
+-- Returns: texture, stacks, debuffType, duration, timeleft, spellId
+libdebuff:UnitOwnDebuff(unit, id)
+
+-- Get the best/most recent aura cast info for a spell on a target
+-- Returns: { casterGuid, rank, time }
+libdebuff:GetBestAuraCast(guid, spellName)
+
+-- Get all enhanced debuff data for a target GUID (Nampower path)
+-- Returns table of active debuffs with full metadata
+libdebuff:GetEnhancedDebuffs(targetGUID)
+
+-- Get the spell icon texture for a spellId
+-- Returns: texture path string or nil
+libdebuff:GetSpellIcon(spellId)
+
+-- Get duration info for a debuff effect
+-- Returns: duration in seconds
+libdebuff:GetDuration(effect, rank)
+
+-- Get the maximum known rank for a debuff effect
+-- Returns: rank number
+libdebuff:GetMaxRank(effect)
+```
+
+---
+
+## 🎯 What's New in Version 7.7.0 (February 25, 2026)
+
+🗡️ Swingtimer Overhaul (swingtimer.lua)
+Complete rewrite of HS/Cleave detection and StartSwing timing for accurate warrior swing tracking:
+Previously, Heroic Strike and Cleave were detected via SPELL_GO_SELF by matching against a hardcoded spell ID list. The timer calculation used now + speed which caused visible jumps when HS consumed the swing.
+HS/Cleave Detection via SPELL_GO_SELF hook:
+
+✅ HS/Cleave now detected via pfUI.libdebuff_spell_go_hooks["swingtimer"] — reuses libdebuff's existing SPELL_GO_SELF event instead of registering a duplicate event handler
+✅ cachedHSSlots / cachedCleaveSlots — actionbar slots pre-scanned on UNIT_INVENTORY_CHANGED and ACTIONBAR_SLOT_CHANGED, no per-swing scanning
+✅ IsHSOrCleaveQueued() — lightweight check via CheckQueuedAction() on cached slots
+
+StartSwing timing fix:
+
+✅ nextSwing = previousNextSwing + speed instead of now + speed — timer continues from the previous swing boundary, preventing jumps when HS/normal swing alternates
+✅ 100ms dual-wield guard — detects missing isOffhand flag by checking MH swing age, prevents MH swings being misclassified as OH
+
+Ranged swing (Auto Shot / Throw):
+
+✅ Triggered via SPELL_GO_SELF hook (same hook as HS/Cleave) — no separate event registration
+✅ Ranged swing cancels MH bar display while active
+
+
+🛡️ Raid Performance: Buff Cache Seeding (api/unitframes.lua)
+Eliminated tooltip scans for all known buffs on cold cache:
+Previously, DetectBuff checked pfUI_cache.buff_icons for known buff icons. On a cold cache (raid join, reload), every unknown icon triggered a scanner:SetUnitBuff + scanner:Line(1) tooltip scan. With 40 raid frames × 32 buff slots = up to 1280 scans per UNIT_AURA event.
+The Fix:
+
+✅ buff_icons_seeded flag — runs once per login
+✅ On first DetectBuff call, all entries from L["icons"] are pre-loaded into pfUI_cache.buff_icons (icon path → spell name)
+✅ All known buffs (Fort, MotW, Shadow Protection, Mark, etc.) hit the cache immediately — scanner never triggered for them
+✅ Fixed broken cache check: removed L["icons"][detect_name] condition (detect_name was always nil at that point)
+
+
+🏷️ RaidMarkers → MarkTracking Module Rename (modules/marktracking.lua)
+Module renamed and extended with color configuration:
+
+✅ Module renamed from raidmarkers to marktracking for clarity
+✅ Per-marker color configuration — each of the 8 raid markers has individually configurable RGBA color
+✅ Default colors per marker type (skull=red, cross=blue, square=blue, moon=silver, etc.)
+✅ ParseColor() helper for robust color string parsing
+
+
+🐛 Bug Fixes
+Castbar: Channel spell name missing after queued cast (castbar.lua)
+
+✅ Fixed UnitChannelInfo being called with player name string instead of "player" unitstring
+✅ When a channel spell (Arcane Missiles, Icicles) was queued after a normal cast, the castbar showed only "Channeling" without spell name or icon
+✅ UnitChannelInfo now always receives this.unitstr — full spell info returned correctly
+
+Map Reveal: Memory leak and Error 132 crash fix (modules/mapreveal.lua)
+
+✅ explorecaches cleared at the start of every pfWorldMapFrame_Update call
+✅ Previously, texture references accumulated indefinitely — WoW internally recycles textures, causing stale pointers → ACCESS_VIOLATION (Error 132)
+✅ alreadyknown table reused as upvalue instead of allocating a new table every update — reduces GC pressure
 
 ---
 
@@ -1493,7 +1669,7 @@ Same as original pfUI - free to use and modify.
 
 ---
 
-**Version:** 7.6.2
-**Release Date:** February 6, 2026  
+**Version:** 8.1.0
+**Release Date:** March 04, 2026  
 **Compatibility:** Turtle WoW 1.18.0  
 **Status:** Stable

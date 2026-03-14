@@ -2,8 +2,15 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
-  -- check for SuperWoW support (use SUPERWOW_VERSION global)
-  local superwow_active = SUPERWOW_VERSION ~= nil
+  -- Check for Nampower support (preferred)
+  local hasNampower = false
+  if GetNampowerVersion then
+    local major, minor, patch = GetNampowerVersion()
+    patch = patch or 0
+    if major > 2 or (major == 2 and minor > 27) or (major == 2 and minor == 27 and patch >= 2) then
+      hasNampower = true
+    end
+  end
 
   -- Local function references for performance
   local GetTime = GetTime
@@ -94,7 +101,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end end
 
   -- Player GUID for filtering
-  local _, PlayerGUID = UnitExists("player")
+  local PlayerGUID = GetUnitGUID("player")
 
   -- ============================================================================
   -- OPTIMIZATION: Config caching
@@ -111,6 +118,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     cfg.spellname = C.nameplates.spellname == "1"
     cfg.showhp = C.nameplates.showhp == "1"
     cfg.showdebuffs = C.nameplates["showdebuffs"] == "1"
+    cfg.showdebuffs_hostile = C.nameplates["showdebuffs_hostile"] == "1"
+    cfg.showdebuffs_friendly = C.nameplates["showdebuffs_friendly"] == "1"
     cfg.targetzoom = C.nameplates.targetzoom == "1"
     cfg.zoomval = (tonumber(C.nameplates.targetzoomval) or 0.4) + 1
     cfg.width = tonumber(C.nameplates.width) or 120
@@ -470,7 +479,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
   nameplates.OnAuraUpdate = function(self, guid)
     if not guid then return end
     
-    -- GUID is actual GUID (0xF13000...) from SuperWoW/Nampower events
+    -- GUID is actual GUID (0xF13000...) from Nampower events
     local plate = guidRegistry[guid]
     if plate and plate.nameplate then
       -- Mark nameplate for aura update in next OnUpdate cycle
@@ -540,7 +549,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
     elseif event == "PLAYER_TARGET_CHANGED" then
       -- Flag target plate for update via GUID registry
-      local _, targetGuid = UnitExists("target")
+      local targetGuid = GetUnitGUID("target")
       if targetGuid then
         local plate = guidRegistry[targetGuid]
         if plate and plate.nameplate then
@@ -552,7 +561,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
     elseif event == "PLAYER_COMBO_POINTS" or event == "UNIT_COMBO_POINTS" then
       -- Only flag the target plate for combo point update
-      local _, targetGuid = UnitExists("target")
+      local targetGuid = GetUnitGUID("target")
       if targetGuid then
         local plate = guidRegistry[targetGuid]
         if plate and plate.nameplate then
@@ -932,7 +941,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local font_size = C.nameplates.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
 
     -- use superwow unit guid as unitstr if possible
-    if superwow_active and not unitstr then
+    if hasNampower and not unitstr then
       unitstr = plate.parent:GetName(1)
     end
 
@@ -983,7 +992,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     end
 
     -- target indicator
-    if superwow_active and cfg.outcombatstate then
+    if hasNampower and cfg.outcombatstate then
       local guid = plate.parent:GetName(1) or ""
 
       -- determine color based on combat state
@@ -1073,7 +1082,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       local rhp, rhpmax, estimated
       
       -- Try Nampower first for real HP values via GUID
-      local guid = superwow_active and plate.parent:GetName(1) or nil
+      local guid = hasNampower and plate.parent:GetName(1) or nil
       if guid and GetUnitField then
         local npHp = GetUnitField(guid, "health")
         local npMaxHp = GetUnitField(guid, "maxHealth")
@@ -1123,11 +1132,11 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       r, g, b, a = RAID_CLASS_COLORS[class].r, RAID_CLASS_COLORS[class].g, RAID_CLASS_COLORS[class].b, 1
     end
 
-    if superwow_active and unitstr and UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
+    if hasNampower and unitstr and UnitIsTapped(unitstr) and not UnitIsTappedByPlayer(unitstr) then
       r, g, b, a = .5, .5, .5, .8
     end
 
-    if superwow_active and cfg.barcombatstate then
+    if hasNampower and cfg.barcombatstate then
       local guid = plate.parent:GetName(1) or ""
       local color = GetCombatStateColor(guid)
 
@@ -1155,7 +1164,9 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     -- update debuffs
     local index = 1
 
-    if cfg.showdebuffs then
+    local isFriendly = unittype == "FRIENDLY_PLAYER" or unittype == "FRIENDLY_NPC"
+    local showDebuffsForType = cfg.showdebuffs and (isFriendly and cfg.showdebuffs_friendly or (not isFriendly and cfg.showdebuffs_hostile))
+    if showDebuffsForType then
       local verify = string.format("%s:%s", (name or ""), (level or ""))
 
       -- update cached debuffs
@@ -1232,7 +1243,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local nameplate = frame.nameplate
 
     -- Register GUID when plate becomes visible
-    if superwow_active then
+    if hasNampower then
       local guid = frame:GetName(1)
       if guid then
         nameplate.cachedGuid = guid
@@ -1248,7 +1259,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local now = state and state.now or GetTime()
     
     -- Update GUID registry (lightweight, needed for event routing)
-    if superwow_active then
+    if hasNampower then
       local guid = frame:GetName(1)
       if guid and guid ~= nameplate.cachedGuid then
         if nameplate.cachedGuid and guidRegistry[nameplate.cachedGuid] == frame then
@@ -1260,16 +1271,20 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     end
     
     -- PERF: Intelligent throttling based on target/castbar status and plate count
-    local target = state and state.hasTarget and frame:GetAlpha() >= 0.99 or nil
+    -- Use GUID comparison as primary target detection: instant, immune to alpha transitions,
+    -- and immediately correct on de-target (unlike istarget which updates one tick later)
+    local targetGuid = state and state.targetGuid
+    local target = (targetGuid and nameplate.cachedGuid and targetGuid == nameplate.cachedGuid) or
+                   (state and state.hasTarget and frame:GetAlpha() >= 0.99) or nil
     local isCasting = nameplate.castbar and nameplate.castbar:IsShown()
     
     local throttle
     if target or isCasting then
-      throttle = pfUI.throttle:Get("nameplates_target")  -- Default: Fast (20 FPS)
+      throttle = pfUI.throttle:Get("nameplates_target")  -- Default: 50 FPS
     elseif visiblePlateCount > 20 then
-      throttle = pfUI.throttle:Get("nameplates_mass")    -- Default: Slow (5 FPS) for mass pulls
+      throttle = pfUI.throttle:Get("nameplates_mass")    -- Default: 7 FPS for mass pulls
     else
-      throttle = pfUI.throttle:Get("nameplates")         -- Default: Normal (10 FPS)
+      throttle = pfUI.throttle:Get("nameplates")         -- Default: 10 FPS
     end
     
     -- Check for pending event updates (these bypass throttle for immediate response)
@@ -1380,7 +1395,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     -- trigger update when name color changed (includes combat state check)
     local r, g, b = original.name:GetTextColor()
     local inCombatWithPlayer = false
-    if superwow_active and cfg.namefightcolor then
+    if hasNampower and cfg.namefightcolor then
       local guid = nameplate.cachedGuid
       if guid then
         inCombatWithPlayer = UnitAffectingCombat(guid) and UnitAffectingCombat("player")
@@ -1492,10 +1507,14 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       -- Get GUID for CastEvents lookup - use cached GUID when available
       if isTargetPlate then
         targetGUID = state and state.targetGuid
+        if not targetGUID then
+          local guid = GetUnitGUID("target")
+          targetGUID = guid
+        end
       end
       
       -- Use cached GUID for non-target plates
-      if superwow_active and not isTargetPlate then
+      if not isTargetPlate then
         unitstr = nameplate.cachedGuid
       end
       
@@ -1544,32 +1563,32 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
           nameplate.castbar:Show()
         end
       else
-        -- Fallback to API calls if no event data (for non-SuperWoW or target)
+        -- Fallback to API calls only when no GUID available (Nampower not tracking this unit)
         local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
-        
-        -- Try to get cast info for target plates
-        if isTargetPlate and UnitExists("target") then
+
+        if targetGUID then
+          -- We have a GUID = Nampower is authority, no cast means no cast
+          nameplate.castbar:Hide()
+        elseif isTargetPlate and UnitExists("target") then
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
-          if not cast then 
+          if not cast then
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
           end
-        -- NAMPOWER: For non-target plates, use GUID or mobName
         elseif unitstr then
-          -- unitstr is GUID from Nampower
-          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(unitstr)
+          local guid = GetUnitGUID(unitstr)
+          local q = guid or unitstr
+          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(q)
           if not cast then
-            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(unitstr)
+            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(q)
           end
         elseif name then
-          -- Fallback to mob name (for CHAT_MSG castbars)
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(name)
           if not cast then
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(name)
           end
         end
-        
+
         if not cast and not channel then
-          -- No cast data = hide castbar (fixes stuck castbar on FAIL for non-target plates)
           nameplate.castbar:Hide()
         else
           local effect = cast or channel
@@ -1581,21 +1600,20 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
           nameplate.castbar:SetMinMaxValues(0, duration/1000)
           nameplate.castbar:SetValue(cur)
-          -- Show remaining time (countdown), not elapsed time
           local remaining = max - cur
-          if channel then remaining = cur end  -- Channel already counts down
+          if channel then remaining = cur end
           if C.unitframes.castbardecimals == "1" then
             nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
           else
             nameplate.castbar.text:SetText(string.format("%.2f", remaining))
           end
-          
+
           if C.nameplates.spellname == "1" then
             nameplate.castbar.spell:SetText(effect)
           else
             nameplate.castbar.spell:SetText("")
           end
-          
+
           nameplate.castbar:Show()
 
           if texture then
