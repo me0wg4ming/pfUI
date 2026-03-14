@@ -66,7 +66,7 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function()
       elseif this.mode == "MANA" and diff > 0 then
         if UnitMana("player") >= UnitManaMax("player") then
           this.start = nil
-          this.spark:SetAlpha(0)
+          this:Hide()
         elseif this.max ~= 5 and diff > (this.badtick and this.badtick * 1.2 or 5) then
           this.target = 2
         else
@@ -93,6 +93,7 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function()
       this.start, this.max = GetTime(), this.target
       this.target = nil
       this.spark:SetAlpha(1)
+      this:Show()
     end
 
     if not this.start then
