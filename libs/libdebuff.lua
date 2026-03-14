@@ -140,6 +140,15 @@ local slotOwnership = pfUI.libdebuff_slot_ownership
 pfUI.libdebuff_display_to_aura = pfUI.libdebuff_display_to_aura or {}
 local displayToAura = pfUI.libdebuff_display_to_aura
 
+-- spilloverSlots: [targetGUID][auraSlot] = true
+-- Tracks which buff-region slots (1-32) currently hold spillover debuffs.
+-- Populated by IterDebuffs PASS 2 when debuffSlotCount >= 16, then re-checked
+-- on subsequent calls even if debuffSlotCount drops below 16.
+-- Entries are removed when the slot is empty or no longer flagged as debuff.
+-- Cleared on CleanupUnit (unit dies, out of range, etc.)
+pfUI.libdebuff_spillover_slots = pfUI.libdebuff_spillover_slots or {}
+local spilloverSlots = pfUI.libdebuff_spillover_slots
+
 -- pendingCasts: [targetGUID][spellName] = {casterGuid, rank, time}
 -- Temporary storage from SPELL_GO to correlate with DEBUFF_ADDED
 pfUI.libdebuff_pending = pfUI.libdebuff_pending or {}
@@ -645,6 +654,15 @@ local function CleanupUnit(guid)
     displayToAura[guid] = nil
   end
 
+  if spilloverSlots[guid] then
+    if debugStats.enabled then
+      local count = 0
+      for _ in pairs(spilloverSlots[guid]) do count = count + 1 end
+      DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[libdebuff]|r CleanupUnit: removed spilloverSlots for %s (%d slots)", DebugGuid(guid), count))
+    end
+    spilloverSlots[guid] = nil
+  end
+
   if slotMapCache[guid] then
     slotMapCache[guid] = nil
   end
@@ -946,16 +964,6 @@ function libdebuff:IterDebuffs(unit, fn)
   local now = GetTime()
   local count = 0
   local debuffSlotCount = 0
-  local buffSlotCount = 0
-
-  -- Pre-count buff slots to know if spillover scan needed.
-  -- Spillover debuffs stay in buff slots even after debuffSlotCount drops below 16
-  -- (Nampower does not move them back), so we must scan buff slots whenever any are occupied.
-  for auraSlot = 1, 32 do
-    if auras[auraSlot] and auras[auraSlot] ~= 0 then
-      buffSlotCount = buffSlotCount + 1
-    end
-  end
 
   -- ============================================================
   -- PASS 1: Normal debuff slots (33-48)
@@ -1023,14 +1031,29 @@ function libdebuff:IterDebuffs(unit, fn)
   -- ============================================================
   -- PASS 2: Spillover debuffs in buff slots (1-32)
   -- Icon + tooltip only, no timer except for sharedOverwrite debuffs
+  --
+  -- Full scan (slots 1-32) only when debuffSlotCount >= 16.
+  -- Once spillover slots are found, they are cached in spilloverSlots[guid].
+  -- Cached slots are re-checked on every call even if debuffSlotCount drops
+  -- below 16 (Nampower does not move them back to 33-48).
+  -- Slots are removed from cache when the spell is gone or no longer a debuff.
   -- ============================================================
-  if buffSlotCount > 0 or debuffSlotCount >= 16 then
+  local hasKnownSpillovers = spilloverSlots[guid] and next(spilloverSlots[guid])
+  if debuffSlotCount >= 16 or hasKnownSpillovers then
     local auraFlags = GetCachedAuraFlags(guid)
     if auraFlags then
-      for auraSlot = 1, 32 do
-        local spellId = auras[auraSlot]
-        if spellId and spellId ~= 0 then
-          if IsDebuffByFlag(auraFlags, auraSlot) then
+      -- Determine scan range: full 1-32 when slots are full, only cached slots otherwise
+      local fullScan = debuffSlotCount >= 16
+
+      if fullScan then
+        -- Full scan: check all buff-region slots for spillover debuffs
+        for auraSlot = 1, 32 do
+          local spellId = auras[auraSlot]
+          if spellId and spellId ~= 0 and IsDebuffByFlag(auraFlags, auraSlot) then
+            -- Found spillover debuff - cache it and display (store spellId for debug/removal)
+            spilloverSlots[guid] = spilloverSlots[guid] or {}
+            spilloverSlots[guid][auraSlot] = spellId
+
             local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
             if not isHidden then
               local texture = libdebuff:GetSpellIcon(spellId)
@@ -1042,7 +1065,6 @@ function libdebuff:IterDebuffs(unit, fn)
                 local rawStacks = auraApps and auraApps[auraSlot]
                 local stacks = rawStacks and (rawStacks + 1) or 1
 
-                -- sharedOverwrite: show timer regardless of caster
                 local duration, timeleft = nil, -1
                 if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
                   local st = slotTimers[guid] and slotTimers[guid][auraSlot]
@@ -1053,7 +1075,6 @@ function libdebuff:IterDebuffs(unit, fn)
                       timeleft = remaining > 0 and remaining or 0
                     end
                   end
-                  -- pfUI.libdebuff_sharedoverwrite_timers: persistent, written by AURA_CAST, no expiry
                   if not duration and pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName] then
                     local d = pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
                     local remaining = (d.startTime + d.duration) - now
@@ -1082,11 +1103,93 @@ function libdebuff:IterDebuffs(unit, fn)
                 fn(auraSlot, spellId, spellName, texture, stacks, nil, duration, timeleft, isOursSpillover and "player" or nil, isOursSpillover)
               end
             end
+          else
+            -- Slot empty or no longer a debuff - remove from cache
+            if spilloverSlots[guid] and spilloverSlots[guid][auraSlot] then
+              if debugStats.enabled and IsCurrentTarget(guid) then
+                local prevSpellId = spilloverSlots[guid][auraSlot]
+                local prevSpellName = GetSpellRecField and GetSpellRecField(prevSpellId, "name") or "?"
+                DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[libdebuff]|r Spillover REMOVED (full-scan): slot=%d spellId=%s name=%s guid=%s", auraSlot, tostring(prevSpellId), prevSpellName, DebugGuid(guid)))
+              end
+              spilloverSlots[guid][auraSlot] = nil
+            end
           end
+        end
+      else
+        -- Cached-only scan: only re-check slots we previously found spillovers in
+        for auraSlot in pairs(spilloverSlots[guid]) do
+          local spellId = auras[auraSlot]
+          if spellId and spellId ~= 0 and IsDebuffByFlag(auraFlags, auraSlot) then
+            -- Still a spillover debuff - display it
+            local isHidden = pfUI_HiddenBuffsLookup and pfUI_HiddenBuffsLookup[spellId]
+            if not isHidden then
+              local texture = libdebuff:GetSpellIcon(spellId)
+              if texture then
+                local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+                if not spellName or spellName == "" then
+                  spellName = GetSpellNameAndRank and GetSpellNameAndRank(spellId) or "Unknown"
+                end
+                local rawStacks = auraApps and auraApps[auraSlot]
+                local stacks = rawStacks and (rawStacks + 1) or 1
+
+                local duration, timeleft = nil, -1
+                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                  local st = slotTimers[guid] and slotTimers[guid][auraSlot]
+                  if st and st.duration and st.duration > 0 then
+                    local remaining = (st.startTime + st.duration) - now
+                    if remaining > -1 then
+                      duration = st.duration
+                      timeleft = remaining > 0 and remaining or 0
+                    end
+                  end
+                  if not duration and pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName] then
+                    local d = pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
+                    local remaining = (d.startTime + d.duration) - now
+                    if remaining > -1 then
+                      duration = d.duration
+                      timeleft = remaining > 0 and remaining or 0
+                    end
+                  end
+                  if not duration and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+                    local d = ownDebuffs[guid][spellName]
+                    local remaining = (d.startTime + d.duration) - now
+                    if remaining > -1 then
+                      duration = d.duration
+                      timeleft = remaining > 0 and remaining or 0
+                    end
+                  end
+                end
+
+                local isOursSpillover = false
+                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                  local sot = pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
+                  isOursSpillover = sot and sot.isOurs or false
+                end
+
+                count = count + 1
+                fn(auraSlot, spellId, spellName, texture, stacks, nil, duration, timeleft, isOursSpillover and "player" or nil, isOursSpillover)
+              end
+            end
+          else
+            -- Slot empty or no longer a debuff - remove from cache
+            if debugStats.enabled and IsCurrentTarget(guid) then
+              local prevSpellId = spilloverSlots[guid][auraSlot]
+              local prevSpellName = GetSpellRecField and GetSpellRecField(prevSpellId, "name") or "?"
+              DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[libdebuff]|r Spillover REMOVED (cached-scan): slot=%d spellId=%s name=%s guid=%s", auraSlot, tostring(prevSpellId), prevSpellName, DebugGuid(guid)))
+            end
+            spilloverSlots[guid][auraSlot] = nil
+          end
+        end
+        -- Clean up empty cache entry
+        if not next(spilloverSlots[guid]) then
+          if debugStats.enabled and IsCurrentTarget(guid) then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[libdebuff]|r Spillover cache cleared (all slots gone) for %s", DebugGuid(guid)))
+          end
+          spilloverSlots[guid] = nil
         end
       end
     end -- if auraFlags
-  end -- if buffSlotCount > 0 or debuffSlotCount >= 16
+  end -- if debuffSlotCount >= 16 or hasKnownSpillovers
 
   return count
 end
@@ -2038,7 +2141,7 @@ end
                 if pfUI.buff and pfUI.buff:GetScript("OnEvent") then
                   pfUI.buff:GetScript("OnEvent")()
                 end
-                -- Also notify player unitframe via libdebuff_on_unit_updated
+                -- Also notify player unitframe
               end
             end
           else
@@ -2312,8 +2415,9 @@ end
           DEFAULT_CHAT_FRAME:AddMessage(string.format("%s |cff00ffff[AURA_CAST]|r %s rank=%d target=%s isOurs=%s dur=%.1fs",
             GetDebugTimestamp(), spellName, rankNum, DebugGuid(targetGuid), tostring(isOurs), duration))
         end
-      end -- if targetGuid and duration > 0
-
+      end
+      
+      
       -- APPLICATOR REFRESH: Refresh passive proc debuffs when applicator spells hit
       -- Run for ALL casters (not just isOurs) - RefreshApplicatorDebuffs internally
       -- filters to only refresh debuffs that belong to us (myGuid or shared)
