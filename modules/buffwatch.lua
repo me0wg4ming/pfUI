@@ -605,5 +605,13 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
         tdebuffbar:RefreshPosition()
       end
     end)
+
+    -- Refresh on target change so new target's debuffs show immediately
+    local targetChangeFrame = CreateFrame("Frame", nil, UIParent)
+    targetChangeFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+    targetChangeFrame:SetScript("OnEvent", function()
+      RefreshBuffBarFrame(tdebuffbar)
+      tdebuffbar:RefreshPosition()
+    end)
   end
 end)
