@@ -264,6 +264,7 @@ function pfUI:LoadConfig()
   pfUI:UpdateConfig("unitframes", nil,           "raidmarkercolor_skull",    "1,1,1,1")
   pfUI:UpdateConfig("unitframes", nil,           "abbrevnum",        "1")
   pfUI:UpdateConfig("unitframes", nil,           "castbardecimals",  "2")
+  pfUI:UpdateConfig("unitframes", nil,           "castbardecimalscur","2")
   pfUI:UpdateConfig("unitframes", nil,           "abbrevname",       "1")
 
   -- Nampower Settings
