@@ -66,6 +66,7 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function()
       elseif this.mode == "MANA" and diff > 0 then
         if UnitMana("player") >= UnitManaMax("player") then
           this.start = nil
+          this.spark:SetAlpha(0)
           this:Hide()
         elseif this.max ~= 5 and diff > (this.badtick and this.badtick * 1.2 or 5) then
           this.target = 2
@@ -103,6 +104,12 @@ pfUI:RegisterModule("energytick", "vanilla:tbc", function()
     this.current = GetTime() - this.start
 
     if this.current > this.max then
+      -- Don't restart tick timer if mana is full
+      if this.mode == "MANA" and UnitMana("player") >= UnitManaMax("player") then
+        this.start = nil
+        this.spark:SetAlpha(0)
+        return
+      end
       this.start, this.max, this.current = GetTime(), getAdjustedTickTimer(), 0
     end
 
