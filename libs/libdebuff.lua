@@ -964,6 +964,7 @@ function libdebuff:IterDebuffs(unit, fn)
   local now = GetTime()
   local count = 0
   local debuffSlotCount = 0
+  local ls = libspelldata()  -- cache once per call, not per slot iteration
 
   -- ============================================================
   -- PASS 1: Normal debuff slots (33-48)
@@ -1011,7 +1012,7 @@ function libdebuff:IterDebuffs(unit, fn)
 
           -- Fallback: ownDebuffs for own spells when slotTimers missing
           -- For sharedOverwrite debuffs: also use ownDebuffs even if not ours (only 1 instance exists)
-          local isSelfOverwrite = libspelldata() and libspelldata():IsSharedOverwrite(spellName)
+          local isSelfOverwrite = ls and ls:IsSharedOverwrite(spellName)
           if not duration and (isOurs or isSelfOverwrite) and ownDebuffs[guid] and ownDebuffs[guid][spellName] then
             local d = ownDebuffs[guid][spellName]
             local remaining = (d.startTime + d.duration) - now
@@ -1066,7 +1067,7 @@ function libdebuff:IterDebuffs(unit, fn)
                 local stacks = rawStacks and (rawStacks + 1) or 1
 
                 local duration, timeleft = nil, -1
-                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                if ls and ls:IsSharedOverwrite(spellName) then
                   local st = slotTimers[guid] and slotTimers[guid][auraSlot]
                   if st and st.duration and st.duration > 0 then
                     local remaining = (st.startTime + st.duration) - now
@@ -1094,7 +1095,7 @@ function libdebuff:IterDebuffs(unit, fn)
                 end
 
                 local isOursSpillover = false
-                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                if ls and ls:IsSharedOverwrite(spellName) then
                   local sot = pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
                   isOursSpillover = sot and sot.isOurs or false
                 end
@@ -1133,7 +1134,7 @@ function libdebuff:IterDebuffs(unit, fn)
                 local stacks = rawStacks and (rawStacks + 1) or 1
 
                 local duration, timeleft = nil, -1
-                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                if ls and ls:IsSharedOverwrite(spellName) then
                   local st = slotTimers[guid] and slotTimers[guid][auraSlot]
                   if st and st.duration and st.duration > 0 then
                     local remaining = (st.startTime + st.duration) - now
@@ -1161,7 +1162,7 @@ function libdebuff:IterDebuffs(unit, fn)
                 end
 
                 local isOursSpillover = false
-                if libspelldata() and libspelldata():IsSharedOverwrite(spellName) then
+                if ls and ls:IsSharedOverwrite(spellName) then
                   local sot = pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
                   isOursSpillover = sot and sot.isOurs or false
                 end
