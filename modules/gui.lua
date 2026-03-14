@@ -957,6 +957,11 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "20x2:" .. "20x2",
         "40x1:" .. "40x1",
       },
+      ["uf_raidfill"] = {
+        "HORIZONTAL:" .. T["Horizontal"],
+        "VERTICAL:" .. T["Vertical 1->5"],
+        "VERTICALR:" .. T["Vertical 5->1"],
+      },
       ["uf_powerbar_position"] = {
         "TOPLEFT:" .. T["Left"],
         "TOP:" .. T["Center"],
@@ -2222,21 +2227,25 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           CreateConfig(U[c], T["Layout"], nil, nil, "header")
           CreateConfig(U["raid"], T["Raid Padding"], C.unitframes[c], "raidpadding")
           CreateConfig(U["raid"], T["Raid Layout"], C.unitframes[c], "raidlayout", "dropdown", pfUI.gui.dropdowns.uf_raidlayout)
-          CreateConfig(U["raid"], T["Raid Fill Direction"], C.unitframes[c], "raidfill", "dropdown", pfUI.gui.dropdowns.orientation)
+          CreateConfig(U["raid"], T["Raid Fill Direction"], C.unitframes[c], "raidfill", "dropdown", pfUI.gui.dropdowns.uf_raidfill)
         end
 
         CreateConfig(U[c], T["Healthbar"], nil, nil, "header")
         CreateConfig(U[c], T["Health Bar Width"], C.unitframes[c], "width")
         CreateConfig(U[c], T["Health Bar Height"], C.unitframes[c], "height")
+        CreateConfig(U[c], T["Short Name length"], C.unitframes[c], "txthpshortnamelen")
         CreateConfig(U[c], T["Left Text"], C.unitframes[c], "txthpleft", "dropdown", pfUI.gui.dropdowns.uf_texts)
         CreateConfig(U[c], T["Left Text X Offset"], C.unitframes[c], "txthpleftoffx")
         CreateConfig(U[c], T["Left Text Y Offset"], C.unitframes[c], "txthpleftoffy")
+        CreateConfig(U[c], T["Left Text Font Size Delta"], C.unitframes[c], "txthpleftsizedelta")
         CreateConfig(U[c], T["Center Text"], C.unitframes[c], "txthpcenter", "dropdown", pfUI.gui.dropdowns.uf_texts)
         CreateConfig(U[c], T["Center Text X Offset"], C.unitframes[c], "txthpcenteroffx")
         CreateConfig(U[c], T["Center Text Y Offset"], C.unitframes[c], "txthpcenteroffy")
+        CreateConfig(U[c], T["Center Text Font Size Delta"], C.unitframes[c], "txthpcentersizedelta")
         CreateConfig(U[c], T["Right Text"], C.unitframes[c], "txthpright", "dropdown", pfUI.gui.dropdowns.uf_texts)
         CreateConfig(U[c], T["Right Text X Offset"], C.unitframes[c], "txthprightoffx")
         CreateConfig(U[c], T["Right Text Y Offset"], C.unitframes[c], "txthprightoffy")
+        CreateConfig(U[c], T["Right Text Font Size Delta"], C.unitframes[c], "txthprightsizedelta")
         CreateConfig(U[c], T["Invert Health Bar"], C.unitframes[c], "invert_healthbar", "checkbox")
         CreateConfig(U[c], T["Enable Vertical Health Bar"], C.unitframes[c], "verticalbar", "checkbox")
 
