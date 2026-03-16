@@ -2428,6 +2428,8 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["buff"], T["Number Of Debuffs Per Row"], C.buffs, "debuffrowsize")
       CreateConfig(U["buff"], T["Show Duration Inside Buff"], C.buffs, "textinside", "checkbox")
       CreateConfig(U["buff"], T["Buff Font Size"], C.buffs, "fontsize")
+      CreateConfig(Reload, T["Show More Than 32 Buffs"], C.buffs, "showoverflow", "checkbox")
+      CreateConfig(Reload, T["Show More Than 16 Debuffs"], C.buffs, "showspillover", "checkbox")
     end)
 
     CreateGUIEntry(T["Buffs"], T["Totem Icons"], function()

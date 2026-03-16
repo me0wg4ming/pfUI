@@ -248,7 +248,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     end
 
     -- Clear Nampower data on all buttons
-    for i=1,48 do
+    for i=1,table.getn(pfUI.buff.buffs.buttons) do
       local btn = pfUI.buff.buffs.buttons[i]
       if btn then
         btn.np_texture = nil
@@ -260,7 +260,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
         btn.np_duration = nil
       end
     end
-    for i=1,16 do
+    for i=1,table.getn(pfUI.buff.debuffs.buttons) do
       local btn = pfUI.buff.debuffs.buttons[i]
       if btn then
         btn.np_texture = nil
@@ -309,10 +309,10 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
     end
 
     -- Refresh display
-    for i=1,48 do
+    for i=1,table.getn(pfUI.buff.buffs.buttons) do
       if pfUI.buff.buffs.buttons[i] then RefreshBuffButton(pfUI.buff.buffs.buttons[i]) end
     end
-    for i=1,16 do
+    for i=1,table.getn(pfUI.buff.debuffs.buttons) do
       if pfUI.buff.debuffs.buttons[i] then RefreshBuffButton(pfUI.buff.debuffs.buttons[i]) end
     end
     if C.buffs.separateweapons == "1" then
@@ -358,7 +358,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
 
     -- Buff timers
     local buttons = pfUI.buff.buffs.buttons
-    for i = 1, 48 do
+    for i = 1, table.getn(pfUI.buff.buffs.buttons) do
       local buff = buttons[i]
       if buff and buff:IsShown() then
         local timeleft, stacks = 0, 0
@@ -398,7 +398,7 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
 
     -- Debuff timers
     buttons = pfUI.buff.debuffs.buttons
-    for i = 1, 16 do
+    for i = 1, table.getn(pfUI.buff.debuffs.buttons) do
       local buff = buttons[i]
       if buff and buff:IsShown() then
         local timeleft, stacks = 0, 0
@@ -452,7 +452,8 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   pfUI.buff.buffs = CreateFrame("Frame", "pfBuffFrame", UIParent)
   pfUI.buff.buffs.buttons = {}
   if C.buffs.buffs == "1" then
-    for i=1,48 do
+    local maxBuffs = (C.buffs.showoverflow == "1") and 48 or 32
+    for i=1,maxBuffs do
       pfUI.buff.buffs.buttons[i] = CreateBuffButton(i, "HELPFUL")
     end
   else
@@ -463,7 +464,8 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   pfUI.buff.debuffs = CreateFrame("Frame", "pfDebuffFrame", UIParent)
   pfUI.buff.debuffs.buttons = {}
   if C.buffs.debuffs == "1" then
-    for i=1,16 do
+    local maxDebuffs = (C.buffs.showspillover == "1") and 32 or 16
+    for i=1,maxDebuffs do
       pfUI.buff.debuffs.buttons[i] = CreateBuffButton(i, "HARMFUL")
     end
   else
@@ -538,11 +540,11 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
       RemoveMovable(pfUI.buff.wepbuffs)
     end
 
-    for i=1,48 do
+    for i=1,table.getn(pfUI.buff.buffs.buttons) do
       if pfUI.buff.buffs.buttons[i] then pfUI.buff:UpdateConfigBuffButton(pfUI.buff.buffs.buttons[i]) end
     end
 
-    for i=1,16 do
+    for i=1,table.getn(pfUI.buff.debuffs.buttons) do
       if pfUI.buff.debuffs.buttons[i] then pfUI.buff:UpdateConfigBuffButton(pfUI.buff.debuffs.buttons[i]) end
     end
 

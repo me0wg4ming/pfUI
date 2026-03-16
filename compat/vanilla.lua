@@ -81,6 +81,7 @@ do -- RunMacroText
 
   function RunMacroText(text)
     obj.text = text
+    obj.chatFrame = DEFAULT_CHAT_FRAME
     ChatEdit_ParseText(obj, 1)
   end
 end

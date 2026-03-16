@@ -1040,6 +1040,9 @@ function libdebuff:IterDebuffs(unit, fn)
   -- Slots are removed from cache when the spell is gone or no longer a debuff.
   -- ============================================================
   local hasKnownSpillovers = spilloverSlots[guid] and next(spilloverSlots[guid])
+  if pfUI_config and pfUI_config.buffs and pfUI_config.buffs.showspillover == "0" then
+    return count
+  end
   if debuffSlotCount >= 16 or hasKnownSpillovers then
     local auraFlags = GetCachedAuraFlags(guid)
     if auraFlags then
@@ -1262,6 +1265,9 @@ function libdebuff:IterBuffs(unit, fn)
 
   -- PASS 2: Buff-spillover into debuff slots (33-48)
   -- Only when all 32 buff slots are occupied
+  if pfUI_config and pfUI_config.buffs and pfUI_config.buffs.showoverflow == "0" then
+    return count
+  end
   if buffSlotCount >= 32 and auraFlags then
     for auraSlot = 33, 48 do
       local spellId = auras[auraSlot]
