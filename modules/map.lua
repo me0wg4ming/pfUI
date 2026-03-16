@@ -17,7 +17,7 @@ pfUI:RegisterModule("map", "vanilla:tbc", function ()
   -- hook SetMapToCurrentZone to allow suppression
   local pfOrigSetMapToCurrentZone = _G.SetMapToCurrentZone
   _G.SetMapToCurrentZone = function()
-    if C.appearance.worldmap.autozoneswitch == "0" then return end
+    if C.appearance.worldmap.autozoneswitch == "0" and WorldMapFrame:IsShown() then return end
     pfOrigSetMapToCurrentZone()
   end
 
@@ -61,6 +61,9 @@ pfUI:RegisterModule("map", "vanilla:tbc", function ()
 
         -- set back to default scale
         WorldMapFrame:SetScale(scale or .85)
+
+        -- always switch to current zone when opening the map
+        pfOrigSetMapToCurrentZone()
       end)
 
       HookScript(WorldMapFrame, "OnMouseWheel", function()
