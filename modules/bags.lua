@@ -95,7 +95,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   pfUI.bag:RegisterEvent("BAG_CLOSED")
   pfUI.bag:RegisterEvent("BANKFRAME_CLOSED")
   pfUI.bag:RegisterEvent("BANKFRAME_OPENED")
-  pfUI.bag:RegisterEvent("BAG_UPDATE_COOLDOWN")
+  pfUI.bag:RegisterEvent("ITEM_LOCK_CHANGED")
   pfUI.bag:RegisterEvent("SPELLS_CHANGED")
   pfUI.bag:RegisterEvent("MERCHANT_CLOSED")
 
