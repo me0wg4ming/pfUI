@@ -97,6 +97,16 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local threatMemory = {}   -- guid -> true if mob had player targeted
   local debuffSeen = {}     -- reusable table for debuff tracking (avoid GC churn)
 
+  -- PERF: Module-level IterDebuffs callback to avoid closure allocation per call
+  local _iterDebuffCount = 0
+  local function iterDebuffCallback(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
+    if not texture or string.find(texture, "QuestionMark") then return end
+    _iterDebuffCount = _iterDebuffCount + 1
+    if _iterDebuffCount > 16 then return end
+    local b = debuffDisplayBuf[_iterDebuffCount]
+    b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft = effect, texture, stacks, dtype, duration, timeleft
+  end
+
   -- PERF: Track visible plate count for adaptive throttling
   local visiblePlateCount = 0
   local lastVisibleCheck = 0
@@ -683,8 +693,14 @@ end
   end)
 
   nameplates:SetScript("OnUpdate", function()
+    -- PERF: Throttle central OnUpdate to ~80 FPS (0.0125s)
+    -- Saves ~44% calls at 144 FPS while staying above 50 FPS target-plate rate
+    local now = GetTime()
+    if (this.frameTick or 0) + 0.0125 > now then return end
+    this.frameTick = now
+
     -- PERF: Cache GetTime() once per frame
-    frameState.now = GetTime()
+    frameState.now = now
     frameState.hasTarget, frameState.targetGuid = UnitExists("target")
     frameState.hasMouseover = UnitExists("mouseover")
 
@@ -1282,13 +1298,13 @@ end
     local isFriendly = unittype == "FRIENDLY_PLAYER" or unittype == "FRIENDLY_NPC"
     local showDebuffsForType = cfg.showdebuffs and (isFriendly and cfg.showdebuffs_friendly or (not isFriendly and cfg.showdebuffs_hostile))
     if showDebuffsForType then
-      -- Cache verify string - only recompute when name/level changes
-      local verify = plate.cachedVerify
-      local newVerify = (name or "") .. ":" .. (level or "")
-      if newVerify ~= verify then
-        verify = newVerify
-        plate.cachedVerify = verify
+      -- PERF: Cache verify string - only allocate new string when name/level actually changes
+      if name ~= plate.cachedVerifyName or level ~= plate.cachedVerifyLevel then
+        plate.cachedVerifyName = name
+        plate.cachedVerifyLevel = level
+        plate.cachedVerify = (name or "") .. ":" .. (level or "")
       end
+      local verify = plate.cachedVerify
 
       -- update cached debuffs
       if C.nameplates["guessdebuffs"] == "1" and unitstr then
@@ -1302,13 +1318,9 @@ end
       for i = 1, 16 do debuffDisplayBuf[i].effect = nil end  -- clear previous
       if unitstr and libdebuff and libdebuff.IterDebuffs and GetUnitGUID then
 
-        libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
-          if not texture or string.find(texture, "QuestionMark") then return end
-          debuffCount = debuffCount + 1
-          if debuffCount > 16 then return end
-          local b = debuffDisplayBuf[debuffCount]
-          b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft = effect, texture, stacks, dtype, duration, timeleft
-        end)
+        _iterDebuffCount = 0
+        libdebuff:IterDebuffs(unitstr, iterDebuffCallback)
+        debuffCount = _iterDebuffCount
       elseif unitstr and libdebuff then
         for i = 1, 16 do
           local effect, rank, texture, stacks, dtype, duration, timeleft

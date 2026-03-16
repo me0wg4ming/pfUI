@@ -52,10 +52,14 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
         end
 
       if buff.mode == "MAINHAND" then
-        buff.texture:SetTexture(GetInventoryItemTexture("player", 16))
+        local tex = GetInventoryItemTexture("player", 16)
+        buff.texture:SetTexture(tex)
+        if not tex then pfUI.buff.wepbuffs.pendingRetry = true end
         buff.backdrop:SetBackdropBorderColor(GetItemQualityColor(GetInventoryItemQuality("player", 16) or 1))
       elseif buff.mode == "OFFHAND" then
-        buff.texture:SetTexture(GetInventoryItemTexture("player", 17))
+        local tex = GetInventoryItemTexture("player", 17)
+        buff.texture:SetTexture(tex)
+        if not tex then pfUI.buff.wepbuffs.pendingRetry = true end
         buff.backdrop:SetBackdropBorderColor(GetItemQualityColor(GetInventoryItemQuality("player", 17) or 1))
       end
 
@@ -316,6 +320,12 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
         RefreshBuffButton(pfUI.buff.wepbuffs.buttons[i])
       end
     end
+
+    -- If weapon icon textures were nil (e.g. after /reload), schedule a retry
+    if pfUI.buff.wepbuffs.pendingRetry then
+      pfUI.buff.wepbuffs.pendingRetry = nil
+      pfUI.buff.wepbuffs.retryAt = GetTime() + 0.5
+    end
   end)
 
   -- ============================================================================
@@ -323,6 +333,21 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
   -- ============================================================================
   pfUI.buff:SetScript("OnUpdate", function()
     local now = GetTime()
+
+    -- Retry weapon icon textures that were nil on initial load (e.g. after /reload)
+    if pfUI.buff.wepbuffs.retryAt and now >= pfUI.buff.wepbuffs.retryAt then
+      pfUI.buff.wepbuffs.retryAt = nil
+      if C.buffs.separateweapons == "1" then
+        for i=1,2 do
+          if pfUI.buff.wepbuffs.buttons[i] then RefreshBuffButton(pfUI.buff.wepbuffs.buttons[i]) end
+        end
+      else
+        for i=1,pfUI.buff.wepbuffs.count do
+          if pfUI.buff.buffs.buttons[i] then RefreshBuffButton(pfUI.buff.buffs.buttons[i]) end
+        end
+      end
+    end
+
     if not this.nextUpdate then this.nextUpdate = now + 0.1 end
     if this.nextUpdate > now then return end
     this.nextUpdate = now + 0.1
