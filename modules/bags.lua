@@ -95,7 +95,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   pfUI.bag:RegisterEvent("BAG_CLOSED")
   pfUI.bag:RegisterEvent("BANKFRAME_CLOSED")
   pfUI.bag:RegisterEvent("BANKFRAME_OPENED")
-  pfUI.bag:RegisterEvent("BAG_UPDATE_COOLDOWN")
+  pfUI.bag:RegisterEvent("ITEM_LOCK_CHANGED")
   pfUI.bag:RegisterEvent("SPELLS_CHANGED")
   pfUI.bag:RegisterEvent("MERCHANT_CLOSED")
 
@@ -491,6 +491,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       else
         local bagslot = pfUI.bags[bag].slots[slot].frame
         bagslot.cd = _G[bagslot:GetName().."Cooldown"]
+        bagslot.cd.pfCooldownStyleAnimation = 1
         bagslot.cd.pfCooldownType = "ALL"
       end
 
