@@ -131,6 +131,21 @@ local function ResolveSpellString(text, rec)
 
   -- 0) Cross-spell references: $<spellId><var><idx>
   --    e.g. $3025s1 = get $s1 from spell 3025
+  -- Cross-spell procCharges: $<spellId>u  e.g. $52369u = procCharges of spell 52369
+  text = string.gsub(text, "%$(%d%d+)u", function(refId)
+    refId = tonumber(refId)
+    if not GetSpellRec then return "0" end
+    local refOk, refRec = pcall(GetSpellRec, refId, 1)
+    if not refOk or not refRec then return "0" end
+    if refRec.procCharges and refRec.procCharges > 0 then
+      return tostring(refRec.procCharges)
+    end
+    if refRec.stackAmount and refRec.stackAmount > 0 then
+      return tostring(refRec.stackAmount)
+    end
+    return "0"
+  end)
+
   -- Cross-spell duration: $<spellId>d  e.g. $49560d = duration of spell 49560
   text = string.gsub(text, "%$(%d%d+)d", function(refId)
     refId = tonumber(refId)
@@ -311,6 +326,16 @@ local function ResolveSpellString(text, rec)
     text = string.gsub(text, "%$n", tostring(rec.procChance))
   else
     text = string.gsub(text, "%$n", "")
+  end
+
+  -- 15b) $u - proc charges / stack threshold
+  local uVal = (rec.procCharges and rec.procCharges > 0 and rec.procCharges)
+            or (rec.stackAmount and rec.stackAmount > 0 and rec.stackAmount)
+            or nil
+  if uVal then
+    text = string.gsub(text, "%$u", tostring(uVal))
+  else
+    text = string.gsub(text, "%$u", "")
   end
 
   -- 16) $h (no index) - proc chance (same as $n)
