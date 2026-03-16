@@ -353,6 +353,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       if (this.tick or 0) > now then return end
       this.tick = now + 0.1
 
+      -- Don't hide while unlock mode is active
+      if pfUI.unlock and pfUI.unlock:IsShown() then return end
+
       local hasTarget = UnitExists("target")
         and UnitCanAttack("player", "target")
         and not UnitIsDead("target")
