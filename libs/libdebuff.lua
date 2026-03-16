@@ -2656,9 +2656,12 @@ end
       local pending = pendingSlotTimer[guid] and pendingSlotTimer[guid][spellName]
       if pending and (now - pending.time) < 2.0 then
         -- Fresh pending timer from AURA_CAST - commit to slot, preserving highest rank
-        local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
+        -- Only preserve rank if the existing slot entry is for the SAME spell (prevents
+        -- stale rank from a different spell that held this slot bleeding into the new entry)
+        local existingEntry = slotTimers[guid][auraSlot]
+        local existingRank = (existingEntry and existingEntry.spellName == spellName and existingEntry.rank) or 0
         local writeRank = ((pending.rank or 0) > existingRank) and (pending.rank or 0) or existingRank
-        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = writeRank, isOurs = pending.isOurs or false }
+        slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = writeRank, isOurs = pending.isOurs or false, spellName = spellName }
         pfUI.libdebuff_fire_unit_updated(guid)
         pendingSlotTimer[guid][spellName] = nil
         if debugStats.enabled and IsCurrentTarget(guid) then
