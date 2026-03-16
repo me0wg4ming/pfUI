@@ -552,13 +552,13 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       itemId = info.itemId
       -- GetContainerItemInfo returns negative values for charged items (Nampower behaviour).
       -- Positive = real stack count, negative = charges. Use abs() for display either way.
-      local _, ciCount = GetContainerItemInfo(bag, slot)
+      local _, ciCount, ciLocked = GetContainerItemInfo(bag, slot)
       if ciCount and ciCount ~= 0 then
         count = math.abs(ciCount)
       else
         count = info.stackCount
       end
-      locked = (info.flags and bit.band(info.flags, 4) ~= 0) and 1 or nil
+      locked = ciLocked
       quality = GetItemStatsField(itemId, "quality")
       local itemClass = GetItemStatsField(itemId, "class")
       itype = (itemClass == 12) and "Quest" or nil
@@ -839,14 +839,7 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       if bag == -2 and pfUI.bag.showKeyring == true then bagsize = GetKeyRingSize() end
       for slot=1, bagsize do
         if pfUI.bags[bag] and pfUI.bags[bag].slots[slot] and pfUI.bags[bag].slots[slot].frame:IsShown() then
-          local locked
-          if GetBagItem and bag >= 0 and bag <= 4 then
-            local info = GetBagItem(bag, slot)
-            locked = (info and info.flags and bit.band(info.flags, 4) ~= 0) and 1 or nil
-          else
-            local _, _, l, _ = GetContainerItemInfo(bag, slot)
-            locked = l
-          end
+          local _, _, locked = GetContainerItemInfo(bag, slot)
           if pfUI.bags[bag].slots[slot].locked ~= locked then
             SetItemButtonDesaturated(pfUI.bags[bag].slots[slot].frame, locked, 0.5, 0.5, 0.5)
             if pfUI.unusable then pfUI.unusable:UpdateSlot(bag, slot) end
