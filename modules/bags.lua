@@ -43,6 +43,11 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
     local btn = s.frame
     if not btn then return end
 
+    -- auto-unlock if slot is empty
+    if not btn.hasItem and IL_IsLocked(bag, slot) then
+      IL_Toggle(bag, slot)
+    end
+
     local key = IL_Key(bag, slot)
     if not itemlock_overlays[key] then
       local ov = CreateFrame("Frame", nil, btn)
