@@ -452,25 +452,9 @@ end
 pfUI.libdebuff_slotmapcache = pfUI.libdebuff_slotmapcache or {}
 local slotMapCache = pfUI.libdebuff_slotmapcache
 
--- auraFieldCache: tick-based cache for GetUnitField("aura") and ("auraApplications")
--- Safe because we only cache within a single GetTime() tick.
--- GetUnitField may return internal C-buffer references that become invalid when a
--- different GUID is queried -- caching per-tick avoids cross-GUID aliasing while
--- still de-duplicating multiple IterDebuffs/IterBuffs calls for the same GUID in
--- one frame (unitframes + nameplates + buffwatch all firing on the same event).
-local auraFieldCache = {}         -- [guid] = aura table
-local auraAppsFieldCache = {}     -- [guid] = auraApplications table
-local auraFieldCacheTick = {}     -- [guid] = GetTime() when cached
-
-local function GetCachedAuraField(guid)
-  local now = GetTime()
-  if auraFieldCacheTick[guid] ~= now then
-    auraFieldCache[guid]     = GetUnitField(guid, "aura")
-    auraAppsFieldCache[guid] = GetUnitField(guid, "auraApplications")
-    auraFieldCacheTick[guid] = now
-  end
-  return auraFieldCache[guid], auraAppsFieldCache[guid]
-end
+-- auraFieldCache: stub table so cleanup code (auraFieldCache[guid] = nil) doesn't error
+-- GetUnitField returns internal buffer references that can't be safely cached across GUIDs
+local auraFieldCache = {}
 
 local function GetCachedAuraFlags(guid)
   if not guid or not GetUnitField then return nil end
@@ -701,8 +685,6 @@ local function CleanupUnit(guid)
 
   if auraFieldCache[guid] then
     auraFieldCache[guid] = nil
-    auraAppsFieldCache[guid] = nil
-    auraFieldCacheTick[guid] = nil
   end
 
   if maxRankSeen[guid] then
@@ -972,10 +954,11 @@ function libdebuff:IterDebuffs(unit, fn)
     return 0
   end
 
-  local auras, auraApps = GetCachedAuraField(guid)
+  local auras = GetUnitField(guid, "aura")
   if not auras then
     return 0
   end
+  local auraApps = GetUnitField(guid, "auraApplications")
 
   local myGuid = GetPlayerGUID()
   local now = GetTime()
@@ -1228,8 +1211,9 @@ function libdebuff:IterBuffs(unit, fn)
   local guid = GetUnitGUID(unit)
   if not guid then return 0 end
 
-  local auras, auraApps = GetCachedAuraField(guid)
+  local auras = GetUnitField(guid, "aura")
   if not auras then return 0 end
+  local auraApps = GetUnitField(guid, "auraApplications")
 
   local isPlayer = (unit == "player")
   local hasPlayerAuraDuration = isPlayer and GetPlayerAuraDuration
@@ -1608,8 +1592,6 @@ end
       for k in pairs(overflowBuffs) do overflowBuffs[k] = nil end
       -- Clear auraFieldCache
       for k in pairs(auraFieldCache) do auraFieldCache[k] = nil end
-      for k in pairs(auraAppsFieldCache) do auraAppsFieldCache[k] = nil end
-      for k in pairs(auraFieldCacheTick) do auraFieldCacheTick[k] = nil end
       
     elseif event == "PLAYER_TALENT_UPDATE" then
       -- Talent changes handled dynamically (no cached talent checks needed)
@@ -2761,8 +2743,6 @@ end
       end
 
       auraFieldCache[guid] = nil
-      auraAppsFieldCache[guid] = nil
-      auraFieldCacheTick[guid] = nil
       
       -- Cleanup expired timers
       CleanupExpiredTimers(guid)
@@ -2922,8 +2902,6 @@ end
       end
 
       auraFieldCache[guid] = nil
-      auraAppsFieldCache[guid] = nil
-      auraFieldCacheTick[guid] = nil
       
       -- Cleanup expired timers
       CleanupExpiredTimers(guid)
@@ -2954,8 +2932,6 @@ end
         -- Invalidate slot map cache on retarget
         slotMapCache[targetGuid] = nil
         auraFieldCache[targetGuid] = nil
-        auraAppsFieldCache[targetGuid] = nil
-        auraFieldCacheTick[targetGuid] = nil
         -- Cleanup expired timers for new target
         CleanupExpiredTimers(targetGuid)
       end
