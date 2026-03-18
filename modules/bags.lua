@@ -3,6 +3,165 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
   local borderlimit = tonumber(C.appearance.bags.borderlimit) or 1
   local ICON_PATH = "Interface\\Icons\\"
 
+  -- -------------------------------------------------------------------------
+  -- ItemLock: middle-click to lock/unlock bag slots
+  -- Persisted in pfUI_ItemLock (SavedVariables, declared in TOC).
+  -- Active only when C.appearance.bags.itemlock == "1".
+  -- -------------------------------------------------------------------------
+  local itemlock_overlays = {}   -- key -> overlay Frame
+
+  local _G = getfenv(0)
+
+  local function IL_Key(bag, slot)
+    return bag .. "_" .. slot
+  end
+
+  local function IL_Enabled()
+    return C.appearance.bags.itemlock == "1"
+  end
+
+  local function IL_IsLocked(bag, slot)
+    if not _G.pfUI_ItemLock then return false end
+    return _G.pfUI_ItemLock[IL_Key(bag, slot)] == true
+  end
+
+  local function IL_Toggle(bag, slot)
+    if not _G.pfUI_ItemLock then _G.pfUI_ItemLock = {} end
+    local key = IL_Key(bag, slot)
+    if _G.pfUI_ItemLock[key] then
+      _G.pfUI_ItemLock[key] = nil
+    else
+      _G.pfUI_ItemLock[key] = true
+    end
+  end
+
+  -- Refresh (or create) the lock overlay on a pfUI bag slot frame.
+  -- Called after toggle and on bag updates.
+  local function IL_RefreshOverlay(bag, slot)
+    local s = pfUI.bags and pfUI.bags[bag] and pfUI.bags[bag].slots[slot]
+    if not s then return end
+    local btn = s.frame
+    if not btn then return end
+
+    local key = IL_Key(bag, slot)
+    if not itemlock_overlays[key] then
+      local ov = CreateFrame("Frame", nil, btn)
+      ov:SetAllPoints(btn)
+      ov:SetFrameLevel(btn:GetFrameLevel() + 5)
+      ov:EnableMouse(false)
+      local tex = ov:CreateTexture(nil, "OVERLAY")
+      tex:SetAllPoints(ov)
+      tex:SetTexture(0.3, 0.3, 0.3, 0.6)
+      local icon = ov:CreateTexture(nil, "OVERLAY")
+      icon:SetTexture("Interface\\Icons\\Spell_Nature_MoonKey")
+      icon:SetWidth(10) icon:SetHeight(10)
+      icon:SetPoint("BOTTOMRIGHT", ov, "BOTTOMRIGHT", -1, 1)
+      ov:Hide()
+      itemlock_overlays[key] = ov
+    end
+
+    if IL_Enabled() and IL_IsLocked(bag, slot) then
+      itemlock_overlays[key]:Show()
+    else
+      itemlock_overlays[key]:Hide()
+    end
+  end
+
+  local function IL_RefreshAll()
+    if not IL_Enabled() then
+      -- hide all overlays when feature is disabled
+      for _, ov in pairs(itemlock_overlays) do ov:Hide() end
+      return
+    end
+    for bag = -2, 11 do
+      if pfUI.bags and pfUI.bags[bag] then
+        local bagsize = GetContainerNumSlots(bag)
+        for slot = 1, bagsize do
+          IL_RefreshOverlay(bag, slot)
+        end
+      end
+    end
+  end
+
+  -- Hook middle-click on a pfUI slot frame (idempotent).
+  local function IL_HookSlot(bag, slot)
+    local s = pfUI.bags and pfUI.bags[bag] and pfUI.bags[bag].slots[slot]
+    if not s then return end
+    local btn = s.frame
+    if not btn then return end
+
+    if btn._il_hooked then return end
+    btn._il_hooked = true
+    btn._il_bag  = bag
+    btn._il_slot = slot
+
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp", "MiddleButtonUp")
+
+    -- Left-click: block pickup for locked slots, allow right-click (use)
+    local origClick = btn:GetScript("OnClick")
+    btn:SetScript("OnClick", function()
+      if arg1 == "MiddleButton" and IL_Enabled() then
+        if this.hasItem then
+          IL_Toggle(bag, slot)
+          IL_RefreshOverlay(bag, slot)
+        end
+        return
+      end
+      if IL_Enabled() and IL_IsLocked(bag, slot) then
+        if arg1 == "LeftButton" then
+          ClearCursor()
+          return
+        end
+        if arg1 == "RightButton" and MerchantFrame and MerchantFrame:IsVisible() then
+          return
+        end
+      end
+      if origClick then origClick() end
+    end)
+
+    -- Block drag-onto-slot for locked slots
+    local origReceiveDrag = btn:GetScript("OnReceiveDrag")
+    btn:SetScript("OnReceiveDrag", function()
+      if IL_Enabled() and IL_IsLocked(bag, slot) then
+        ClearCursor()
+        return
+      end
+      if origReceiveDrag then origReceiveDrag() end
+    end)
+
+    -- Block drag-from-slot for locked slots
+    local origDragStart = btn:GetScript("OnDragStart")
+    btn:SetScript("OnDragStart", function()
+      if IL_Enabled() and IL_IsLocked(bag, slot) then return end
+      if origDragStart then origDragStart() end
+    end)
+  end
+
+  local function IL_HookAll()
+    for bag = -2, 11 do
+      if pfUI.bags and pfUI.bags[bag] then
+        local bagsize = GetContainerNumSlots(bag)
+        for slot = 1, bagsize do
+          IL_HookSlot(bag, slot)
+        end
+      end
+    end
+  end
+
+  -- Wrap the Blizzard UseContainerItem at module load time — before itemclick.lua
+  -- captures it as its private upvalue. This way our block runs even when
+  -- itemclick calls pfHookUseContainerItem internally.
+  local _IL_OrigUse = UseContainerItem
+  UseContainerItem = function(bag, slot)
+    if IL_Enabled() and IL_IsLocked(bag, slot) then
+      if MerchantFrame and MerchantFrame:IsVisible() then return end
+    end
+    _IL_OrigUse(bag, slot)
+  end
+  -- -------------------------------------------------------------------------
+  -- end ItemLock
+  -- -------------------------------------------------------------------------
+
   local knownInventorySpellTextures = {
     Spell_Holy_RemoveCurse = {frame="disenchant"},
     Spell_Nature_MoonKey = {frame="picklock"},
@@ -147,6 +306,9 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       pfUI.bag:CreateBagSlots(pfUI.bag.right)
       pfUI.bag:CreateBagSlots(pfUI.bag.left)
       pfUI.bag:RefreshSpells()
+      -- ItemLock: hook slots and show overlays
+      IL_HookAll()
+      IL_RefreshAll()
     end
 
     if event == "SPELLS_CHANGED" then
@@ -289,6 +451,8 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
       pfUI.bag:CreateBags()
       pfUI.bag:CreateBags("bank")
       pfUI.bag.maxslots = maxslots
+      IL_HookAll()
+      IL_RefreshAll()
     end
   end
 
@@ -665,6 +829,9 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
     end
 
     s.frame:Show()
+    -- ItemLock: hook slot (idempotent) and refresh overlay
+    IL_HookSlot(bag, slot)
+    IL_RefreshOverlay(bag, slot)
   end
 
   function pfUI.bag:CreateBagSlots(frame)

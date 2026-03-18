@@ -2383,6 +2383,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Item Slot Size"], C.appearance.bags, "icon_size")
       CreateConfig(nil, T["Auto Sell Grey Items"], C.global, "autosell", "checkbox")
       CreateConfig(nil, T["Auto Repair Items"], C.global, "autorepair", "checkbox")
+      CreateConfig(nil, T["Enable Item Lock (Middle-Click)"], C.appearance.bags, "itemlock", "checkbox")
     end)
 
     CreateGUIEntry(T["Loot"], nil, function()
