@@ -29,6 +29,7 @@ end
 local libdebuff = CreateFrame("Frame", "pfdebuffsScanner", UIParent)
 local scanner = libtipscan:GetScanner("libdebuff")
 local _, class = UnitClass("player")
+local lastspell
 
 -- Nampower Support
 
@@ -386,30 +387,6 @@ pfUI.libdebuff_fire_unit_updated = function(guid)
   end
 end
 
--- Batch dispatcher: deduplicates multiple queueUnitUpdated calls for the same
--- GUID within a single event cycle. Fires on the next OnUpdate frame.
--- Uses pfUI table instead of locals to stay within Lua 5.0 upvalue limit (32).
-pfUI.libdebuff_pending_updates = pfUI.libdebuff_pending_updates or {}
-pfUI.libdebuff_has_pending = false
-
-local batchFrame = CreateFrame("Frame", "pfLibdebuffBatch", UIParent)
-batchFrame:SetScript("OnUpdate", function()
-  if not pfUI.libdebuff_has_pending then return end
-  pfUI.libdebuff_has_pending = false
-  local pending = pfUI.libdebuff_pending_updates
-  for guid in pairs(pending) do
-    pfUI.libdebuff_fire_unit_updated(guid)
-    pending[guid] = nil
-  end
-end)
-
-pfUI.libdebuff_queue_update = function(guid)
-  if guid then
-    pfUI.libdebuff_pending_updates[guid] = true
-    pfUI.libdebuff_has_pending = true
-  end
-end
-
 local function GetDebugTimestamp()
   return string.format("[%.3f]", GetTime())
 end
@@ -480,14 +457,18 @@ local slotMapCache = pfUI.libdebuff_slotmapcache
 -- First call per guid per tick always calls GetUnitField normally.
 -- Second+ call returns cached result, saving redundant Nampower calls when
 -- unitframes + nameplates + buffwatch all react to the same fire_unit_updated.
+-- auraFC: single-table cache to minimize upvalue usage (Lua 5.0 limit: 32)
+-- auraFC[guid] = { aura, auraApps, auraFlags, tick, hit }
 local auraFC = {}
 
 local function GetCachedAuraField(guid)
   local now = GetTime()
   local c = auraFC[guid]
   if c and c[4] == now and c[5] then
+    -- Second+ call this tick: return cached result
     return c[1], c[2], c[3]
   end
+  -- First call this tick (or new tick): always call GetUnitField normally
   local auras     = GetUnitField(guid, "aura")
   local auraApps  = GetUnitField(guid, "auraApplications")
   local auraFlags = GetUnitField(guid, "auraFlags")
@@ -642,10 +623,6 @@ local function GetSlotCaster(guid, auraSlot, spellName)
   return nil, false
 end
 
--- Register as pfUI functions so event handler can call via pfUI.* (avoids upvalue slots)
-pfUI.libdebuff_get_slot_map    = GetDebuffSlotMap
-pfUI.libdebuff_get_slot_caster = GetSlotCaster
-
 -- ============================================================================
 -- CLEANUP FUNCTIONS
 -- ============================================================================
@@ -729,9 +706,7 @@ local function CleanupUnit(guid)
     recentCasts[guid] = nil
   end
 
-  if auraFC[guid] then
-    auraFC[guid] = nil
-  end
+  if auraFC[guid] then auraFC[guid] = nil end
 
   if maxRankSeen[guid] then
     maxRankSeen[guid] = nil
@@ -891,7 +866,7 @@ local function RefreshApplicatorDebuffs(targetGuid, spellName, myGuid)
   end
 
   if refreshed then
-    pfUI.libdebuff_queue_update(targetGuid)
+    pfUI.libdebuff_fire_unit_updated(targetGuid)
     if GetUnitGUID("target") then
       local currentTargetGuid = GetUnitGUID("target")
       if currentTargetGuid == targetGuid then
@@ -949,6 +924,8 @@ function libdebuff:GetMaxRank(effect)
   return max
 end
 
+local updateUnitsTimer = nil
+local updateUnitsPending = false
 function libdebuff:UpdateUnits()
   -- Replaced by pfUI.libdebuff_fire_unit_updated hook system
   -- Kept as stub for external compat
@@ -1254,13 +1231,14 @@ function libdebuff:IterBuffs(unit, fn)
   local guid = GetUnitGUID(unit)
   if not guid then return 0 end
 
-  local auras, auraApps, auraFlags = GetCachedAuraField(guid)
+  local auras, auraApps, auraFlagsCache = GetCachedAuraField(guid)
   if not auras then return 0 end
 
   local isPlayer = (unit == "player")
   local hasPlayerAuraDuration = isPlayer and GetPlayerAuraDuration
 
-  -- auraFlags already fetched via GetCachedAuraField above
+  -- auraFlags needed to filter spillover debuffs from buff display
+  local auraFlags = auraFlagsCache or GetCachedAuraFlags(guid)
 
   local count = 0
   local buffSlotCount = 0
@@ -1572,7 +1550,7 @@ end
         end
       end
       
-      pfUI.libdebuff_queue_update(targetGuid)
+      pfUI.libdebuff_fire_unit_updated(targetGuid)
       
       if GetUnitGUID("target") then
         local currentTargetGuid = GetUnitGUID("target")
@@ -1631,7 +1609,7 @@ end
       GetPlayerGUID()
       -- Clear overflow buffs (death, instance change, login)
       for k in pairs(overflowBuffs) do overflowBuffs[k] = nil end
-      -- Clear auraFieldCache
+      -- Clear auraFC
       for k in pairs(auraFC) do auraFC[k] = nil end
       
     elseif event == "PLAYER_TALENT_UPDATE" then
@@ -1923,7 +1901,7 @@ end
         end
         
         if refreshed then
-          pfUI.libdebuff_queue_update(targetGuid)
+          pfUI.libdebuff_fire_unit_updated(targetGuid)
           if GetUnitGUID("target") then
             local currentTargetGuid = GetUnitGUID("target")
             if currentTargetGuid == targetGuid then
@@ -2026,7 +2004,7 @@ end
         end
         
         if refreshed then
-          pfUI.libdebuff_queue_update(targetGuid)
+          pfUI.libdebuff_fire_unit_updated(targetGuid)
           if GetUnitGUID("target") then
             local currentTargetGuid = GetUnitGUID("target")
             if currentTargetGuid == targetGuid then
@@ -2365,7 +2343,7 @@ end
           end
           if not blocked then
             pfUI.libdebuff_sharedoverwrite_timers[targetGuid][spellName] = { startTime = startTime, duration = duration, isOurs = isOurs, rank = rankNum }
-            pfUI.libdebuff_queue_update(targetGuid)
+            pfUI.libdebuff_fire_unit_updated(targetGuid)
           end
         end
 
@@ -2429,7 +2407,7 @@ end
             local existingRank = slotTimers[targetGuid][auraSlot] and slotTimers[targetGuid][auraSlot].rank or 0
             local writeRank = (rankNum > existingRank) and rankNum or existingRank
             slotTimers[targetGuid][auraSlot] = { startTime = startTime, duration = duration, rank = writeRank, isOurs = isOurs }
-            pfUI.libdebuff_queue_update(targetGuid)
+            pfUI.libdebuff_fire_unit_updated(targetGuid)
             -- Sync ownDebuffs for our refreshes (only if entry already exists = confirmed hit)
             if isOurs and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
               ownDebuffs[targetGuid][spellName].startTime = startTime
@@ -2573,7 +2551,7 @@ end
       -- Get auraSlot from event parameter (Nampower 2.29+)
       -- Fallback to GetUnitField lookup if not available
       if not auraSlot then
-        local slotMap = pfUI.libdebuff_get_slot_map(guid)
+        local slotMap = GetDebuffSlotMap(guid)
         if slotMap and slotMap[displaySlot] then
           auraSlot = slotMap[displaySlot].auraSlot
         end
@@ -2709,7 +2687,7 @@ end
         local existingRank = (existingEntry and existingEntry.spellName == spellName and existingEntry.rank) or 0
         local writeRank = ((pending.rank or 0) > existingRank) and (pending.rank or 0) or existingRank
         slotTimers[guid][auraSlot] = { startTime = pending.startTime, duration = pending.duration, rank = writeRank, isOurs = pending.isOurs or false, spellName = spellName }
-        pfUI.libdebuff_queue_update(guid)
+        pfUI.libdebuff_fire_unit_updated(guid)
         pendingSlotTimer[guid][spellName] = nil
         if debugStats.enabled and IsCurrentTarget(guid) then
           DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER]|r aura=%d %s rank=%d start=%.2f dur=%.1f",
@@ -2728,7 +2706,7 @@ end
         if fallbackDur > 0 then
           local existingRank = slotTimers[guid][auraSlot] and slotTimers[guid][auraSlot].rank or 0
           slotTimers[guid][auraSlot] = { startTime = now, duration = fallbackDur, rank = existingRank, isOurs = true }
-          pfUI.libdebuff_queue_update(guid)
+          pfUI.libdebuff_fire_unit_updated(guid)
           if debugStats.enabled and IsCurrentTarget(guid) then
             DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[SLOT TIMER FALLBACK]|r aura=%d %s dur=%.1f (no pending, own spell)",
               auraSlot, spellName, fallbackDur))
@@ -2742,7 +2720,7 @@ end
           local forcedDur = libspelldata():GetDuration(spellName)
           if forcedDur and forcedDur > 0 then
             slotTimers[guid][auraSlot] = { startTime = now, duration = forcedDur, rank = 0, isOurs = isOurs }
-            pfUI.libdebuff_queue_update(guid)
+            pfUI.libdebuff_fire_unit_updated(guid)
             if debugStats.enabled and IsCurrentTarget(guid) then
               DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ff[FORCED TIMER]|r aura=%d %s dur=%.1f",
                 auraSlot, spellName, forcedDur))
@@ -2932,7 +2910,7 @@ end
               end
             end
             slotTimers[guid][foundAuraSlot] = nil
-            pfUI.libdebuff_queue_update(guid)
+            pfUI.libdebuff_fire_unit_updated(guid)
             -- Schedule maxRankSeen clear after 2s (re-apply window expires)
             -- We do this by storing the removal time; checked in AURA_CAST
             if maxRankSeen[guid] and maxRankSeen[guid][spellName] then
@@ -2963,7 +2941,7 @@ end
           fn(guid)
         end
       end
-      pfUI.libdebuff_queue_update(guid)
+      pfUI.libdebuff_fire_unit_updated(guid)
 
     elseif event == "PLAYER_TARGET_CHANGED" then
       if not GetUnitGUID then return end
