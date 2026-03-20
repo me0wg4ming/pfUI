@@ -1440,6 +1440,7 @@ function pfUI.api.GetNoNameObject(frame, objtype, layer, arg1, arg2)
   local arg2 = arg2 and gsub(arg2, "([%+%-%*%(%)%?%[%]%^])", "%%%1")
 
   local objects
+  if not frame or not frame.GetRegions then return end
   if objtype == "Texture" or objtype == "FontString" then
     objects = {frame:GetRegions()}
   else
