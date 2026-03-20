@@ -2,6 +2,44 @@
 if not TargetHPText or not TargetHPPercText then return end
 
 pfUI:RegisterModule("turtle-wow", "vanilla", function ()
+  -- Turtle WoW's new RaidFrame.lua uses GROUP_REPLACE_PARTY to decide whether to
+  -- call ShowPartyFrame(). Since pfUI replaces party frames, always set this so
+  -- RaidOptionsFrame_UpdatePartyFrames never tries to restore the Blizzard frames.
+  if C.unitframes.disable ~= "1" then
+    GROUP_REPLACE_PARTY = "1"
+  end
+
+  -- hide Turtle WoW's new compact GroupFrame (GroupClusterFrame1-8) when pfUI
+  -- unitframes are active, since pfUI has its own party/raid frames
+  if C.unitframes.disable ~= "1" then
+    HookAddonOrVariable("GroupFrame", function()
+      local function HideGroupFrames()
+        if GroupFrame then
+          GroupFrame:Hide()
+          GroupFrame.Show = function() return end
+        end
+        for i = 1, 8 do
+          local f = _G["GroupClusterFrame"..i]
+          if f then
+            f:Hide()
+            f.Show = function() return end
+          end
+        end
+        if GroupPetsClusterFrame then
+          GroupPetsClusterFrame:Hide()
+          GroupPetsClusterFrame.Show = function() return end
+        end
+      end
+
+      HideGroupFrames()
+
+      -- GroupFrame_Update shows the cluster frames on every raid/party update
+      if GroupFrame_Update then
+        hooksecurefunc("GroupFrame_Update", HideGroupFrames)
+      end
+    end)
+  end
+
   -- custom debuff durations
   L["debuffs"]["Hand of Reckoning"] = {[0]=3.0}
   L["debuffs"]['Insect Swarm'] = {[0]=18.0}
@@ -299,39 +337,30 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
     local initialized = false
 
     HookAddonOrVariable("Blizzard_InspectUI", function()
-      -- one-time setup: skin frame structure on first open
       hooksecurefunc("InspectFrame_Show", function()
+        -- break if theres nothing left to do
         if initialized then return end
 
-        -- skin Tab3 and Tab4 positions
-        local border = GetBorderSize()
-        if InspectFrameTab3 then
-          SkinTab(InspectFrameTab3)
-          InspectFrameTab3:ClearAllPoints()
-          InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", border*2 + 1, 0)
-          InspectFrameTab3:Hide()
-          InspectFrameTab3:Show()
-        end
-        if InspectFrameTab4 then
-          SkinTab(InspectFrameTab4)
-          InspectFrameTab4:ClearAllPoints()
-          InspectFrameTab4:SetPoint("LEFT", InspectFrameTab3, "RIGHT", border*2 + 1, 0)
-          InspectFrameTab4:Hide()
-          InspectFrameTab4:Show()
-        end
+        -- adjust ui positions
+        SkinTab(InspectFrameTab3)
+        InspectFrameTab3:ClearAllPoints()
+        InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", GetBorderSize()*2 + 1, 0)
+        TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
 
-        -- skin InspectTalentsFrame container and scrollbar
+        -- reload text position
+        InspectFrameTab3:Hide()
+        InspectFrameTab3:Show()
+
+        -- skin inspect window elements
         StripTextures(InspectTalentsFrame)
         StripTextures(TWTalentFrameScrollFrame)
         SkinScrollbar(TWTalentFrameScrollFrameScrollBar)
-
-        -- skin the 3 talent tree tabs
         for i = 1, 3 do
           SkinTab(_G["TWTalentFrameTab"..i])
         end
 
-        -- skin each talent button (buttons exist in XML already, data arrives later via addon msg)
-        for i = 1, (MAX_NUM_TALENTS or 100) do
+        -- skin each talent button
+        for i = 1, MAX_NUM_TALENTS do
           local talent = _G["TWTalentFrameTalent" .. i]
           if talent then
             StripTextures(talent)
@@ -340,16 +369,8 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
           end
         end
 
+        -- only run once
         initialized = true
-      end)
-
-      -- TWTalentFrame_OnShow fires AFTER talent data has arrived via addon messages
-      -- so this is the right place to fix the tab1 position
-      hooksecurefunc("TWTalentFrame_OnShow", function()
-        if TWTalentFrameTab1 then
-          TWTalentFrameTab1:ClearAllPoints()
-          TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
-        end
       end)
     end)
   end

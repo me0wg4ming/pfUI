@@ -2,6 +2,52 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
 
+  -- hide blizzard raid group frames so they don't overlap pfUI raid frames
+  local function HideBlizzardRaidFrames()
+    DEFAULT_CHAT_FRAME:AddMessage("|cFFFF6600pfUI-Debug:|r HideBlizzardRaidFrames called")
+    for i = 1, NUM_RAID_GROUPS do
+      local frame = _G["RaidGroup"..i]
+      if frame then
+        local wasVisible = frame:IsShown() and "visible" or "hidden"
+        frame:Hide()
+        frame:UnregisterAllEvents()
+        frame.Show = function()
+          DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000pfUI-Debug:|r RaidGroup"..i..":Show() blocked!")
+          return
+        end
+        if wasVisible == "visible" then
+          DEFAULT_CHAT_FRAME:AddMessage("|cFFFF6600pfUI-Debug:|r RaidGroup"..i.." was "..wasVisible..", now hidden")
+        end
+      else
+        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF6600pfUI-Debug:|r RaidGroup"..i.." does not exist yet!")
+      end
+    end
+    for i = 1, MAX_RAID_MEMBERS do
+      local button = _G["RaidGroupButton"..i]
+      if button then
+        button:Hide()
+        button:UnregisterAllEvents()
+        button.Show = function() return end
+      end
+    end
+    GROUP_REPLACE_PARTY = "1"
+  end
+
+  -- run once when Blizzard_RaidUI loads
+  HookAddonOrVariable("Blizzard_RaidUI", function()
+    DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00pfUI-Debug:|r Blizzard_RaidUI loaded, running hide")
+    HideBlizzardRaidFrames()
+
+    -- RaidGroupFrame_Update calls :Show() on all RaidGroup frames every update
+    -- hook it to immediately re-hide them after Blizzard shows them
+    if RaidGroupFrame_Update then
+      DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00pfUI-Debug:|r hooking RaidGroupFrame_Update")
+      hooksecurefunc("RaidGroupFrame_Update", HideBlizzardRaidFrames)
+    else
+      DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000pfUI-Debug:|r RaidGroupFrame_Update not found!")
+    end
+  end)
+
   pfUI.uf.raid = CreateFrame("Frame", "pfRaidUpdater", UIParent)
 
   local maxraid = tonumber(C.unitframes.maxraid)

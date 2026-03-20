@@ -12,6 +12,7 @@
   <Include file="..\skins\blizzard\questlog.lua"/>
   <Include file="..\skins\blizzard\mail.lua"/>
   <Include file="..\skins\blizzard\readycheck.lua"/>
+  <Include file="..\skins\blizzard\raidui.lua"/>
   <Include file="..\skins\blizzard\battlefield_minimap.lua"/>
   <Include file="..\skins\blizzard\battlefield_score.lua"/>
   <Include file="..\skins\blizzard\survey.lua"/>
