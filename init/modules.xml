@@ -11,6 +11,7 @@
   <Include file="..\modules\chatcopy.lua"/>
   <Include file="..\modules\bubbles.lua"/>
   <Include file="..\modules\addons.lua"/>
+  <Include file="..\modules\friends.lua"/>
   <Include file="..\modules\minimap.lua"/>
   <Include file="..\modules\panel.lua"/>
   <Include file="..\modules\player.lua"/>

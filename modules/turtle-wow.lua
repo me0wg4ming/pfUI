@@ -2,6 +2,39 @@
 if not TargetHPText or not TargetHPPercText then return end
 
 pfUI:RegisterModule("turtle-wow", "vanilla", function ()
+  -- tell Turtle WoW's RaidFrame.lua that pfUI replaces party/raid frames
+  if C.unitframes.disable ~= "1" then
+    GROUP_REPLACE_PARTY = "1"
+  end
+
+  -- hide Turtle WoW's compact GroupFrame (GroupClusterFrame1-8) when pfUI unitframes are active
+  if C.unitframes.disable ~= "1" then
+    HookAddonOrVariable("GroupFrame", function()
+      local function HideGroupFrames()
+        if GroupFrame then
+          GroupFrame:Hide()
+          GroupFrame.Show = function() return end
+        end
+        for i = 1, 8 do
+          local f = _G["GroupClusterFrame"..i]
+          if f then
+            f:Hide()
+            f.Show = function() return end
+          end
+        end
+        if GroupPetsClusterFrame then
+          GroupPetsClusterFrame:Hide()
+          GroupPetsClusterFrame.Show = function() return end
+        end
+      end
+
+      HideGroupFrames()
+
+      if GroupFrame_Update then
+        hooksecurefunc("GroupFrame_Update", HideGroupFrames)
+      end
+    end)
+  end
   -- custom debuff durations
   L["debuffs"]["Hand of Reckoning"] = {[0]=3.0}
   L["debuffs"]['Insect Swarm'] = {[0]=18.0}
@@ -288,35 +321,45 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
     end
   end
 
+
   -- add skin to twow's talent inspect frame
   if pfUI.skin["Inspect"] and pfUI_config["disabled"]["skin_Inspect"] ~= "1" then
     local initialized = false
 
     HookAddonOrVariable("Blizzard_InspectUI", function()
+      -- one-time setup: skin frame structure on first open
       hooksecurefunc("InspectFrame_Show", function()
-        -- break if theres nothing left to do
         if initialized then return end
 
-        -- adjust ui positions
-        SkinTab(InspectFrameTab3)
-        InspectFrameTab3:ClearAllPoints()
-        InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", GetBorderSize()*2 + 1, 0)
-        TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
+        -- skin Tab3 (Arena) and Tab4 (Talents)
+        local border = GetBorderSize()
+        if InspectFrameTab3 then
+          SkinTab(InspectFrameTab3)
+          InspectFrameTab3:ClearAllPoints()
+          InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", border*2 + 1, 0)
+          InspectFrameTab3:Hide()
+          InspectFrameTab3:Show()
+        end
+        if InspectFrameTab4 then
+          SkinTab(InspectFrameTab4)
+          InspectFrameTab4:ClearAllPoints()
+          InspectFrameTab4:SetPoint("LEFT", InspectFrameTab3, "RIGHT", border*2 + 1, 0)
+          InspectFrameTab4:Hide()
+          InspectFrameTab4:Show()
+        end
 
-        -- reload text position
-        InspectFrameTab3:Hide()
-        InspectFrameTab3:Show()
-
-        -- skin inspect window elements
+        -- skin InspectTalentsFrame container and scrollbar
         StripTextures(InspectTalentsFrame)
         StripTextures(TWTalentFrameScrollFrame)
         SkinScrollbar(TWTalentFrameScrollFrameScrollBar)
+
+        -- skin the 3 talent tree tabs
         for i = 1, 3 do
           SkinTab(_G["TWTalentFrameTab"..i])
         end
 
         -- skin each talent button
-        for i = 1, MAX_NUM_TALENTS do
+        for i = 1, (MAX_NUM_TALENTS or 100) do
           local talent = _G["TWTalentFrameTalent" .. i]
           if talent then
             StripTextures(talent)
@@ -325,8 +368,15 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
           end
         end
 
-        -- only run once
         initialized = true
+      end)
+
+      -- TWTalentFrame_OnShow fires AFTER talent data arrived via addon messages
+      hooksecurefunc("TWTalentFrame_OnShow", function()
+        if TWTalentFrameTab1 then
+          TWTalentFrameTab1:ClearAllPoints()
+          TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
+        end
       end)
     end)
   end

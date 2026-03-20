@@ -124,39 +124,8 @@ pfUI:RegisterSkin("Inspect", "tbc", function ()
       StripTextures(InspectPVPFrame)
     end
 
-    do -- Talent Tab
-      StripTextures(InspectTalentFrame)
-      InspectTalentFrameCancelButton:Hide()
-      InspectTalentFrameCloseButton:Hide()
-
-      InspectTalentFrameSpentPoints:ClearAllPoints()
-      InspectTalentFrameSpentPoints:SetPoint("BOTTOMRIGHT", InspectTalentFrame, "BOTTOMRIGHT", 0, 83)
-
-      StripTextures(InspectTalentFrameScrollFrame)
-      SkinScrollbar(InspectTalentFrameScrollFrameScrollBar)
-
-      for i = 1, MAX_NUM_TALENTS do
-        local talent = _G["InspectTalentFrameTalent"..i]
-        if talent then
-          StripTextures(talent)
-          SkinButton(talent, nil, nil, nil, _G["InspectTalentFrameTalent"..i.."IconTexture"])
-
-          _G["InspectTalentFrameTalent"..i.."Rank"]:SetFont(pfUI.font_default, C.global.font_size, "OUTLINE")
-        end
-      end
-
-      for i = 1, 3 do
-        local tab = _G["InspectTalentFrameTab"..i]
-        local lastTab = _G["InspectTalentFrameTab"..(i-1)]
-        tab:ClearAllPoints()
-        if lastTab then
-          tab:SetPoint("LEFT", lastTab, "RIGHT", border*2 + 1, 0)
-        else
-          tab:SetPoint("TOPLEFT", 70, -50)
-        end
-        SkinTab(tab)
-      end
-    end
+    -- NOTE: Old "InspectTalentFrame" block removed - Turtle WoW replaced it with
+    -- InspectTalentsFrame + TWTalentFrame (handled in turtle-wow.lua)
   end)
 end)
 
@@ -197,12 +166,20 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
     InspectNameText:ClearAllPoints()
     InspectNameText:SetPoint("TOP", InspectFrame.backdrop, "TOP", 0, -10)
 
-    SkinTab(InspectFrameTab1)
-    InspectFrameTab1:ClearAllPoints()
-    InspectFrameTab1:SetPoint("TOPLEFT", InspectFrame.backdrop, "BOTTOMLEFT", bpad, -(border + (border == 1 and 1 or 2)))
-    SkinTab(InspectFrameTab2)
-    InspectFrameTab2:ClearAllPoints()
-    InspectFrameTab2:SetPoint("LEFT", InspectFrameTab1, "RIGHT", border*2 + 1, 0)
+    -- Turtle WoW has 4 inspect tabs: Character, Honor, Arena, Talents
+    for i = 1, 4 do
+      local tab = _G["InspectFrameTab"..i]
+      if tab then
+        local lastTab = _G["InspectFrameTab"..(i-1)]
+        tab:ClearAllPoints()
+        if lastTab then
+          tab:SetPoint("LEFT", lastTab, "RIGHT", border*2 + 1, 0)
+        else
+          tab:SetPoint("TOPLEFT", InspectFrame.backdrop, "BOTTOMLEFT", bpad, -(border + (border == 1 and 1 or 2)))
+        end
+        SkinTab(tab)
+      end
+    end
 
     do -- Character Tab
       StripTextures(InspectPaperDollFrame)
@@ -406,6 +383,31 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
       CreateBackdrop(InspectHonorFrameProgressBar)
       InspectHonorFrameProgressBar:SetStatusBarTexture(pfUI.media["img:bar"])
       InspectHonorFrameProgressBar:SetHeight(24)
+    end
+
+    do -- Turtle WoW Talent Tab (TWTalentFrame)
+      if TWTalentFrame then
+        StripTextures(TWTalentFrame)
+
+        StripTextures(TWTalentFrameScrollFrame)
+        SkinScrollbar(TWTalentFrameScrollFrameScrollBar)
+
+        for i = 1, 3 do
+          SkinTab(_G["TWTalentFrameTab"..i])
+        end
+
+        for i = 1, (MAX_NUM_TALENTS or 100) do
+          local talent = _G["TWTalentFrameTalent"..i]
+          if talent then
+            StripTextures(talent)
+            SkinButton(talent, nil, nil, nil, _G["TWTalentFrameTalent"..i.."IconTexture"])
+            local rank = _G["TWTalentFrameTalent"..i.."Rank"]
+            if rank then
+              rank:SetFont(pfUI.font_default, C.global.font_size, "OUTLINE")
+            end
+          end
+        end
+      end
     end
   end)
 end)
