@@ -83,7 +83,8 @@ pfUI:RegisterSkin("Inspect", "tbc", function ()
           local btn = _G["Inspect"..slot]
           if btn then
             local slotId = btn:GetID()
-            local npItem = GetEquippedItem and GetEquippedItem(guid, slotId)
+            local ok, npItem = pcall(GetEquippedItem, guid, slotId)
+            if not ok then npItem = nil end
             if npItem and npItem.itemId and npItem.itemId > 0 then
               local itemId = npItem.itemId
               local displayInfoId = GetItemStatsField and GetItemStatsField(itemId, "displayInfoID")
@@ -206,7 +207,8 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
           if not unit or not (pfUI.api.librange and pfUI.api.librange:UnitInInspectRange(unit)) then return end
           local guid = unit and GetUnitGUID and GetUnitGUID(unit)
           local slotId = this:GetID()
-          local npItem = guid and GetEquippedItem and GetEquippedItem(guid, slotId)
+          local ok, npItem = pcall(function() return guid and GetEquippedItem and GetEquippedItem(guid, slotId) end)
+          if not ok then npItem = nil end
           if npItem and npItem.itemId and npItem.itemId > 0 then
             local itemId    = npItem.itemId
             local enchantId = npItem.permanentEnchantId or 0
@@ -239,7 +241,12 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
 
         for i, vslot in pairs(slots) do
           local slotId = GetInventorySlotInfo(vslot)
-          local npItem = GetEquippedItem and GetEquippedItem(guid, slotId)
+          local ok, npItem = pcall(GetEquippedItem, guid, slotId)
+          if not ok then
+            npTick.pending = true
+            npTick.delay = 0
+            return
+          end
           local itemId = npItem and npItem.itemId and npItem.itemId > 0 and npItem.itemId
           if itemId then
             local enchantId = npItem.permanentEnchantId or 0
