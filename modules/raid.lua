@@ -2,43 +2,9 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
 
-  -- hide blizzard raid group frames so they don't overlap pfUI raid frames
-  local function HideBlizzardRaidFrames()
-    for i = 1, NUM_RAID_GROUPS do
-      local frame = _G["RaidGroup"..i]
-      if frame then
-        local wasVisible = frame:IsShown() and "visible" or "hidden"
-        frame:Hide()
-        frame:UnregisterAllEvents()
-        frame.Show = function()
-            return
-        end
-        if wasVisible == "visible" then
-          end
-      else
-      end
-    end
-    for i = 1, MAX_RAID_MEMBERS do
-      local button = _G["RaidGroupButton"..i]
-      if button then
-        button:Hide()
-        button:UnregisterAllEvents()
-        button.Show = function() return end
-      end
-    end
-    GROUP_REPLACE_PARTY = "1"
-  end
-
-  -- run once when Blizzard_RaidUI loads
+  -- tell RaidFrame.lua pfUI replaces party frames
   HookAddonOrVariable("Blizzard_RaidUI", function()
-    HideBlizzardRaidFrames()
-
-    -- RaidGroupFrame_Update calls :Show() on all RaidGroup frames every update
-    -- hook it to immediately re-hide them after Blizzard shows them
-    if RaidGroupFrame_Update then
-      hooksecurefunc("RaidGroupFrame_Update", HideBlizzardRaidFrames)
-    else
-    end
+    GROUP_REPLACE_PARTY = "1"
   end)
 
   pfUI.uf.raid = CreateFrame("Frame", "pfRaidUpdater", UIParent)
@@ -123,12 +89,21 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
 
   pfUI.uf.raid:Hide()
   pfUI.uf.raid:RegisterEvent("RAID_ROSTER_UPDATE")
+  pfUI.uf.raid:RegisterEvent("PARTY_MEMBERS_CHANGED")
+  pfUI.uf.raid:RegisterEvent("PARTY_LEADER_CHANGED")
   pfUI.uf.raid:RegisterEvent("VARIABLES_LOADED")
-  pfUI.uf.raid:SetScript("OnEvent", function() this:Show() end)
+  pfUI.uf.raid:SetScript("OnEvent", function()
+    this:Show()
+    -- Debounce: delay update by 0.5s to batch rapid roster changes (mass swaps)
+    this.pendingUpdate = GetTime() + 0.5
+  end)
   pfUI.uf.raid:SetScript("OnUpdate", function()
-    -- Throttle raid roster updates to 1 FPS
+    -- Wait for debounce: don't update until 0.5s after last event
+    if this.pendingUpdate and GetTime() < this.pendingUpdate then return end
+    -- Throttle raid roster updates to 1 FPS max
     if (this.tick or 0) > GetTime() then return end
     this.tick = GetTime() + 1.0
+    this.pendingUpdate = nil
 
     -- don't proceed without raid or during combat
     if not UnitInRaid("player") or (InCombatLockdown and InCombatLockdown()) then return end

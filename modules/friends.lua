@@ -455,13 +455,13 @@ pfUI:RegisterSkin("Friends", "vanilla:tbc", function ()
       end
     end
 
-    -- RaidFrameConvertToRaidButton and friends are part of Blizzard_RaidUI in Turtle WoW
+    -- all RaidFrame buttons are in Blizzard_RaidUI in Turtle WoW
     HookAddonOrVariable("Blizzard_RaidUI", function()
       if RaidFrameRaidInfoButton      then SkinButton(RaidFrameRaidInfoButton)      end
       if RaidFrameConvertToRaidButton then SkinButton(RaidFrameConvertToRaidButton) end
       if RaidFrameReadyCheckButton    then SkinButton(RaidFrameReadyCheckButton)    end
       if RaidFrameAddMemberButton     then SkinButton(RaidFrameAddMemberButton)     end
-      -- RaidGroup frames and buttons are hidden by modules/raid.lua, no skinning needed
+      -- RaidGroup frames and buttons are hidden by modules/raid.lua
     end)
   end
 end)
