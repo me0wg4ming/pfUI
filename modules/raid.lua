@@ -2,6 +2,11 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
 
+  -- tell RaidFrame.lua pfUI replaces party frames
+  HookAddonOrVariable("Blizzard_RaidUI", function()
+    GROUP_REPLACE_PARTY = "1"
+  end)
+
   pfUI.uf.raid = CreateFrame("Frame", "pfRaidUpdater", UIParent)
 
   local maxraid = tonumber(C.unitframes.maxraid)

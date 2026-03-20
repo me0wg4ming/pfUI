@@ -27,6 +27,37 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
           GroupPetsClusterFrame.Show = function() return end
         end
       end
+      HideGroupFrames()
+      if GroupFrame_Update then
+        hooksecurefunc("GroupFrame_Update", HideGroupFrames)
+      end
+    end)
+  end
+  -- tell Turtle WoW's RaidFrame.lua that pfUI replaces party/raid frames
+  if C.unitframes.disable ~= "1" then
+    GROUP_REPLACE_PARTY = "1"
+  end
+
+  -- hide Turtle WoW's compact GroupFrame (GroupClusterFrame1-8) when pfUI unitframes are active
+  if C.unitframes.disable ~= "1" then
+    HookAddonOrVariable("GroupFrame", function()
+      local function HideGroupFrames()
+        if GroupFrame then
+          GroupFrame:Hide()
+          GroupFrame.Show = function() return end
+        end
+        for i = 1, 8 do
+          local f = _G["GroupClusterFrame"..i]
+          if f then
+            f:Hide()
+            f.Show = function() return end
+          end
+        end
+        if GroupPetsClusterFrame then
+          GroupPetsClusterFrame:Hide()
+          GroupPetsClusterFrame.Show = function() return end
+        end
+      end
 
       HideGroupFrames()
 
