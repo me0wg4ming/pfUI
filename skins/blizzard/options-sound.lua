@@ -1,4 +1,5 @@
 pfUI:RegisterSkin("Options - Sound", "vanilla:tbc", function ()
+  if OptionsFrameCategoryList then return end
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
