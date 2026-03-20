@@ -299,30 +299,39 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
     local initialized = false
 
     HookAddonOrVariable("Blizzard_InspectUI", function()
+      -- one-time setup: skin frame structure on first open
       hooksecurefunc("InspectFrame_Show", function()
-        -- break if theres nothing left to do
         if initialized then return end
 
-        -- adjust ui positions
-        SkinTab(InspectFrameTab3)
-        InspectFrameTab3:ClearAllPoints()
-        InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", GetBorderSize()*2 + 1, 0)
-        TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
+        -- skin Tab3 and Tab4 positions
+        local border = GetBorderSize()
+        if InspectFrameTab3 then
+          SkinTab(InspectFrameTab3)
+          InspectFrameTab3:ClearAllPoints()
+          InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", border*2 + 1, 0)
+          InspectFrameTab3:Hide()
+          InspectFrameTab3:Show()
+        end
+        if InspectFrameTab4 then
+          SkinTab(InspectFrameTab4)
+          InspectFrameTab4:ClearAllPoints()
+          InspectFrameTab4:SetPoint("LEFT", InspectFrameTab3, "RIGHT", border*2 + 1, 0)
+          InspectFrameTab4:Hide()
+          InspectFrameTab4:Show()
+        end
 
-        -- reload text position
-        InspectFrameTab3:Hide()
-        InspectFrameTab3:Show()
-
-        -- skin inspect window elements
+        -- skin InspectTalentsFrame container and scrollbar
         StripTextures(InspectTalentsFrame)
         StripTextures(TWTalentFrameScrollFrame)
         SkinScrollbar(TWTalentFrameScrollFrameScrollBar)
+
+        -- skin the 3 talent tree tabs
         for i = 1, 3 do
           SkinTab(_G["TWTalentFrameTab"..i])
         end
 
-        -- skin each talent button
-        for i = 1, MAX_NUM_TALENTS do
+        -- skin each talent button (buttons exist in XML already, data arrives later via addon msg)
+        for i = 1, (MAX_NUM_TALENTS or 100) do
           local talent = _G["TWTalentFrameTalent" .. i]
           if talent then
             StripTextures(talent)
@@ -331,8 +340,16 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
           end
         end
 
-        -- only run once
         initialized = true
+      end)
+
+      -- TWTalentFrame_OnShow fires AFTER talent data has arrived via addon messages
+      -- so this is the right place to fix the tab1 position
+      hooksecurefunc("TWTalentFrame_OnShow", function()
+        if TWTalentFrameTab1 then
+          TWTalentFrameTab1:ClearAllPoints()
+          TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
+        end
       end)
     end)
   end
