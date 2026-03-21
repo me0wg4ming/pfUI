@@ -18,7 +18,8 @@ pfUI:RegisterModule("tracking", "vanilla", function ()
     any = {
       "Racial_Dwarf_FindTreasure", -- Find Treasure
       "Spell_Nature_Earthquake", -- Find Minerals
-      "INV_Misc_Flower_02" -- Find Herbs
+      "INV_Misc_Flower_02", -- Find Herbs
+      "inv_tradeskillitem_03" -- Find Trees (TurtleWow Survival)
     },
     HUNTER = {
       "Ability_Tracking", -- Track Beasts, 4+
