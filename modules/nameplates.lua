@@ -574,8 +574,13 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
   end)
 
   nameplates:SetScript("OnUpdate", function()
+    -- PERF: Throttle central OnUpdate to ~100 FPS (0.01s)
+    local now = GetTime()
+    if (this.frameTick or 0) + 0.01 > now then return end
+    this.frameTick = now
+
     -- PERF: Cache GetTime() once per frame
-    frameState.now = GetTime()
+    frameState.now = now
     frameState.hasTarget, frameState.targetGuid = UnitExists("target")
     frameState.hasMouseover = UnitExists("mouseover")
 
