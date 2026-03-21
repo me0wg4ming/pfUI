@@ -59,7 +59,7 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
 
   local function pfGetOverlay(idx)
     if not pfOverlays[idx] then
-      pfOverlays[idx] = WorldMapDetailFrame:CreateTexture("pfReveal"..idx, "ARTWORK")
+      pfOverlays[idx] = WorldMapDetailFrame:CreateTexture("pfReveal"..idx, "BORDER")
     end
     return pfOverlays[idx]
   end
@@ -151,8 +151,9 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
         explore:Hide()
       end
 
-      -- render overlay texture tiles
-      if C.appearance.worldmap.mapreveal == "1" or alreadyknown[textureName] then
+      -- render overlay texture tiles on BORDER draw layer
+      -- Blizzard's explored overlays on ARTWORK draw on top of BORDER
+      if C.appearance.worldmap.mapreveal == "1" then
         local numH = math.ceil(textureWidth / 256)
         local numV = math.ceil(textureHeight / 256)
         local texPixW, texFileW, texPixH, texFileH
@@ -192,11 +193,7 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
             explorecaches[name] = explorecaches[name] or {}
             explorecaches[name][tex] = true
 
-            if not alreadyknown[textureName] then
-              tex:SetVertexColor(r,g,b,a)
-            else
-              tex:SetVertexColor(1,1,1,1)
-            end
+            tex:SetVertexColor(r,g,b,a)
             tex:Show()
           end
         end
