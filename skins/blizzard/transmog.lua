@@ -1,25 +1,23 @@
 pfUI:RegisterSkin("Transmog", "vanilla", function ()
   if not TransmogFrame then return end
 
-  local rawborder, border = GetBorderSize()
-  local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
-
-  -- Main frame
+  -- Strip all background/border textures from the main frame
+  -- The frame has Background1/2 (ui1/ui2 textures) and a Splash texture
   StripTextures(TransmogFrame, true)
+
+  -- Apply pfUI backdrop
   CreateBackdrop(TransmogFrame, nil, nil, .75)
   CreateBackdropShadow(TransmogFrame)
-
-  TransmogFrame.backdrop:SetPoint("TOPLEFT", 14, -10)
-  TransmogFrame.backdrop:SetPoint("BOTTOMRIGHT", -14, 10)
-  TransmogFrame:SetHitRectInsets(14, 14, 10, 10)
   EnableMovable(TransmogFrame)
 
   -- Close button
   SkinCloseButton(TransmogFrameCloseButton, TransmogFrame.backdrop, -6, -6)
 
-  -- Title
-  TransmogFrameTitleText:ClearAllPoints()
-  TransmogFrameTitleText:SetPoint("TOP", TransmogFrame.backdrop, "TOP", 0, -10)
+  -- Buttons
+  if TransmogFrameItemsButton then StripTextures(TransmogFrameItemsButton) SkinButton(TransmogFrameItemsButton) end
+  if TransmogFrameSetsButton then StripTextures(TransmogFrameSetsButton) SkinButton(TransmogFrameSetsButton) end
+  if TransmogFrameSaveOutfit then SkinButton(TransmogFrameSaveOutfit) end
+  if TransmogFrameApplyButton then SkinButton(TransmogFrameApplyButton) end
 
   -- Search box
   if TransmogFrameSearch then
@@ -32,13 +30,7 @@ pfUI:RegisterSkin("Transmog", "vanilla", function ()
     SkinDropDown(TransmogFrameOutfits)
   end
 
-  -- Tab buttons (Items / Outfits)
-  if TransmogFrameItemsButton then SkinButton(TransmogFrameItemsButton) end
-  if TransmogFrameSetsButton then SkinButton(TransmogFrameSetsButton) end
-  if TransmogFrameApplyButton then SkinButton(TransmogFrameApplyButton) end
-  if TransmogFrameSaveOutfit then SkinButton(TransmogFrameSaveOutfit) end
-
-  -- Arrow buttons (pagination)
+  -- Pagination arrows
   if TransmogFrameLeftArrow then
     StripTextures(TransmogFrameLeftArrow)
     SkinArrowButton(TransmogFrameLeftArrow, "left", 18)
@@ -48,7 +40,9 @@ pfUI:RegisterSkin("Transmog", "vanilla", function ()
     SkinArrowButton(TransmogFrameRightArrow, "right", 18)
   end
 
-  -- Equipment slot buttons
+  -- Equipment slots from TransmogPlayerSlotTemplate
+  -- Names come directly from XML: HeadSlot, ShoulderSlot, etc.
+  -- ShirtSlot IS in the InventorySlots table in the Lua (slot 4) so we include it
   local slots = {
     "HeadSlot", "ShoulderSlot", "BackSlot", "ChestSlot",
     "ShirtSlot", "TabardSlot", "WristSlot", "HandsSlot",
@@ -59,9 +53,19 @@ pfUI:RegisterSkin("Transmog", "vanilla", function ()
   for _, name in ipairs(slots) do
     local slot = _G[name]
     if slot then
-      local icon = _G[name .. "ItemIcon"]
-      StripTextures(slot)
+      -- Strip all the custom transmog border textures defined in TransmogPlayerSlotTemplate
+      -- NoEquip is intentionally kept (shows the X when slot is empty)
+      local textures = { "Border", "BorderHi", "BorderFull", "BorderSelected", "BorderHighlight" }
+      for _, t in ipairs(textures) do
+        local tex = _G[name .. t]
+        if tex then tex:SetTexture(nil) end
+      end
+
+      -- Apply pfUI backdrop to the slot button
       CreateBackdrop(slot, nil, true)
+
+      -- Fix the item icon to fill the slot properly
+      local icon = _G[name .. "ItemIcon"]
       if icon then
         icon:SetTexCoord(.08, .92, .08, .92)
         icon:ClearAllPoints()
@@ -70,4 +74,24 @@ pfUI:RegisterSkin("Transmog", "vanilla", function ()
       end
     end
   end
+
+  -- TransmogFrameLookTemplate items (browsing grid, named TransmogFrameLook1..15)
+  -- Each has a Button child and a DressUpModel child
+  local function SkinLookButton(frame)
+    if not frame or frame._pfSkinned then return end
+    frame._pfSkinned = true
+    local btn = _G[frame:GetName() .. "Button"]
+    if btn then
+      StripTextures(btn)
+      CreateBackdrop(btn, nil, true)
+    end
+  end
+
+  local origOnShow = TransmogFrame:GetScript("OnShow")
+  TransmogFrame:SetScript("OnShow", function()
+    if origOnShow then origOnShow() end
+    for i = 1, 20 do
+      SkinLookButton(_G["TransmogFrameLook" .. i])
+    end
+  end)
 end)
