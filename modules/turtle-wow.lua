@@ -183,7 +183,7 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
     if pfUI.chat then
       for index, value in ipairs(UnitPopupMenus["FRIEND"]) do
         if value == "IGNORE_PLAYER" then
-          UnitPopupMenus["FRIEND"][index] = nil
+          table.remove(UnitPopupMenus["FRIEND"], index)
           break
         end
       end
