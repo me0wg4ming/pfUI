@@ -46,6 +46,11 @@
   <Include file="..\skins\blizzard\arena_score.lua"/>
   <Include file="..\skins\blizzard\ebc.lua"/>
 
+  <!-- Turtle WoW -->
+  <Include file="..\skins\blizzard\barbershop.lua"/>
+  <Include file="..\skins\blizzard\transmog.lua"/>
+  <Include file="..\skins\blizzard\ebc.lua"/>
+
   <!-- TBC -->
   <Include file="..\skins\blizzard\tracking.lua"/>
   <Include file="..\skins\blizzard\guildbank.lua"/>
