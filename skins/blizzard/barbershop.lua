@@ -46,6 +46,18 @@ pfUI:RegisterSkin("Barbershop", "vanilla", function ()
   SkinButton(BarbershopFrameCancelButton)
   SkinButton(BarbershopFrameResetButton)
 
+  -- Turtle WoW's Barbershop calls PlayerFrame:Show() and TargetFrame:Show()
+  -- on open/close. pfUI manages its own frames so we noop those calls.
+  if C.unitframes.disable ~= "1" then
+    if PlayerFrame then
+      PlayerFrame:Hide()
+      PlayerFrame.Show = function() return end
+    end
+    if TargetFrame then
+      TargetFrame.Show = function() return end
+    end
+  end
+
   -- Fix: disable TargetFrameDebuff OnEnter scripts while barbershop is open
   -- to prevent SetUnitDebuff crash (TargetFrame is hidden but scripts remain active)
   local savedOnEnter = {}
