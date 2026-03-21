@@ -696,7 +696,7 @@ end
     -- PERF: Throttle central OnUpdate to ~80 FPS (0.0125s)
     -- Saves ~44% calls at 144 FPS while staying above 50 FPS target-plate rate
     local now = GetTime()
-    if (this.frameTick or 0) + 0.0125 > now then return end
+    if (this.frameTick or 0) + 0.01 > now then return end
     this.frameTick = now
 
     -- PERF: Cache GetTime() once per frame
@@ -1451,20 +1451,28 @@ end
     local targetGuid = state and state.targetGuid
     local target = (targetGuid and nameplate.cachedGuid and targetGuid == nameplate.cachedGuid) or
                    (state and state.hasTarget and frame:GetAlpha() >= 0.99) or nil
-    local isCasting = nameplate.castbar and nameplate.castbar:IsShown()
-    
     local throttle
-    if target or isCasting then
+    if target then
       throttle = pfUI.throttle:Get("nameplates_target")  -- Default: 50 FPS
     elseif visiblePlateCount > 20 then
       throttle = pfUI.throttle:Get("nameplates_mass")    -- Default: 7 FPS for mass pulls
     else
       throttle = pfUI.throttle:Get("nameplates")         -- Default: 10 FPS
     end
-    
+
+    -- castbar has its own throttle (independent of target throttle)
+    local castbarThrottle = pfUI.throttle:Get("nameplates_castbar")  -- Default: 20 FPS
+    local castbarReady = (nameplate.castLastTick or 0) + castbarThrottle <= now
+    if nameplate.castUpdate and castbarReady then
+      nameplate.castLastTick = now
+    elseif nameplate.castUpdate and not castbarReady then
+      nameplate.castUpdate = nil  -- defer castUpdate until castbar throttle allows it
+    end
+
     -- Check for pending event updates (these bypass throttle for immediate response)
+    -- castUpdate is now handled by its own throttle above, not the general bypass
     local hasEventUpdate = nameplate.eventcache or nameplate.auraUpdate or nameplate.castUpdate or nameplate.targetUpdate or nameplate.comboUpdate
-    
+
     -- Event updates bypass throttle
     if not hasEventUpdate and (nameplate.lasttick or 0) + throttle > now then return end
     nameplate.lasttick = now

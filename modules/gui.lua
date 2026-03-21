@@ -1764,7 +1764,58 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       local spacer2 = CreateConfig(nil, " ", nil, nil, "header")
       spacer2:GetParent().objectCount = spacer2:GetParent().objectCount - 1
       spacer2:SetHeight(5)
-      
+
+      local castbarCustom
+
+      CreateConfig(function()
+        if castbarCustom and castbarCustom.input then
+          local isCustom = pfUI.throttle:IsCustom("nameplates_castbar")
+          if not isCustom then
+            castbarCustom.input:EnableMouse(false)
+            castbarCustom.input:EnableKeyboard(false)
+            castbarCustom.input:ClearFocus()
+            castbarCustom.input:SetTextColor(.5,.5,.5,1)
+            castbarCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_castbar")))
+          else
+            castbarCustom.input:EnableMouse(true)
+            castbarCustom.input:EnableKeyboard(true)
+            castbarCustom.input:SetTextColor(.2,1,.8,1)
+            if _G.pfUI_throttle.nameplates_castbar_custom then
+              castbarCustom.input:SetText(_G.pfUI_throttle.nameplates_castbar_custom)
+            end
+          end
+        end
+      end, T["Castbar Plates"], _G.pfUI_throttle, "nameplates_castbar", "dropdown", {
+        "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
+        "slow:" .. T["Slow"] .. " (5 FPS)",
+        "normal:" .. T["Normal"] .. " (10 FPS)",
+        "fast:" .. T["Fast"] .. " (20 FPS)",
+        "very_fast:" .. T["Very Fast"] .. " (30 FPS)",
+        "fastest:" .. T["Fastest"] .. " (50 FPS)",
+        "custom:" .. T["Custom"],
+      })
+
+      castbarCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_castbar_custom")
+
+      local isCustom3b = pfUI.throttle:IsCustom("nameplates_castbar")
+      if not isCustom3b then
+        castbarCustom.input:EnableMouse(false)
+        castbarCustom.input:EnableKeyboard(false)
+        castbarCustom.input:SetTextColor(.5,.5,.5,1)
+        castbarCustom.input:SetText(tostring(pfUI.throttle:GetFps("nameplates_castbar")))
+      else
+        castbarCustom.input:EnableMouse(true)
+        castbarCustom.input:EnableKeyboard(true)
+        castbarCustom.input:SetTextColor(.2,1,.8,1)
+        if _G.pfUI_throttle.nameplates_castbar_custom then
+          castbarCustom.input:SetText(_G.pfUI_throttle.nameplates_castbar_custom)
+        end
+      end
+
+      local spacer3 = CreateConfig(nil, " ", nil, nil, "header")
+      spacer3:GetParent().objectCount = spacer3:GetParent().objectCount - 1
+      spacer3:SetHeight(5)
+
       local massCustom
       
       CreateConfig(function()
