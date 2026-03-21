@@ -1680,7 +1680,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
             end
           end
         end
-      end, T["Target/Casting Plates"], _G.pfUI_throttle, "nameplates_target", "dropdown", {
+      end, T["Target Plates"], _G.pfUI_throttle, "nameplates_target", "dropdown", {
         "very_slow:" .. T["Very Slow"] .. " (2 FPS)",
         "slow:" .. T["Slow"] .. " (5 FPS)",
         "normal:" .. T["Normal"] .. " (10 FPS)",
