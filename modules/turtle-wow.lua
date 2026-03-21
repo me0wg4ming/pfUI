@@ -2,41 +2,76 @@
 if not TargetHPText or not TargetHPPercText then return end
 
 pfUI:RegisterModule("turtle-wow", "vanilla", function ()
-  -- Turtle WoW's new RaidFrame.lua uses GROUP_REPLACE_PARTY to decide whether to
-  -- call ShowPartyFrame(). Since pfUI replaces party frames, always set this so
-  -- RaidOptionsFrame_UpdatePartyFrames never tries to restore the Blizzard frames.
-  if C.unitframes.disable ~= "1" then
+  -- Manage Turtle WoW's GroupUI (Turtle_GroupUI addon) vs pfUI frames.
+  --
+  -- Turtle uses GroupClusterFrame1-8 for BOTH party AND raid display,
+  -- and GroupPetsClusterFrame for pets only. GroupFrame_Toggle() controls
+  -- the entire system via the GROUP_ENABLED global.
+  --
+  -- Logic:
+  --   pfUI UF disabled (disable=="1")  -> don't touch Turtle at all
+  --   In party (no raid):
+  --     pfUI group visible=="1"        -> disable Turtle GroupUI, pfUI handles party
+  --     pfUI group visible=="0"        -> enable Turtle GroupUI for party
+  --   In raid:
+  --     pfUI raid visible=="1"         -> disable Turtle GroupUI, pfUI handles raid
+  --     pfUI raid visible=="0"         -> enable Turtle GroupUI for raid
+
+  if C.unitframes.disable == "1" then
+    -- pfUI unit frames are completely off, let Turtle handle everything
+  else
+    -- Set GROUP_REPLACE_PARTY early so Turtle's own init can use it
     GROUP_REPLACE_PARTY = "1"
-  end
 
-  -- hide Turtle WoW's new compact GroupFrame (GroupClusterFrame1-8) when pfUI
-  -- unitframes are active, since pfUI has its own party/raid frames
-  if C.unitframes.disable ~= "1" then
     HookAddonOrVariable("GroupFrame", function()
-      local function HideGroupFrames()
-        if GroupFrame then
-          GroupFrame:Hide()
-          GroupFrame.Show = function() return end
+      hooksecurefunc("GroupFrame_Toggle", function()
+        local inRaid = (GetNumRaidMembers() > 0)
+        local pfUIHandles
+        if inRaid then
+          pfUIHandles = C.unitframes.raid and C.unitframes.raid.visible == "1"
+        else
+          pfUIHandles = C.unitframes.group and C.unitframes.group.visible == "1"
         end
-        for i = 1, 8 do
-          local f = _G["GroupClusterFrame"..i]
-          if f then
-            f:Hide()
-            f.Show = function() return end
+
+        if pfUIHandles then
+          GROUP_ENABLED = "0"
+          for i = 1, 8 do
+            local f = _G["GroupClusterFrame"..i]
+            if f then f:Hide() end
           end
+          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
+        else
+          GROUP_ENABLED = "1"
+          GROUP_REPLACE_PARTY = "1"
+          GroupFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
+          GroupFrame:RegisterEvent("RAID_ROSTER_UPDATE")
+          GroupFrame:RegisterEvent("RAID_TARGET_UPDATE")
+          GroupFrame:RegisterEvent("UNIT_NAME_UPDATE")
+          GroupFrame:RegisterEvent("UNIT_PET")
+          GroupFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+          GroupFrame:RegisterEvent("CHAT_MSG_ADDON")
+          GroupFrame:Show()
+          GroupFrame_Update()
         end
-        if GroupPetsClusterFrame then
-          GroupPetsClusterFrame:Hide()
-          GroupPetsClusterFrame.Show = function() return end
+      end)
+
+      hooksecurefunc("GroupFrame_Update", function()
+        local inRaid = (GetNumRaidMembers() > 0)
+        local pfUIHandles
+        if inRaid then
+          pfUIHandles = C.unitframes.raid and C.unitframes.raid.visible == "1"
+        else
+          pfUIHandles = C.unitframes.group and C.unitframes.group.visible == "1"
         end
-      end
 
-      HideGroupFrames()
-
-      -- GroupFrame_Update shows the cluster frames on every raid/party update
-      if GroupFrame_Update then
-        hooksecurefunc("GroupFrame_Update", HideGroupFrames)
-      end
+        if pfUIHandles then
+          for i = 1, 8 do
+            local f = _G["GroupClusterFrame"..i]
+            if f then f:Hide() end
+          end
+          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
+        end
+      end)
     end)
   end
 
