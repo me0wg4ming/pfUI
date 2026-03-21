@@ -18,8 +18,9 @@ pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
 
     HookAddonOrVariable(addon, function()
       local SetSelection = frame.."_SetSelection"
-      local icon = _G[template.."Icon"]
-      local seltitle = _G[template.."Name"]
+      -- Turtle WoW uses "SkillIcon"/"SkillName" instead of "Icon"/"Name"
+      local icon = _G[template.."Icon"] or _G[template.."SkillIcon"]
+      local seltitle = _G[template.."Name"] or _G[template.."SkillName"]
       local reagentlabel = _G[name.."ReagentLabel"]
       local collapseall = _G[name.."CollapseAllButton"]
       local detailscroll = _G[name.."DetailScrollFrame"]
@@ -40,7 +41,8 @@ pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
       local title = _G[frame.."TitleText"]
       local points = _G[frame.."PointsText"]
       local requiretext = _G[name .. "RequirementText"]
-      local search = _G[name .. "FrameEditBox"]
+      -- Turtle WoW: TradeSkillFrameSearchBox / CraftFrameSearchBox
+      local search = _G[name .. "FrameEditBox"] or _G[name .. "FrameSearchBox"]
 
       local frame = _G[frame]
 
@@ -220,18 +222,33 @@ pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
       end
 
       -- Compatibility
-      if search then -- tbc
+      if search then -- tbc / turtle wow
         _G[displayed] = 21
         scrollframe:SetHeight(338)
 
         local rank = _G[name.."RankFrameSkillRank"]
-        rank:ClearAllPoints()
-        rank:SetPoint("CENTER", rankbar, "CENTER", 0, 0)
+        if rank then
+          rank:ClearAllPoints()
+          rank:SetPoint("CENTER", rankbar, "CENTER", 0, 0)
+        end
 
+        -- Turtle WoW: MatsCheckButton + SkillCheckButton
+        -- standard TBC: AvailableFilterCheckButton
         local available = _G[frame:GetName().."AvailableFilterCheckButton"]
-        SkinCheckbox(available)
-        available:ClearAllPoints()
-        available:SetPoint("TOPLEFT", scrollframe.backdrop, "BOTTOMLEFT", -4, -5)
+            or _G[name.."MatsCheckButton"]
+            or _G[name.."FrameMatsCheckButton"]
+        local available2 = _G[name.."SkillCheckButton"]
+            or _G[name.."FrameSkillCheckButton"]
+        if available then
+          SkinCheckbox(available)
+          available:ClearAllPoints()
+          available:SetPoint("BOTTOMLEFT", scrollframe.backdrop, "TOPLEFT", -4, 2)
+        end
+        if available2 then
+          SkinCheckbox(available2)
+          available2:ClearAllPoints()
+          available2:SetPoint("LEFT", available, "RIGHT", 90, 0)
+        end
 
         search:DisableDrawLayer("BACKGROUND")
         CreateBackdrop(search, nil, nil, 1)
@@ -239,6 +256,7 @@ pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
         search:SetTextInsets(5, 5, 5, 5)
         search:SetHeight(22)
         search:ClearAllPoints()
+        search:SetPoint("TOPLEFT",  scrollframe.backdrop, "BOTTOMLEFT",  0, -5)
         search:SetPoint("TOPRIGHT", scrollframe.backdrop, "BOTTOMRIGHT", 0, -5)
 
         local craft_filter = CraftFrameFilterDropDown
@@ -247,9 +265,10 @@ pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
           craft_filter:ClearAllPoints()
           craft_filter:SetPoint("BOTTOMRIGHT", scrollframe.backdrop, "TOPRIGHT", 15, 0)
         end
-      else -- vanilla
+      else -- vanilla (no search)
         _G[displayed] = 23
       end
+
       -- build remaining tradeskills
       for i = 9, _G[displayed] do
         local button = _G[template..i] or CreateFrame("Button", template..i, frame, template.."ButtonTemplate")
