@@ -2,68 +2,64 @@
 if not TargetHPText or not TargetHPPercText then return end
 
 pfUI:RegisterModule("turtle-wow", "vanilla", function ()
-  -- tell Turtle WoW's RaidFrame.lua that pfUI replaces party/raid frames
-  if C.unitframes.disable ~= "1" then
+  -- Manage Turtle WoW's GroupUI vs pfUI group/raid frames.
+  -- When pfUI group/raid is enabled (visible=="1"), hide Turtle's frames.
+  -- When pfUI group/raid is disabled (visible=="0"), let Turtle show its frames.
+  if C.unitframes.disable == "1" then
+    -- pfUI unit frames are completely off, let Turtle handle everything
+  else
+    -- Set GROUP_REPLACE_PARTY early so Turtle's own init can use it
     GROUP_REPLACE_PARTY = "1"
-  end
 
-  -- hide Turtle WoW's compact GroupFrame (GroupClusterFrame1-8) when pfUI unitframes are active
-  if C.unitframes.disable ~= "1" then
     HookAddonOrVariable("GroupFrame", function()
-      local function HideGroupFrames()
-        if GroupFrame then
-          GroupFrame:Hide()
-          GroupFrame.Show = function() return end
+      hooksecurefunc("GroupFrame_Toggle", function()
+        local inRaid = (GetNumRaidMembers() > 0)
+        local pfUIHandles
+        if inRaid then
+          pfUIHandles = C.unitframes.raid and C.unitframes.raid.visible == "1"
+        else
+          pfUIHandles = C.unitframes.group and C.unitframes.group.visible == "1"
         end
-        for i = 1, 8 do
-          local f = _G["GroupClusterFrame"..i]
-          if f then
-            f:Hide()
-            f.Show = function() return end
+
+        if pfUIHandles then
+          GROUP_ENABLED = "0"
+          for i = 1, 8 do
+            local f = _G["GroupClusterFrame"..i]
+            if f then f:Hide() end
           end
+          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
+        else
+          GROUP_ENABLED = "1"
+          GROUP_REPLACE_PARTY = "1"
+          GroupFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
+          GroupFrame:RegisterEvent("RAID_ROSTER_UPDATE")
+          GroupFrame:RegisterEvent("RAID_TARGET_UPDATE")
+          GroupFrame:RegisterEvent("UNIT_NAME_UPDATE")
+          GroupFrame:RegisterEvent("UNIT_PET")
+          GroupFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+          GroupFrame:RegisterEvent("CHAT_MSG_ADDON")
+          GroupFrame:Show()
+          GroupFrame_Update()
         end
-        if GroupPetsClusterFrame then
-          GroupPetsClusterFrame:Hide()
-          GroupPetsClusterFrame.Show = function() return end
-        end
-      end
-      HideGroupFrames()
-      if GroupFrame_Update then
-        hooksecurefunc("GroupFrame_Update", HideGroupFrames)
-      end
-    end)
-  end
-  -- tell Turtle WoW's RaidFrame.lua that pfUI replaces party/raid frames
-  if C.unitframes.disable ~= "1" then
-    GROUP_REPLACE_PARTY = "1"
-  end
+      end)
 
-  -- hide Turtle WoW's compact GroupFrame (GroupClusterFrame1-8) when pfUI unitframes are active
-  if C.unitframes.disable ~= "1" then
-    HookAddonOrVariable("GroupFrame", function()
-      local function HideGroupFrames()
-        if GroupFrame then
-          GroupFrame:Hide()
-          GroupFrame.Show = function() return end
+      hooksecurefunc("GroupFrame_Update", function()
+        local inRaid = (GetNumRaidMembers() > 0)
+        local pfUIHandles
+        if inRaid then
+          pfUIHandles = C.unitframes.raid and C.unitframes.raid.visible == "1"
+        else
+          pfUIHandles = C.unitframes.group and C.unitframes.group.visible == "1"
         end
-        for i = 1, 8 do
-          local f = _G["GroupClusterFrame"..i]
-          if f then
-            f:Hide()
-            f.Show = function() return end
+
+        if pfUIHandles then
+          for i = 1, 8 do
+            local f = _G["GroupClusterFrame"..i]
+            if f then f:Hide() end
           end
+          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
         end
-        if GroupPetsClusterFrame then
-          GroupPetsClusterFrame:Hide()
-          GroupPetsClusterFrame.Show = function() return end
-        end
-      end
-
-      HideGroupFrames()
-
-      if GroupFrame_Update then
-        hooksecurefunc("GroupFrame_Update", HideGroupFrames)
-      end
+      end)
     end)
   end
   -- custom debuff durations
