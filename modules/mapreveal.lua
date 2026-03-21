@@ -51,7 +51,7 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
 
   local explores = {}
   local explorecaches = {}
-  local alreadyknown = {}
+  local alreadyknown = {} -- per-zone accumulator: { [zone] = { [texName] = true } }
 
   -- Own texture pool - separate from Blizzard's WorldMapOverlay textures
   local pfOverlays = {}
@@ -111,12 +111,14 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
     local prefix = string.format("Interface\\WorldMap\\%s\\", mapFileName)
     local numOverlays = GetNumMapOverlays()
 
-    -- collect explored overlays
-    for k in pairs(alreadyknown) do alreadyknown[k] = nil end
+    -- accumulate explored overlays per zone (never clear, only add)
+    if not alreadyknown[mapFileName] then alreadyknown[mapFileName] = {} end
     for i = 1, numOverlays do
       local texName = GetMapOverlayInfo(i)
-      if texName then alreadyknown[texName] = true end
+      if texName then alreadyknown[mapFileName][string.upper(texName)] = true end
     end
+
+    local zoneKnown = alreadyknown[mapFileName]
 
     -- hide explore icons
     for _, frame in pairs(explores) do frame:Hide() end
@@ -144,7 +146,7 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
       explore.tex:SetTexCoord(.08, .92, .08, .92)
       explore.tex:SetAllPoints()
 
-      if C.appearance.worldmap.mapexploration == "1" and not alreadyknown[textureName] then
+      if C.appearance.worldmap.mapexploration == "1" and not zoneKnown[string.upper(textureName)] then
         explore.tex:SetTexture("Interface\\WorldMap\\WorldMap-MagnifyingGlass")
         explore:Show()
       else
@@ -209,4 +211,5 @@ pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
     origUpdate(unpack(arg))
     pfWorldMapFrame_Update()
   end
+
 end)
