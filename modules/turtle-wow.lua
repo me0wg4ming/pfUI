@@ -23,53 +23,48 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
     -- Set GROUP_REPLACE_PARTY early so Turtle's own init can use it
     GROUP_REPLACE_PARTY = "1"
 
-    HookAddonOrVariable("GroupFrame", function()
-      hooksecurefunc("GroupFrame_Toggle", function()
-        local inRaid = (GetNumRaidMembers() > 0)
-        local pfUIHandles
-        if inRaid then
-          pfUIHandles = C.unitframes.raid and C.unitframes.raid.visible == "1"
-        else
-          pfUIHandles = C.unitframes.group and C.unitframes.group.visible == "1"
-        end
-
-        if pfUIHandles then
-          GROUP_ENABLED = "0"
-          for i = 1, 8 do
-            local f = _G["GroupClusterFrame"..i]
-            if f then f:Hide() end
+    -- Hide Turtle GroupUI frames and disable mouse when pfUI handles group/raid.
+    -- When pfUI does NOT handle them, we simply don't interfere - Turtle manages itself.
+    -- Important: Do NOT unregister events - Turtle needs RAID_ROSTER_UPDATE etc.
+    -- to react when group converts to raid (and vice versa).
+    local function DisableTurtleGroupFrames()
+      for i = 1, 8 do
+        local f = _G["GroupClusterFrame"..i]
+        if f then
+          f:Hide()
+          f:EnableMouse(false)
+          for _, child in pairs({f:GetChildren()}) do
+            child:EnableMouse(false)
           end
-          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
-        else
-          GROUP_ENABLED = "1"
-          GROUP_REPLACE_PARTY = "1"
-          GroupFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
-          GroupFrame:RegisterEvent("RAID_ROSTER_UPDATE")
-          GroupFrame:RegisterEvent("RAID_TARGET_UPDATE")
-          GroupFrame:RegisterEvent("UNIT_NAME_UPDATE")
-          GroupFrame:RegisterEvent("UNIT_PET")
-          GroupFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
-          GroupFrame:RegisterEvent("CHAT_MSG_ADDON")
-          GroupFrame:Show()
-          GroupFrame_Update()
+        end
+      end
+      if GroupPetsClusterFrame then
+        GroupPetsClusterFrame:Hide()
+        GroupPetsClusterFrame:EnableMouse(false)
+      end
+    end
+
+    -- Check if pfUI is handling group or raid for the current situation
+    local function pfUIHandlesGroupOrRaid()
+      if GetNumRaidMembers() > 0 then
+        return C.unitframes.raid and C.unitframes.raid.visible == "1"
+      else
+        return C.unitframes.group and C.unitframes.group.visible == "1"
+      end
+    end
+
+    HookAddonOrVariable("GroupFrame", function()
+      -- After Turtle's own init, hide frames if pfUI handles them
+      hooksecurefunc("GroupFrame_Toggle", function()
+        if pfUIHandlesGroupOrRaid() then
+          DisableTurtleGroupFrames()
         end
       end)
 
+      -- After every group/raid update, re-hide if pfUI handles them
       hooksecurefunc("GroupFrame_Update", function()
-        local inRaid = (GetNumRaidMembers() > 0)
-        local pfUIHandles
-        if inRaid then
-          pfUIHandles = C.unitframes.raid and C.unitframes.raid.visible == "1"
-        else
-          pfUIHandles = C.unitframes.group and C.unitframes.group.visible == "1"
-        end
-
-        if pfUIHandles then
-          for i = 1, 8 do
-            local f = _G["GroupClusterFrame"..i]
-            if f then f:Hide() end
-          end
-          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
+        if pfUIHandlesGroupOrRaid() then
+          DisableTurtleGroupFrames()
         end
       end)
     end)

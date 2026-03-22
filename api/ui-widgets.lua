@@ -115,7 +115,7 @@ do -- statusbars
 
   function pfUI.api.CreateStatusBar(name, parent)
     local f = CreateFrame("Button", name, parent)
-    f:EnableMouse(nil)
+    f:EnableMouse(false)
 
     f.bar = f:CreateTexture(nil, "NORMAL")
     f.bar:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)

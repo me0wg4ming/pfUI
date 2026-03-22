@@ -1579,8 +1579,17 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
         local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
 
         if targetGUID then
-          -- We have a GUID = Nampower is authority, no cast means no cast
-          nameplate.castbar:Hide()
+          -- We have a GUID but Nampower has no cast info.
+          -- Fall back to API for the target plate (channels may not be in cast cache)
+          if isTargetPlate and UnitExists("target") then
+            cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
+            if not cast then
+              channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
+            end
+          end
+          if not cast and not channel then
+            nameplate.castbar:Hide()
+          end
         elseif isTargetPlate and UnitExists("target") then
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
           if not cast then
