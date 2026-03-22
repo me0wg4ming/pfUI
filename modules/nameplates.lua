@@ -1292,17 +1292,14 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       throttle = pfUI.throttle:Get("nameplates")         -- Default: 10 FPS
     end
 
-    -- castbar has its own throttle (independent of target throttle)
-    local castbarThrottle = pfUI.throttle:Get("nameplates_castbar")  -- Default: 20 FPS
-    local castbarReady = (nameplate.castLastTick or 0) + castbarThrottle <= now
-    if nameplate.castUpdate and castbarReady then
-      nameplate.castLastTick = now
-    elseif nameplate.castUpdate and not castbarReady then
-      nameplate.castUpdate = nil  -- defer castUpdate until castbar throttle allows it
+    -- When a castbar is actively shown, use the castbar throttle if it's faster
+    -- than the general throttle, so the castbar animation stays smooth
+    local castbarThrottle = pfUI.throttle:Get("nameplates_castbar")
+    if isCasting and castbarThrottle < throttle then
+      throttle = castbarThrottle
     end
 
     -- Check for pending event updates (these bypass throttle for immediate response)
-    -- castUpdate is now handled by its own throttle above, not the general bypass
     local hasEventUpdate = nameplate.eventcache or nameplate.auraUpdate or nameplate.castUpdate or nameplate.targetUpdate or nameplate.comboUpdate
 
     -- Event updates bypass throttle
