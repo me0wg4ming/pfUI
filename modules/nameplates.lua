@@ -1513,25 +1513,20 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     -- Use multiple checks for target detection (target variable, istarget flag, or zoomed state)
     local isTargetPlate = target or nameplate.istarget or (nameplate.health and nameplate.health.zoomed)
     if cfg.showcastbar and ( not cfg.targetcastbar or isTargetPlate ) then
-      local unitstr = nil
-      local targetGUID = nil
-      
-      -- Get GUID for CastEvents lookup - use cached GUID when available
+      -- Always use GUID for cast lookup to prevent duplicate castbars on same-name mobs
+      local plateGUID = nil
+
       if isTargetPlate then
-        targetGUID = state and state.targetGuid
-        if not targetGUID then
-          local guid = GetUnitGUID("target")
-          targetGUID = guid
+        plateGUID = state and state.targetGuid
+        if not plateGUID then
+          plateGUID = GetUnitGUID("target")
         end
+      else
+        plateGUID = nameplate.cachedGuid
       end
-      
-      -- Use cached GUID for non-target plates
-      if not isTargetPlate then
-        unitstr = nameplate.cachedGuid
-      end
-      
-      -- Check event-based cast cache first (use GUID)
-      local castInfo = GetCastInfo(targetGUID) or (unitstr and GetCastInfo(unitstr))
+
+      -- Check event-based cast cache by GUID
+      local castInfo = plateGUID and GetCastInfo(plateGUID)
       
       if castInfo and castInfo.spellID then
         -- Check if cast is still valid
@@ -1575,38 +1570,21 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
           nameplate.castbar:Show()
         end
       else
-        -- Fallback to API calls only when no GUID available (Nampower not tracking this unit)
+        -- No cast in libdebuff_casts for this GUID
+        -- For target plate: try API fallback (channels may not be in cast cache)
+        -- For non-target: no GUID = no castbar (prevents duplicate castbars on same-name mobs)
         local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
 
-        if targetGUID then
-          -- We have a GUID but Nampower has no cast info.
-          -- Fall back to API for the target plate (channels may not be in cast cache)
-          if isTargetPlate and UnitExists("target") then
+        if isTargetPlate and UnitExists("target") then
+          if UnitCastingInfo then
             cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
-            if not cast then
-              channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
-            end
           end
-          if not cast and not channel then
-            nameplate.castbar:Hide()
-          end
-        elseif isTargetPlate and UnitExists("target") then
-          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
-          if not cast then
+          if not cast and UnitChannelInfo then
             channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
           end
-        elseif unitstr then
-          local guid = GetUnitGUID(unitstr)
-          local q = guid or unitstr
-          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(q)
-          if not cast then
-            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(q)
-          end
-        elseif name then
-          cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(name)
-          if not cast then
-            channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(name)
-          end
+        elseif plateGUID then
+          -- Non-target with GUID but no cast data = no cast
+          nameplate.castbar:Hide()
         end
 
         if not cast and not channel then
