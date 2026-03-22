@@ -31,6 +31,7 @@ pfUI:RegisterModule("infight", "vanilla:tbc", function ()
 
   pfUI.infight.screen = CreateFrame("Frame", "pfUICombatScreen", WorldFrame)
   pfUI.infight.screen:SetAllPoints(WorldFrame)
+  pfUI.infight.screen:EnableMouse(false)
   pfUI.infight.screen:Hide()
 
   pfUI.infight.UpdateConfig = function(self)
