@@ -120,12 +120,15 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         if castData.event == "CAST" or castData.event == "FAIL" then
           castBlocked = true
           pfUI.libdebuff_casts[focusGuid] = nil
-        elseif castData.event == "START" and castData.endTime and castData.endTime > GetTime() then
+        elseif (castData.event == "START" or castData.event == "CHANNEL") and castData.endTime and castData.endTime > GetTime() then
           cast = castData.spellName
           texture = castData.icon
           startTime = castData.startTime * 1000
           endTime = castData.endTime * 1000
           nameSubtext = ""
+          if castData.event == "CHANNEL" then
+            channel = cast
+          end
         end
       end
 

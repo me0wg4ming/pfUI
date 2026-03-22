@@ -1460,17 +1460,15 @@ end
       throttle = pfUI.throttle:Get("nameplates")         -- Default: 10 FPS
     end
 
-    -- castbar has its own throttle (independent of target throttle)
-    local castbarThrottle = pfUI.throttle:Get("nameplates_castbar")  -- Default: 20 FPS
-    local castbarReady = (nameplate.castLastTick or 0) + castbarThrottle <= now
-    if nameplate.castUpdate and castbarReady then
-      nameplate.castLastTick = now
-    elseif nameplate.castUpdate and not castbarReady then
-      nameplate.castUpdate = nil  -- defer castUpdate until castbar throttle allows it
+    -- When a castbar is actively shown, use the castbar throttle if it's faster
+    -- than the general throttle, so the castbar animation stays smooth
+    local castbarThrottle = pfUI.throttle:Get("nameplates_castbar")
+    local isCastbarVisible = nameplate.castbar and nameplate.castbar:IsShown()
+    if isCastbarVisible and castbarThrottle < throttle then
+      throttle = castbarThrottle
     end
 
     -- Check for pending event updates (these bypass throttle for immediate response)
-    -- castUpdate is now handled by its own throttle above, not the general bypass
     local hasEventUpdate = nameplate.eventcache or nameplate.auraUpdate or nameplate.castUpdate or nameplate.targetUpdate or nameplate.comboUpdate
 
     -- Event updates bypass throttle
@@ -1750,8 +1748,17 @@ end
         local channel, cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
 
         if targetGUID then
-          -- We have a GUID = Nampower is authority, no cast means no cast
-          nameplate.castbar:Hide()
+          -- We have a GUID but Nampower has no cast info.
+          -- Fall back to API for the target plate (channels may not be in cast cache)
+          if isTargetPlate and UnitExists("target") then
+            cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
+            if not cast then
+              channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo("target")
+            end
+          end
+          if not cast and not channel then
+            nameplate.castbar:Hide()
+          end
         elseif isTargetPlate and UnitExists("target") then
           cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo("target")
           if not cast then

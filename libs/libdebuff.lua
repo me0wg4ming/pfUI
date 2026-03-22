@@ -1652,7 +1652,9 @@ end
       local itemId = arg1
       local spellId = arg2
       local casterGuid = arg3
-      local castTime = arg6
+      local spellType = arg8 or 0  -- 0=Normal, 1=Channel, 2=Autorepeating
+      local isChannel = spellType == 1
+      local castTime = isChannel and arg7 or arg6  -- arg6=castTime (normal), arg7=duration (channel)
       
       if not casterGuid or not spellId then return end
       
@@ -1696,7 +1698,7 @@ end
         startTime = GetTime(),
         duration = castTime and castTime / 1000 or 0,
         endTime = castTime and (GetTime() + castTime / 1000) or nil,
-        event = "START"
+        event = isChannel and "CHANNEL" or "START"
       }
 
       if event == "SPELL_START_SELF" and pfUI.libdebuff_spell_start_self_hooks then
@@ -1719,8 +1721,9 @@ end
       
       -- Clear cast bar only if SPELL_GO matches the active cast
       -- (Reactive procs like Frost Armor trigger SPELL_GO but shouldn't clear the castbar)
+      -- Don't clear channels on SPELL_GO - channels persist until duration expires or SPELL_FAILED
       if casterGuid and pfUI.libdebuff_casts[casterGuid] then
-        if pfUI.libdebuff_casts[casterGuid].spellID == spellId then
+        if pfUI.libdebuff_casts[casterGuid].spellID == spellId and pfUI.libdebuff_casts[casterGuid].event ~= "CHANNEL" then
           pfUI.libdebuff_casts[casterGuid] = nil
         end
       end
