@@ -23,61 +23,6 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
     -- Set GROUP_REPLACE_PARTY early so Turtle's own init can use it
     GROUP_REPLACE_PARTY = "1"
 
-    -- Disable Turtle GroupUI cluster frames and member frames so they
-    -- cannot intercept mouse clicks meant for pfUI unit frames or nameplates.
-    local function DisableTurtleGroupFrames()
-      GROUP_ENABLED = "0"
-
-      -- Stop GroupFrame from firing events that re-show cluster frames
-      GroupFrame:UnregisterAllEvents()
-      GroupFrame:Hide()
-
-      for i = 1, 8 do
-        local f = _G["GroupClusterFrame"..i]
-        if f then
-          f:Hide()
-          f:EnableMouse(false)
-          -- Disable mouse on all child member frames (Buttons with click handlers)
-          for _, child in pairs({f:GetChildren()}) do
-            child:EnableMouse(false)
-          end
-        end
-      end
-      if GroupPetsClusterFrame then
-        GroupPetsClusterFrame:Hide()
-        GroupPetsClusterFrame:EnableMouse(false)
-      end
-    end
-
-    local function EnableTurtleGroupFrames()
-      GROUP_ENABLED = "1"
-      GROUP_REPLACE_PARTY = "1"
-
-      -- Re-enable mouse on cluster frames and their children
-      for i = 1, 8 do
-        local f = _G["GroupClusterFrame"..i]
-        if f then
-          f:EnableMouse(true)
-          for _, child in pairs({f:GetChildren()}) do
-            child:EnableMouse(true)
-          end
-        end
-      end
-      if GroupPetsClusterFrame then
-        GroupPetsClusterFrame:EnableMouse(true)
-      end
-
-      GroupFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
-      GroupFrame:RegisterEvent("RAID_ROSTER_UPDATE")
-      GroupFrame:RegisterEvent("RAID_TARGET_UPDATE")
-      GroupFrame:RegisterEvent("UNIT_NAME_UPDATE")
-      GroupFrame:RegisterEvent("UNIT_PET")
-      GroupFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
-      GroupFrame:RegisterEvent("CHAT_MSG_ADDON")
-      GroupFrame:Show()
-      GroupFrame_Update()
-    end
-
     HookAddonOrVariable("GroupFrame", function()
       hooksecurefunc("GroupFrame_Toggle", function()
         local inRaid = (GetNumRaidMembers() > 0)
@@ -89,9 +34,24 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
         end
 
         if pfUIHandles then
-          DisableTurtleGroupFrames()
+          GROUP_ENABLED = "0"
+          for i = 1, 8 do
+            local f = _G["GroupClusterFrame"..i]
+            if f then f:Hide() end
+          end
+          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
         else
-          EnableTurtleGroupFrames()
+          GROUP_ENABLED = "1"
+          GROUP_REPLACE_PARTY = "1"
+          GroupFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
+          GroupFrame:RegisterEvent("RAID_ROSTER_UPDATE")
+          GroupFrame:RegisterEvent("RAID_TARGET_UPDATE")
+          GroupFrame:RegisterEvent("UNIT_NAME_UPDATE")
+          GroupFrame:RegisterEvent("UNIT_PET")
+          GroupFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+          GroupFrame:RegisterEvent("CHAT_MSG_ADDON")
+          GroupFrame:Show()
+          GroupFrame_Update()
         end
       end)
 
@@ -105,7 +65,11 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
         end
 
         if pfUIHandles then
-          DisableTurtleGroupFrames()
+          for i = 1, 8 do
+            local f = _G["GroupClusterFrame"..i]
+            if f then f:Hide() end
+          end
+          if GroupPetsClusterFrame then GroupPetsClusterFrame:Hide() end
         end
       end)
     end)
