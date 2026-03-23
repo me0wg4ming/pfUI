@@ -139,6 +139,7 @@ pfUI:RegisterModule("firstrun", "vanilla:tbc", function ()
     f.Modern:SetText("Modern")
     f.Modern:SetScript("OnClick", function()
       _G["pfUI_config"] = CopyTable(pfUI_profiles["Modern"])
+      pfUI_init.selected_profile = "Modern"
       pfUI:LoadConfig()
       ReloadUI()
     end)
@@ -152,6 +153,7 @@ pfUI:RegisterModule("firstrun", "vanilla:tbc", function ()
     f.Nostalgia:SetText("Nostalgia")
     f.Nostalgia:SetScript("OnClick", function()
       _G["pfUI_config"] = CopyTable(pfUI_profiles["Nostalgia"])
+      pfUI_init.selected_profile = "Nostalgia"
       pfUI:LoadConfig()
       ReloadUI()
     end)
@@ -165,6 +167,7 @@ pfUI:RegisterModule("firstrun", "vanilla:tbc", function ()
     f.Legacy:SetText("Legacy")
     f.Legacy:SetScript("OnClick", function()
       _G["pfUI_config"] = CopyTable(pfUI_profiles["Legacy"])
+      pfUI_init.selected_profile = "Legacy"
       pfUI:LoadConfig()
       ReloadUI()
     end)
@@ -178,6 +181,7 @@ pfUI:RegisterModule("firstrun", "vanilla:tbc", function ()
     f.Slim:SetText("Slim")
     f.Slim:SetScript("OnClick", function()
       _G["pfUI_config"] = CopyTable(pfUI_profiles["Slim"])
+      pfUI_init.selected_profile = "Slim"
       pfUI:LoadConfig()
       ReloadUI()
     end)
@@ -307,6 +311,26 @@ pfUI:RegisterModule("firstrun", "vanilla:tbc", function ()
 
   -- finalize dialog
   pfUI.firstrun:AddStep("finalize", function()
+    -- Set default positions for new modules based on the active profile.
+    -- Only write positions that haven't been saved yet (don't override user preferences).
+    local function SetDefaultPosition(name, anchor, xpos, ypos)
+      if not pfUI_config.position[name] then
+        pfUI_config.position[name] = {
+          anchor = anchor,
+          parent = "UIParent",
+          xpos   = xpos,
+          ypos   = ypos,
+        }
+      end
+    end
+
+    local positions = (pfUI_profiles[pfUI_init.selected_profile or "Modern"] or pfUI_profiles["Modern"]).new_module_positions
+      or pfUI_profiles["Modern"].new_module_positions
+
+    for frameName, pos in pairs(positions) do
+      SetDefaultPosition(frameName, pos.anchor, pos.xpos, pos.ypos)
+    end
+
     local f = CreateFirstRunPage()
     f.text:SetText(T["Your interface is now set up.\n\nFor advanced configuration, just open the |cff33ffccpf|rUI settings via the escape menu or type \"|cffffffaa/pfui|r\" into the chat.\n\n Have a nice trip!\n\n|cffaaaaaa- Shagu"])
     return f

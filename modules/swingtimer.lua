@@ -1,3 +1,4 @@
+pfUI:RegisterNewModule("swingtimer", "Swing Timer")
 pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
 
@@ -102,7 +103,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   -- Mainhand bar
   pfUI.swingtimer.mainhand = CreateFrame("StatusBar", "pfSwingTimerMainhand", UIParent)
-  pfUI.swingtimer.mainhand:SetPoint("CENTER", UIParent, "CENTER", 0, -100)
+  pfUI.swingtimer.mainhand:SetPoint("BOTTOM", UIParent, "CENTER", -189, 103)
   pfUI.swingtimer.mainhand:SetWidth(sw_width)
   pfUI.swingtimer.mainhand:SetHeight(sw_height)
   pfUI.swingtimer.mainhand:SetMinMaxValues(0, 1)
@@ -218,7 +219,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
   -- Ranged bar
   pfUI.swingtimer.ranged = CreateFrame("Frame", "pfSwingTimerRanged", UIParent)
-  pfUI.swingtimer.ranged:SetPoint("CENTER", UIParent, "CENTER", 0, -120)
+  pfUI.swingtimer.ranged:SetPoint("BOTTOM", UIParent, "CENTER", -189, 83)
   pfUI.swingtimer.ranged:SetWidth(sw_width)
   pfUI.swingtimer.ranged:SetHeight(sw_height)
   pfUI.swingtimer.ranged:Hide()

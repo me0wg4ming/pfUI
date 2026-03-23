@@ -1,3 +1,4 @@
+pfUI:RegisterNewModule("marktracking", "Mark Tracker")
 pfUI:RegisterModule("marktracking", "vanilla:tbc", function ()
   -- Requires mark1-mark8 unit tokens (Turtle WoW / Nampower)
   if not UnitExists("mark1") and not UnitExists("mark8") then
@@ -94,9 +95,9 @@ pfUI:RegisterModule("marktracking", "vanilla:tbc", function ()
 pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
   pfUI.marktracking:SetFrameStrata("MEDIUM")
   if GROW == "up" then
-    pfUI.marktracking:SetPoint("BOTTOM", UIParent, "CENTER", 0, 0)
+    pfUI.marktracking:SetPoint("LEFT", UIParent, "LEFT", 6, -5)
   else
-    pfUI.marktracking:SetPoint("TOP", UIParent, "CENTER", 0, 0)
+    pfUI.marktracking:SetPoint("LEFT", UIParent, "LEFT", 6, -5)
   end
   pfUI.marktracking:SetWidth(TOTAL_ROW_WIDTH)
   pfUI.marktracking:SetHeight(8 * (ROW_HEIGHT + 1) + border * 2 - 1)
