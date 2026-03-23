@@ -390,7 +390,7 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
         end
 
         -- skin each talent button
-        for i = 1, MAX_NUM_TALENTS do
+        for i = 1, (MAX_NUM_TALENTS or 100) do
           local talent = _G["TWTalentFrameTalent" .. i]
           if talent then
             StripTextures(talent)

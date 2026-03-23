@@ -38,7 +38,7 @@ pfUI:RegisterSkin("Talents", "vanilla:tbc", function ()
     _G[TALENT_FRAME_NAME.."TalentPointsText"]:ClearAllPoints()
     _G[TALENT_FRAME_NAME.."TalentPointsText"]:SetPoint("BOTTOMRIGHT", TALENT_FRAME, "BOTTOMRIGHT", -65, 83)
 
-    for i = 1, MAX_NUM_TALENTS do
+    for i = 1, (MAX_NUM_TALENTS or 100) do
       local talent = _G[TALENT_FRAME_NAME.."Talent"..i]
       if talent then
         StripTextures(talent)
