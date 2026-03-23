@@ -139,13 +139,13 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         query = UnitName("player")
       end
 
-      -- Fallback: UnitCastingInfo only when no focusGuid (Nampower not available for this unit)
-      if not cast and not castBlocked and not focusGuid and UnitCastingInfo then
-        cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(query)
+      -- Fallback: pfGetCastInfo only when no focusGuid (Nampower not available for this unit)
+      if not cast and not castBlocked and not focusGuid and pfGetCastInfo then
+        cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetCastInfo(query)
       end
 
-      if not cast and not castBlocked and not focusGuid and UnitChannelInfo then
-        channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(this.unitstr or this.unitname)
+      if not cast and not castBlocked and not focusGuid and pfGetChannelInfo then
+        channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetChannelInfo(this.unitstr or this.unitname)
         cast = channel
       end
 
@@ -254,12 +254,12 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
 
       if event == CASTBAR_EVENT_CAST_DELAY and playerarg then
-        local isCast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitCastingInfo(this.unitstr or this.unitname)
+        local isCast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetCastInfo(this.unitstr or this.unitname)
         if not isCast then return end
         if not this.endTime then return end
         this.delay = this.delay + (endTime - this.endTime) / 1000
       elseif event == CASTBAR_EVENT_CHANNEL_DELAY and playerarg then
-        local isChannel, _, _, _, startTime, endTime = UnitChannelInfo(this.unitstr or this.unitname)
+        local isChannel, _, _, _, startTime, endTime = pfGetChannelInfo(this.unitstr or this.unitname)
         if not isChannel then return end
         this.delay = ( this.delay or 0 ) + this.bar:GetValue() - (endTime/1000 - GetTime())
       elseif playerarg then

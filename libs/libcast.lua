@@ -4,10 +4,10 @@ setfenv(1, pfUI:GetEnvironment())
 --[[ libcast ]]--
 -- A pfUI library that detects and saves all ongoing castbars of players, NPCs and enemies.
 -- The library also includes spells that usually don't have a castbar like Multi-Shot and Aimed Shot.
--- This is exclusivly used for vanilla in order to provide UnitChannelInfo and UnitCastingInfo functions.
+-- This is exclusivly used for vanilla in order to provide pfGetChannelInfo and pfGetCastInfo functions.
 --
 -- External functions:
---   UnitChannelInfo(unit)
+--   pfGetChannelInfo(unit)
 --     Returns information on the spell currently cast by the specified unit.
 --     Returns nil if no spell is being cast.
 --
@@ -19,7 +19,7 @@ setfenv(1, pfUI:GetEnvironment())
 --     endTime[Number] - Specifies when casting will end, in milliseconds.
 --     isTradeSkill[Boolean] - (DUMMY) Specifies if the cast is a tradeskill
 --
---   UnitCastingInfo(unit)
+--   pfGetCastInfo(unit)
 --     Returns information on the spell currently channeled by the specified unit.
 --     Returns nil if no spell is being channeled.
 --
@@ -53,7 +53,7 @@ local scanner = libtipscan:GetScanner("libcast")
 local libcast = CreateFrame("Frame", "pfEnemyCast")
 local player = UnitName("player")
 
-UnitChannelInfo = function(unit)
+pfGetChannelInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
   
@@ -117,7 +117,8 @@ UnitChannelInfo = function(unit)
   end
   
   -- Fallback to name-based lookup (CHAT_MSG castbars)
-  if not db and libcast.db[unitName] then
+  -- Skip when GUID is available to avoid same-name mob bleed
+  if not db and not guid and libcast.db[unitName] then
     db = libcast.db[unitName]
   end
   
@@ -145,7 +146,7 @@ UnitChannelInfo = function(unit)
   return cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill
 end
 
-UnitCastingInfo = function(unit)
+pfGetCastInfo = function(unit)
   -- convert to name if unitstring was given
   local unitName = pfValidUnits[unit] and UnitName(unit) or unit
   
@@ -209,7 +210,8 @@ UnitCastingInfo = function(unit)
   end
   
   -- Fallback to name-based lookup (CHAT_MSG castbars)
-  if not db and libcast.db[unitName] then
+  -- Skip when GUID is available to avoid same-name mob bleed
+  if not db and not guid and libcast.db[unitName] then
     db = libcast.db[unitName]
   end
   
@@ -533,7 +535,7 @@ local function CastCustom(id, bookType, rawSpellName, rank, texture, castingTime
   local func = libcast.customcast[strlower(rawSpellName)]
   if not func then return end
 
-  if GetSpellCooldown(id, bookType) == 0 or UnitCastingInfo(player) then return end -- detect casting
+  if GetSpellCooldown(id, bookType) == 0 or pfGetCastInfo(player) then return end -- detect casting
 
   func(true)
 end
