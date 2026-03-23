@@ -720,10 +720,13 @@ pfUI:RegisterModule("bags", "vanilla:tbc", function ()
     local info = (GetBagItem and bag >= 0 and bag <= 4) and GetBagItem(bag, slot)
     if info and info.itemId then
       itemId = info.itemId
-      -- GetContainerItemInfo returns negative values for charged items (Nampower behaviour).
-      -- Positive = real stack count, negative = charges. Use abs() for display either way.
+      -- Nampower 4.1.4+: spellChargesRemaining gives accurate charge count for
+      -- charged items (e.g. Brilliant Mana Oil). Only use when stackCount == 1
+      -- and spellChargesRemaining > 1 to avoid overriding normal stack counts.
       local _, ciCount, ciLocked = GetContainerItemInfo(bag, slot)
-      if ciCount and ciCount ~= 0 then
+      if info.stackCount == 1 and info.spellChargesRemaining and info.spellChargesRemaining > 1 then
+        count = info.spellChargesRemaining
+      elseif ciCount and ciCount ~= 0 then
         count = math.abs(ciCount)
       else
         count = info.stackCount
