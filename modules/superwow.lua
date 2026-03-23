@@ -213,16 +213,6 @@ pfUI:RegisterModule("superwow", "vanilla", function ()
     end
   end
 
-  -- Enhanced GetContainerItemInfo for charges
-  -- SuperWoW returns charges as negative numbers
-  pfUI.api.GetItemCharges = function(bag, slot)
-    local texture, count = GetContainerItemInfo(bag, slot)
-    if count and count < 0 then
-      return math.abs(count) -- Return positive charge count
-    end
-    return nil -- Not a charged item
-  end
-
   -- Weapon Enchant Info on other players
   if GetWeaponEnchantInfo then
     local origGetWeaponEnchantInfo = GetWeaponEnchantInfo
