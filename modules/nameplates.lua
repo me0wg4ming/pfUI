@@ -469,12 +469,27 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
   -- Callback from libdebuff when auras change (GUID-based, event-driven)
   nameplates.OnAuraUpdate = function(self, guid)
     if not guid then return end
-    
-    -- GUID is actual GUID (0xF13000...) from Nampower events
+
+    -- Fast path: GUID already registered
     local plate = guidRegistry[guid]
     if plate and plate.nameplate then
-      -- Mark nameplate for aura update in next OnUpdate cycle
       plate.nameplate.auraUpdate = true
+      return
+    end
+
+    -- Fallback: plate may have become visible but OnUpdate hasn't run yet
+    -- to register its GUID. Use GetName(1) directly since cachedGuid may
+    -- not be set yet if OnUpdate hasn't fired for this plate.
+    for _, frame in pairs(registry) do
+      if frame.nameplate then
+        local frameGuid = frame:GetName(1)
+        if frameGuid == guid then
+          frame.nameplate.cachedGuid = frameGuid
+          guidRegistry[guid] = frame
+          frame.nameplate.auraUpdate = true
+          return
+        end
+      end
     end
   end
 
