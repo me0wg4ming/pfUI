@@ -248,6 +248,68 @@ function pfUI:GetEnvironment()
   return pfUI.env
 end
 
+-- [ New Module Registry ]
+-- Tracks modules introduced after initial release so existing users get
+-- a one-time prompt asking if they want to enable them.
+pfUI.new_modules = {}
+
+function pfUI:RegisterNewModule(name, label)
+  table.insert(pfUI.new_modules, { name = name, label = label })
+end
+
+function pfUI:CheckNewModules()
+  pfUI_init.seen_modules = pfUI_init.seen_modules or {}
+
+  local pending = 0
+  for _, entry in pairs(pfUI.new_modules) do
+    if not pfUI_init.seen_modules[entry.name] and pfUI_init["finalize"] then
+      pending = pending + 1
+    end
+  end
+
+  if pending == 0 then return end
+
+  local remaining = pending
+  local needsReload = false
+
+  local function onAnswer()
+    remaining = remaining - 1
+    if remaining <= 0 and needsReload then
+      ReloadUI()
+    end
+  end
+
+  for _, entry in pairs(pfUI.new_modules) do
+    local name = entry.name
+    if not pfUI_init.seen_modules[name] then
+      pfUI_init.seen_modules[name] = true
+
+      if pfUI_init["finalize"] then
+        StaticPopupDialogs["PFUI_NEW_MODULE_" .. strupper(name)] = {
+          text = "|cff33ffccpfUI|r: New module available!\n\n|cffffffffDo you want to enable |cff33ffcc" .. (entry.label or name) .. "|r|cffffffff?\n\nYou can always change this later in the pfUI settings.|r",
+          button1 = "Yes",
+          button2 = "No",
+          OnAccept = function()
+            pfUI_config["disabled"] = pfUI_config["disabled"] or {}
+            pfUI_config["disabled"][name] = nil
+            onAnswer()
+          end,
+          OnCancel = function()
+            pfUI_config["disabled"] = pfUI_config["disabled"] or {}
+            pfUI_config["disabled"][name] = "1"
+            needsReload = true
+            onAnswer()
+          end,
+          timeout = 0,
+          whileDead = true,
+          hideOnEscape = false,
+        }
+        StaticPopup_Show("PFUI_NEW_MODULE_" .. strupper(name))
+      end
+    end
+  end
+end
+
 function pfUI:RegisterModule(name, a2, a3)
   if pfUI.module[name] then return end
   local hasv = type(a2) == "string"
@@ -331,6 +393,9 @@ pfUI:SetScript("OnEvent", function()
     end
 
     pfUI.bootup = nil
+
+    -- Prompt existing users about newly introduced modules
+    pfUI:CheckNewModules()
   end
 end)
 

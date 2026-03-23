@@ -1,3 +1,4 @@
+pfUI:RegisterNewModule("swingtimer", "Swing Timer")
 pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local rawborder, border = GetBorderSize()
 

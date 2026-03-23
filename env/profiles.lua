@@ -912,6 +912,36 @@ pfUI_profiles["Slim"] = slim
 
 -- overwrite core profiles in userdata
 local profile_loader = CreateFrame("Frame")
+-- assign profiles to userdata
+pfUI_profiles["Modern"] = modern
+pfUI_profiles["Nostalgia"] = nostalgia
+pfUI_profiles["Legacy"] = legacy
+pfUI_profiles["Adapta"] = adapta
+pfUI_profiles["Slim"] = slim
+
+-- Default positions for new modules per profile.
+pfUI_profiles["Modern"].new_module_positions = {
+  pfSwingTimerMainhand = { anchor = "BOTTOM", parent = "UIParent", xpos = -179, ypos = 91 },
+  pfSwingTimerRanged   = { anchor = "BOTTOM", parent = "UIParent", xpos = -179, ypos = 71 },
+  pfMarkTracking       = { anchor = "LEFT",   parent = "UIParent", xpos = 4,    ypos = 17 },
+}
+pfUI_profiles["Nostalgia"].new_module_positions = {
+  pfSwingTimerMainhand = { anchor = "BOTTOM", parent = "UIParent", xpos = -295, ypos = 88 },
+  pfSwingTimerRanged   = { anchor = "BOTTOM", parent = "UIParent", xpos = -295, ypos = 68 },
+  pfMarkTracking       = { anchor = "LEFT",   parent = "UIParent", xpos = 6,    ypos = -19 },
+}
+pfUI_profiles["Legacy"].new_module_positions = {
+  pfSwingTimerMainhand = { anchor = "BOTTOM", parent = "UIParent", xpos = 0,    ypos = 248 },
+  pfSwingTimerRanged   = { anchor = "BOTTOM", parent = "UIParent", xpos = 0,    ypos = 228 },
+  pfMarkTracking       = { anchor = "LEFT",   parent = "UIParent", xpos = 4,    ypos = -17 },
+}
+pfUI_profiles["Slim"].new_module_positions = {
+  pfSwingTimerMainhand = { anchor = "BOTTOM", parent = "UIParent", xpos = -186, ypos = 92 },
+  pfSwingTimerRanged   = { anchor = "BOTTOM", parent = "UIParent", xpos = -186, ypos = 72 },
+  pfMarkTracking       = { anchor = "LEFT",   parent = "UIParent", xpos = 2,    ypos = -82 },
+}
+pfUI_profiles["Adapta"].new_module_positions = pfUI_profiles["Modern"].new_module_positions
+
 profile_loader:RegisterEvent("VARIABLES_LOADED")
 profile_loader:SetScript("OnEvent", function()
   pfUI_profiles["Modern"] = modern
