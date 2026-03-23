@@ -170,8 +170,8 @@ pfUI:RegisterModule("afkcam", "vanilla:tbc", function ()
     if ( this.tick or 0) > GetTime() then return else this.tick = GetTime() + 1 end
 
     local name = UnitName("player")
-    local cast = UnitCastingInfo(name)
-    if not cast then cast = UnitChannelInfo(name) end
+    local cast = pfGetCastInfo(name)
+    if not cast then cast = pfGetChannelInfo(name) end
     if not this.delay then this.delay = 0 end
 
     if cast then

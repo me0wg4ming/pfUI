@@ -446,7 +446,7 @@ function libpredict:ParseComm(sender, msg)
           rank = tonumber(rankStr)
         end
       end
-    elseif select and UnitCastingInfo then
+    elseif select and pfGetCastInfo then
       -- latest healcomm
       msgtype = tonumber(string.sub(msg, 1, 3))
       if not msgtype then return end
@@ -456,8 +456,8 @@ function libpredict:ParseComm(sender, msg)
         heal = tonumber(string.sub(msg, 4, 8))
         target = string.sub(msg,9, -1)
 
-        local starttime = select(5, UnitCastingInfo(sender))
-        local endtime = select(6, UnitCastingInfo(sender))
+        local starttime = select(5, pfGetCastInfo(sender))
+        local endtime = select(6, pfGetCastInfo(sender))
         if not starttime or not endtime then return end
         time = endtime - starttime
       elseif msgtype == 1 then
@@ -466,8 +466,8 @@ function libpredict:ParseComm(sender, msg)
         msgtype = "Heal"
         heal = tonumber(string.sub(msg,4, 8))
         target = {strsplit(":", string.sub(msg,9, -1))}
-        local starttime = select(5, UnitCastingInfo(sender))
-        local endtime = select(6, UnitCastingInfo(sender))
+        local starttime = select(5, pfGetCastInfo(sender))
+        local endtime = select(6, pfGetCastInfo(sender))
         if not starttime or not endtime then return end
         time = endtime - starttime
       end
