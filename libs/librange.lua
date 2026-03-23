@@ -124,6 +124,16 @@ end)
 -- Flag to prevent UnitXP calls during logout (crash prevention)
 local librange_isLoggingOut = false
 
+-- Detect UnitXP_SP3 once at load time to avoid pcall+closure overhead per tick.
+-- UnitXP_SP3 exposes UnitXP("distanceBetween", ...) — test it once and cache the result.
+local hasUnitXP_SP3 = false
+if UnitXP then
+  local ok, val = pcall(UnitXP, "distanceBetween", "player", "player")
+  if ok and val then
+    hasUnitXP_SP3 = true
+  end
+end
+
 librange:Hide()
 librange:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 librange:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -185,14 +195,14 @@ librange:SetScript("OnUpdate", function()
     local unit = units[this.id]
     if not UnitIsUnit("target", unit) then
       -- Try UnitXP_SP3 first (most accurate distance measurement)
-      local unitxp_success, unitxp_distance = pcall(function()
-        return UnitXP("distanceBetween", "player", unit)
-      end)
-      if unitxp_success and unitxp_distance then
-        local threshold = (tonumber(C.unitframes.rangecheck_distance) or 40) + 5
-        unitdata[unit] = unitxp_distance < threshold and 1 or 0
-        this.id = this.id + 1
-        return
+      if hasUnitXP_SP3 then
+        local unitxp_distance = UnitXP("distanceBetween", "player", unit)
+        if unitxp_distance then
+          local threshold = (tonumber(C.unitframes.rangecheck_distance) or 40) + 5
+          unitdata[unit] = unitxp_distance < threshold and 1 or 0
+          this.id = this.id + 1
+          return
+        end
       end
 
       -- try to read distance via superwow second
