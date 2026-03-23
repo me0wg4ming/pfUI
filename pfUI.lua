@@ -186,6 +186,11 @@ function pfUI:UpdateFonts()
   NAMEPLATE_FONT     = default
   UNIT_NAME_FONT     = unit_name
 
+  -- If the Invisible font is selected, suppress all combat text entirely
+  if string.find(combat or "", "AdobeBlank") then
+    SHOW_COMBAT_TEXT = "0"
+  end
+
   -- set dropdown font to default size
   UIDROPDOWNMENU_DEFAULT_TEXT_HEIGHT = 11
 
@@ -405,19 +410,25 @@ function pfUI.SetupCVars()
   NAMEPLATES_ON = "1"
   SIMPLE_CHAT = "0"
 
-  SHOW_COMBAT_TEXT = "1"
-  COMBAT_TEXT_SHOW_LOW_HEALTH_MANA = "1"
-  COMBAT_TEXT_SHOW_AURAS = "1"
-  COMBAT_TEXT_SHOW_AURA_FADE = "1"
-  COMBAT_TEXT_SHOW_COMBAT_STATE = "1"
-  COMBAT_TEXT_SHOW_DODGE_PARRY_MISS = "1"
-  COMBAT_TEXT_SHOW_RESISTANCES = "1"
-  COMBAT_TEXT_SHOW_REPUTATION = "1"
-  COMBAT_TEXT_SHOW_REACTIVES = "1"
-  COMBAT_TEXT_SHOW_FRIENDLY_NAMES = "1"
-  COMBAT_TEXT_SHOW_COMBO_POINTS = "1"
-  COMBAT_TEXT_SHOW_MANA = "1"
-  COMBAT_TEXT_FLOAT_MODE = "1"
-  COMBAT_TEXT_SHOW_HONOR_GAINED = "1"
+  -- Only force combat text CVars when not using the Invisible font.
+  -- If AdobeBlank is selected, the player wants no combat text -- respect that.
+  local isInvisible = pfUI_config.global.font_combat and
+    string.find(pfUI_config.global.font_combat, "AdobeBlank")
+  if not isInvisible then
+    SHOW_COMBAT_TEXT = "1"
+    COMBAT_TEXT_SHOW_LOW_HEALTH_MANA = "1"
+    COMBAT_TEXT_SHOW_AURAS = "1"
+    COMBAT_TEXT_SHOW_AURA_FADE = "1"
+    COMBAT_TEXT_SHOW_COMBAT_STATE = "1"
+    COMBAT_TEXT_SHOW_DODGE_PARRY_MISS = "1"
+    COMBAT_TEXT_SHOW_RESISTANCES = "1"
+    COMBAT_TEXT_SHOW_REPUTATION = "1"
+    COMBAT_TEXT_SHOW_REACTIVES = "1"
+    COMBAT_TEXT_SHOW_FRIENDLY_NAMES = "1"
+    COMBAT_TEXT_SHOW_COMBO_POINTS = "1"
+    COMBAT_TEXT_SHOW_MANA = "1"
+    COMBAT_TEXT_FLOAT_MODE = "1"
+    COMBAT_TEXT_SHOW_HONOR_GAINED = "1"
+  end
   UIParentLoadAddOn("Blizzard_CombatText")
 end
