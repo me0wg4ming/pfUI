@@ -15,6 +15,8 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
 
     local h = pfUI.uf.target:GetHeight() or 30
     local slot = h / 3  -- divide frame into thirds
+    local fontSize = tonumber(C.unitframes.unitxp_font_size) or (C.global.font_size + 2)
+    local suffix = (C.unitframes.hide_distance_yd == "1") and "" or " yd"
 
     -- Behind Indicator for all units (MIDDLE)
     if C.unitframes.behind_indicator == "1" and not pfUI.uf.target.behindIndicator then
@@ -23,7 +25,7 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
       behindFrame:SetFrameLevel(pfUI.uf.target:GetFrameLevel() + 10)
 
       behindFrame.text = behindFrame:CreateFontString(nil, "OVERLAY")
-      behindFrame.text:SetFont(pfUI.font_default, 13, "OUTLINE")
+      behindFrame.text:SetFont(pfUI.font_default, fontSize, "OUTLINE")
       behindFrame.text:SetPoint("RIGHT", behindFrame, "RIGHT", -1, 0)
       behindFrame.text:SetTextColor(0.3, 1, 0.3, 1)
       behindFrame.text:SetText("BEHIND")
@@ -57,7 +59,7 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
       losFrame:SetFrameLevel(pfUI.uf.target:GetFrameLevel() + 10)
 
       losFrame.text = losFrame:CreateFontString(nil, "OVERLAY")
-      losFrame.text:SetFont(pfUI.font_default, 13, "OUTLINE")
+      losFrame.text:SetFont(pfUI.font_default, fontSize, "OUTLINE")
       losFrame.text:SetPoint("RIGHT", losFrame, "RIGHT", -1, -slot)
       losFrame.text:SetTextColor(1, 0.3, 0.3, 1)
       losFrame.text:SetText("NO LOS")
@@ -93,7 +95,7 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
         distFrame:SetFrameLevel(pfUI.uf.target:GetFrameLevel() + 10)
 
         distFrame.text = distFrame:CreateFontString(nil, "OVERLAY")
-        distFrame.text:SetFont(pfUI.font_default, 13, "OUTLINE")
+        distFrame.text:SetFont(pfUI.font_default, fontSize, "OUTLINE")
         distFrame.text:SetPoint("RIGHT", distFrame, "RIGHT", -1, slot)
         distFrame.text:SetTextColor(1, 1, 1, 1)
         distFrame.text:Hide()
@@ -132,7 +134,7 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
           end
 
           this.text:SetTextColor(r, g, b, 1)
-          this.text:SetText(string.format("%.1f yd", distance))
+          this.text:SetText(string.format("%.1f%s", distance, suffix))
           this.text:Show()
         end)
 
@@ -201,7 +203,7 @@ pfUI:RegisterModule("unitxp", "vanilla", function ()
             end
 
             f.text:SetTextColor(r, g, b, 1)
-            f.text:SetText(string.format("%.1f yd", distance))
+            f.text:SetText(string.format("%.1f%s", distance, suffix))
           end)
         end
         pfUI.uf.target.distanceIndicator = pfRangeDisplay
