@@ -25,7 +25,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
             ufunc = function()
               for _, fr in ipairs(pfUI.uf.frames) do
                 if fr.label == key then
-                  pfUI.uf.UpdateConfig(fr)
+                  fr:UpdateConfig()
                 end
               end
             end
@@ -2392,16 +2392,16 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Focus Color"], C.unitframes[c], "focuscolor", "color")
 
         if c == "player" then
-          CreateConfig(U[c], T["Player SP/Haste Display"], nil, nil, "header")
-          CreateConfig(U[c], T["Haste Display"], C.unitframes[c], "display_haste", "dropdown", {
+          CreateConfig(nil, T["Player SP/Haste Display"], nil, nil, "header")
+          CreateConfig(nil, T["Haste Display"], C.unitframes[c], "display_haste", "dropdown", {
             "0:"..T["None"],
             "1:"..T["Haste (cast speed increase)"],
             "2:"..T["Effective Haste (Haste * cast time reduction)"], -- Only affects mages/warlocks I believe
           })
-          CreateConfig(U[c], T["Haste Display Color"], C.unitframes[c], "display_haste_color", "color")
-          CreateConfig(U[c], T["Display Spell Power"], C.unitframes[c], "display_spellpower", "checkbox")
-          CreateConfig(U[c], T["Use Custom Spell Power Color (unchecked = biggest school color)"], C.unitframes[c], "display_sp_color_override", "checkbox")
-          CreateConfig(U[c], T["Spell Power Color"], C.unitframes[c], "display_sp_color", "color")
+          CreateConfig(nil, T["Haste Display Color"], C.unitframes[c], "display_haste_color", "color")
+          CreateConfig(nil, T["Display Spell Power"], C.unitframes[c], "display_spellpower", "checkbox")
+          CreateConfig(nil, T["Use Custom Spell Power Color (unchecked = biggest school color)"], C.unitframes[c], "display_sp_color_override", "checkbox")
+          CreateConfig(nil, T["Spell Power Color"], C.unitframes[c], "display_sp_color", "color")
         end
       end)
     end

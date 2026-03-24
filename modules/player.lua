@@ -142,7 +142,11 @@ pfUI:RegisterModule("player", "vanilla:tbc", function ()
     playerFrame.infoTopCenterText:SetText(text)
   end
 
+  -- Keep a reference to the generic UF UpdateConfig so we can chain it
+  local genericUpdateConfig = pfUI.uf.UpdateConfig
+
   function playerFrame:UpdateConfig()
+    genericUpdateConfig(self)
     UpdateInfoText()
   end
 
