@@ -40,7 +40,7 @@ local cache, gear_string = {}, ""
 local rejuvDuration, renewDuration = 12, 15 --default durations
 local ressGuidToName = {} -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
 local healGuidToName = {} -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
-local ress_timers = {}    -- [target][sender] = expiry_timestamp (60s Rez-Fenster)
+local ress_timers = {}    -- [target][sender] = expiry_timestamp (60s rez window)
 local RESS_TIMEOUT = 60   -- Vanilla: rez offer expires after 60s
 
 local PRAYER_OF_HEALING
@@ -176,7 +176,7 @@ local function isRezSpell(spellId)
   return spellName and L["resurrections"][spellName]
 end
 
--- Cache beim Betreten der Welt aufbauen
+-- Build cache on world enter
 libpredict:RegisterEvent("PLAYER_ENTERING_WORLD")
 libpredict:RegisterEvent("RAID_ROSTER_UPDATE")
 libpredict:RegisterEvent("PARTY_MEMBERS_CHANGED")
@@ -188,7 +188,7 @@ libpredict:SetScript("OnEvent", function()
   if origOnEvent then origOnEvent() end
 end)
 
--- SPELL_START_SELF: eigener Cast gestartet (Heals + Rez)
+-- SPELL_START_SELF: own cast started (heals + rez)
 pfUI.libdebuff_spell_start_self_hooks = pfUI.libdebuff_spell_start_self_hooks or {}
 pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGuid, targetGuid, castTime)
   local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
@@ -293,7 +293,7 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
   end
 end
 
--- SPELL_GO_SELF: eigener Cast gelandet (HealStop + Regrowth timer)
+-- SPELL_GO_SELF: own cast landed (HealStop + Regrowth timer)
 pfUI.libdebuff_spell_go_hooks["libpredict_sender"] = function(spellId)
   libpredict:HealStop(player)
   local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
@@ -310,19 +310,50 @@ pfUI.libdebuff_spell_go_hooks["libpredict_sender"] = function(spellId)
   libpredict.sender.current_cast_target = nil
 end
 
--- SPELL_START_OTHER: fremder Rez-Cast gestartet
+-- SPELL_START_OTHER: foreign cast started (heals + rez)
 -- Signature: fn(spellId, casterGuid, targetGuid, castTime)
 pfUI.libdebuff_spell_start_other_hooks = pfUI.libdebuff_spell_start_other_hooks or {}
 pfUI.libdebuff_spell_start_other_hooks["libpredict"] = function(spellId, casterGuid, targetGuid, castTime)
-  if not isRezSpell(spellId) then return end
+  local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+  if not spellName then return end
+
   local casterName = resolveNameFromGuid(casterGuid)
-  local targetName = resolveNameFromGuid(targetGuid)
-  if casterName and targetName then
-    libpredict:Ress(casterName, targetName, casterGuid)
+  if not casterName then return end
+
+  -- Resurrection cast
+  if L["resurrections"][spellName] then
+    local targetName = resolveNameFromGuid(targetGuid)
+    if targetName then
+      libpredict:Ress(casterName, targetName, casterGuid)
+    end
+    return
   end
+
+  -- Heal: use GetSpellRec base values as estimate (no SP/talents — rough)
+  local targetName = resolveNameFromGuid(targetGuid)
+  if not targetName then return end
+
+  local amount
+  if GetSpellRec then
+    local rec = GetSpellRec(spellId)
+    if rec then
+      local base = rec.effectBasePoints1
+      local dice = rec.effectDieSides1
+      if not base and rec.effectBasePoints then
+        base = rec.effectBasePoints[1]
+        dice = rec.effectDieSides and rec.effectDieSides[1] or 0
+      end
+      if base then
+        amount = (base + 1) + math.floor((dice or 0) / 2)
+      end
+    end
+  end
+  if not amount or amount <= 0 then return end
+
+  libpredict:Heal(casterName, targetName, amount, castTime, casterGuid)
 end
 
--- SPELL_GO_SELF: eigener Cast gelandet - HoTs + eigener Rez Timer
+-- SPELL_GO_SELF: own cast landed - HoTs + own rez timer
 -- Signature: fn(spellId, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 pfUI.libdebuff_spell_go_hooks = pfUI.libdebuff_spell_go_hooks or {}
 pfUI.libdebuff_spell_go_hooks["libpredict"] = function(spellId, a1, a2, a3, a4, a5, a6, a7)
@@ -355,7 +386,7 @@ pfUI.libdebuff_spell_go_hooks["libpredict"] = function(spellId, a1, a2, a3, a4, 
       end
     end
   end
-  -- Eigener Rez gelandet: Timer setzen
+  -- Own rez landed: set timer
   if isRezSpell(spellId) then
     local targetGuid = a4
     local targetName = resolveNameFromGuid(targetGuid)
@@ -367,19 +398,26 @@ pfUI.libdebuff_spell_go_hooks["libpredict"] = function(spellId, a1, a2, a3, a4, 
 
 end
 
--- SPELL_GO_OTHER: fremder Rez gelandet - Timer setzen
+-- SPELL_GO_OTHER: foreign cast landed - rez timer + HealStop
 -- Signature: fn(spellId, casterGuid, targetGuid)
 pfUI.libdebuff_spell_go_other_hooks = pfUI.libdebuff_spell_go_other_hooks or {}
 pfUI.libdebuff_spell_go_other_hooks["libpredict"] = function(spellId, casterGuid, targetGuid)
-  if not isRezSpell(spellId) then return end
   local casterName = resolveNameFromGuid(casterGuid)
-  local targetName = resolveNameFromGuid(targetGuid)
-  if casterName and targetName then
-    libpredict:RessSetTimer(casterName, targetName)
+  if not casterName then return end
+
+  if isRezSpell(spellId) then
+    local targetName = resolveNameFromGuid(targetGuid)
+    if targetName then
+      libpredict:RessSetTimer(casterName, targetName)
+    end
+    return
   end
+
+  -- Heal landed → prediction fulfilled, clean up
+  libpredict:HealStop(casterName)
 end
 
--- SPELL_FAILED_OTHER: abgebrochene Resses/Heals entfernen
+-- SPELL_FAILED_OTHER: remove cancelled resses/heals
 -- Signature: fn(casterGuid, spellId)
 pfUI.libdebuff_spell_failed_other_hooks = pfUI.libdebuff_spell_failed_other_hooks or {}
 pfUI.libdebuff_spell_failed_other_hooks["libpredict"] = function(casterGuid, spellId)
@@ -405,7 +443,7 @@ libpredict:SetScript("OnUpdate", function()
     end
   end
 
-  -- Rez-Timeout: Angebot nach 60s entfernen wenn Spieler nicht annimmt
+  -- Rez timeout: remove offer after 60s if player doesn't accept
   for target, senders in pairs(ress_timers) do
     for sender, expiry in pairs(senders) do
       if now >= expiry then
@@ -549,7 +587,7 @@ function libpredict:ParseChatMessage(sender, msg, comm)
       libpredict:Ress(sender, target, senderGuid)
     end
   elseif msgtype == "Hot" then
-    -- Duplikat-Check: gleicher sender+target+spell innerhalb DUPLICATE_WINDOW ignorieren
+    -- Duplicate check: ignore same sender+target+spell within DUPLICATE_WINDOW
     local now = pfUI.uf.now or GetTime()
     local key = sender .. target .. heal
     if recentHots[key] and (now - recentHots[key]) < DUPLICATE_WINDOW then
@@ -700,7 +738,7 @@ function libpredict:Ress(sender, target, senderGuid)
   ress[target] = ress[target] or {}
   ress[target][sender] = true
   if senderGuid then ressGuidToName[senderGuid] = sender end
-  -- kein Timer hier - Timer wird erst gesetzt wenn Cast wirklich durchgeht
+  -- no timer here - timer is only set once the cast actually completes
 end
 
 function libpredict:RessSetTimer(sender, target)
@@ -884,7 +922,7 @@ hooksecurefunc("CastSpell", function(id, bookType)
     rankNum = tonumber((string.gsub(rank, "Rank ", ""))) or nil
   end
   
-  -- Instant-HoTs: libdebuff/Nampower via GetHotDuration, Hook-Methode als Fallback
+  -- Instant HoTs: libdebuff/Nampower via GetHotDuration, hook method as fallback
   
   if effect == REJUVENATION then
     local target = spell_queue[3]
@@ -950,7 +988,7 @@ hooksecurefunc("CastSpellByName", function(effect, target)
     spell_queue[3] = target or mouseover or default
   end
   
-  -- Instant-HoTs: libdebuff/Nampower via GetHotDuration, Hook-Methode als Fallback
+  -- Instant HoTs: libdebuff/Nampower via GetHotDuration, hook method as fallback
   
   if effect == REJUVENATION then
     local hotTarget = target or mouseover or default
@@ -1006,7 +1044,7 @@ hooksecurefunc("UseAction", function(slot, target, selfcast)
     rankNum = tonumber((string.gsub(rank, "Rank ", ""))) or nil
   end
   
-  -- Instant-HoTs: libdebuff/Nampower via GetHotDuration, Hook-Methode als Fallback
+  -- Instant HoTs: libdebuff/Nampower via GetHotDuration, hook method as fallback
   
   if effect == REJUVENATION then
     local hotTarget = spell_queue[3]
@@ -1236,7 +1274,7 @@ _G.SlashCmdList.HOTDEBUG = function()
   end
   
   DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[FALLBACK]|r Legacy prediction system: ACTIVE")
-  DEFAULT_CHAT_FRAME:AddMessage("  Using Hook-Methode + HealComm messages")
+  DEFAULT_CHAT_FRAME:AddMessage("  Using hook method + HealComm messages")
   
   -- Show active HoTs in tracking
   local hotCount = 0
