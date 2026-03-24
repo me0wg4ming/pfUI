@@ -209,13 +209,6 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
   end
   local target = pendingTarget or resolveNameFromGuid(targetGuid) or senttarget or spell_queue[3]
 
-  -- Redirect heal prediction to player if target is hostile
-  -- (healing a hostile target always heals yourself in Vanilla)
-  if target then
-    if UnitName("target") == target and UnitCanAttack("player", "target") then target = player end
-    if UnitName("mouseover") == target and UnitCanAttack("player", "mouseover") then target = player end
-  end
-
 
   libpredict.sender.current_cast = spellName
   libpredict.sender.current_cast_target = target
@@ -248,18 +241,29 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
     end
 
     if spellName == PRAYER_OF_HEALING then
-      target = player
+      -- target is already correctly set from spell_queue[3]:
+      -- selfcast (ALT) = player, otherwise = current target
+      -- Use this to find the correct group to heal
+      local pohTarget = target or player
       if GetNumRaidMembers() > 0 then
-        -- Raid: find our subgroup and heal only those members
-        local myGroup
+        -- Raid: find pohTarget's subgroup and heal only those members
+        -- (Turtle WoW changed PoH to heal the target's group, not the caster's group)
+        local targetGroup
         for i = 1, GetNumRaidMembers() do
           local name, _, subgroup = GetRaidRosterInfo(i)
-          if name == player then myGroup = subgroup break end
+          if name == pohTarget then targetGroup = subgroup break end
         end
-        if myGroup then
+        -- Fallback to caster's own group if target not in raid
+        if not targetGroup then
           for i = 1, GetNumRaidMembers() do
             local name, _, subgroup = GetRaidRosterInfo(i)
-            if subgroup == myGroup and name ~= player then
+            if name == player then targetGroup = subgroup break end
+          end
+        end
+        if targetGroup then
+          for i = 1, GetNumRaidMembers() do
+            local name, _, subgroup = GetRaidRosterInfo(i)
+            if subgroup == targetGroup then
               libpredict:Heal(player, name, amount, casttime)
               libpredict.sender:SendHealCommMsg("Heal/" .. name .. "/" .. amount .. "/" .. casttime .. "/")
               libpredict.sender.healing = true
@@ -267,7 +271,10 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
           end
         end
       else
-        -- Party: heal party1-4
+        -- Party: heal all party members including self
+        libpredict:Heal(player, player, amount, casttime)
+        libpredict.sender:SendHealCommMsg("Heal/" .. player .. "/" .. amount .. "/" .. casttime .. "/")
+        libpredict.sender.healing = true
         for i = 1, 4 do
           if CheckInteractDistance("party"..i, 4) then
             local pname = UnitName("party"..i)
@@ -277,6 +284,7 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
           end
         end
       end
+      return  -- skip the generic Heal call below
     end
 
     libpredict:Heal(player, target, amount, casttime)

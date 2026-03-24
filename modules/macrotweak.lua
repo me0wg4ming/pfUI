@@ -1,12 +1,24 @@
 pfUI:RegisterModule("macrotweak", "vanilla", function ()
-  -- disable macrotweak when macro addons are loaded
-  if IsAddOnLoaded("Supermacro") or IsAddOnLoaded("SuperCleveRoidMacros") or IsAddOnLoaded("UltimaMacros") then return end
+  local conflictAddons = { "Supermacro", "SuperCleveRoidMacros", "UltimaMacros" }
+  local disabled = false
+
+  local function CheckConflicts()
+    for _, name in pairs(conflictAddons) do
+      if IsAddOnLoaded(name) then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpfUI|r: " .. name .. " found, macrotweak disabled.")
+        disabled = true
+        return true
+      end
+    end
+    return false
+  end
 
   -- do not write macro calls into chat input history
   if ChatFrameEditBox._AddHistoryLine then
     local userinput
     ChatFrameEditBox._AddHistoryLine = ChatFrameEditBox.AddHistoryLine
     ChatFrameEditBox.AddHistoryLine = function(self, text)
+      if disabled then return ChatFrameEditBox._AddHistoryLine(self, text) end
       if not userinput and text and string.find(text, "^/run(.+)") then return end
       if not userinput and string.find(text, "^/script(.+)") then return end
       if not userinput and string.find(text, "^/cast(.+)") then return end
@@ -24,6 +36,7 @@ pfUI:RegisterModule("macrotweak", "vanilla", function ()
   -- make sure #showtooltip inside macros won't be sent
   local hookSendChatMessage = SendChatMessage
   function _G.SendChatMessage(msg, ...)
+    if disabled then return hookSendChatMessage(msg, unpack(arg)) end
     if msg and string.find(msg, "^#showtooltip ") then return end
     hookSendChatMessage(msg, unpack(arg))
   end
@@ -50,5 +63,12 @@ pfUI:RegisterModule("macrotweak", "vanilla", function ()
     elseif not bag and slot then
       UseInventoryItem(slot)
     end
+  end)
+
+  -- Check conflicts after one tick so all addons have finished loading
+  local watcher = CreateFrame("Frame")
+  watcher:SetScript("OnUpdate", function()
+    this:SetScript("OnUpdate", nil)
+    CheckConflicts()
   end)
 end)
