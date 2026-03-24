@@ -22,7 +22,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     inCombat = false,
     pendingCastSpellId = nil,
     mhFrozenAt = nil,
-    hsQueued = false, cleaveQueued = false,
+    hsQueued = false, cleaveQueued = false, maulQueued = false,
     isWarrior = false,
     cachedHSSlots = {}, cachedCleaveSlots = {},
     useSpellQueueEvent = false,
@@ -64,7 +64,16 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   local cleaveSpellIDs = {
     [845] = true, [7369] = true, [11608] = true, [11609] = true,
     [20569] = true,
-  }
+    }
+
+  -- Maul spell IDs (all ranks 1 to 7)
+    local maulSpellIDs  = {
+        [6807] = true,
+        [6808] = true,
+        [6809] = true,
+        [8972] = true,
+     [9745] = true, [9880] = true, [9881] = true,
+    }
 
   -- Read config
   local sw_width     = tonumber(C.unitframes.swingtimerwidth) or 200
@@ -507,12 +516,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     -- HS/Cleave color
     local curR, curG, curB = mhDefaultR, mhDefaultG, mhDefaultB
     if sw_hsqueue and S.isWarrior then
-      local hs, cl = IsHSOrCleaveQueued()
-      if cl then
-        curR, curG, curB = 0.2, 0.9, 0.2
-      elseif hs then
-        curR, curG, curB = 0.9, 0.9, 0.2
-      end
+        local hs, cl = IsHSOrCleaveQueued()
+        local maul = S.maulQueued
+        if maul then
+          curR, curG, curB = 0.2, 0.6, 1.0 -- blue-ish for druid
+        elseif cl then
+          curR, curG, curB = 0.2, 0.9, 0.2
+        elseif hs then
+          curR, curG, curB = 0.9, 0.9, 0.2
+        end
     end
 
     -- Render MH
@@ -692,8 +704,9 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       -- Slam delays auto-attack but does NOT reset the swing timer. Ignore.
       S.pendingCastSpellId = nil
       return
-    elseif hsSpellIDs[spellId] or IsOnSwingSpell(spellId) then
+    elseif hsSpellIDs[spellId] or cleaveSpellIDs[spellId] or maulSpellIDs[spellId] or IsOnSwingSpell(spellId) then
       S.hsQueued = false; S.cleaveQueued = false
+      S.maulQueued = false
       ResetMH()
     elseif cleaveSpellIDs[spellId] then
       S.hsQueued = false; S.cleaveQueued = false
@@ -716,11 +729,12 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   -- SPELL_CAST_EVENT hook: HS/Cleave queue tracking
   pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
   pfUI.libdebuff_spell_cast_hooks["swingtimer"] = function(success, spellId)
-    if success ~= 1 then return end
     if hsSpellIDs[spellId] then
-      S.hsQueued = true; S.cleaveQueued = false
+      S.hsQueued = true; S.cleaveQueued = false; S.maulQueued = false
     elseif cleaveSpellIDs[spellId] then
-      S.cleaveQueued = true; S.hsQueued = false
+      S.cleaveQueued = true; S.hsQueued = false; S.maulQueued = false
+    elseif maulSpellIDs[spellId] then
+      S.maulQueued = true; S.hsQueued = false; S.cleaveQueued = false
     end
   end
 
@@ -806,12 +820,14 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       if eventCode == ON_SWING_QUEUED then
         S.useSpellQueueEvent = true
         if hsSpellIDs[spellId] then
-          S.hsQueued = true; S.cleaveQueued = false
+          S.hsQueued = true; S.cleaveQueued = false; S.maulQueued = false
         elseif cleaveSpellIDs[spellId] then
-          S.cleaveQueued = true; S.hsQueued = false
+          S.cleaveQueued = true; S.hsQueued = false; S.maulQueued = false
+        elseif maulSpellIDs[spellId] then
+          S.maulQueued = true; S.hsQueued = false; S.cleaveQueued = false
         end
       elseif eventCode == ON_SWING_QUEUE_POPPED then
-        S.hsQueued = false; S.cleaveQueued = false
+        S.hsQueued = false; S.cleaveQueued = false; S.maulQueued = false
       end
 
     elseif event == "START_AUTOATTACK" then
@@ -897,6 +913,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     -- Warrior HS/Cleave queue state
     IsHSQueued        = function() return S.hsQueued end,
     IsCleaveQueued    = function() return S.cleaveQueued end,
+    IsMaulQueued      = function() return S.maulQueued end,
   }
 
   UpdateWeaponSpeeds()
