@@ -518,7 +518,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     local curR, curG, curB = mhDefaultR, mhDefaultG, mhDefaultB
     if sw_hsqueue then
       if S.maulQueued and S.isDruid then
-        curR, curG, curB = 0.2, 0.6, 1.0 -- blue-ish for druid
+        curR, curG, curB = 1.0, 0.55, 0.0 -- orange for druid maul queue
       elseif S.isWarrior then
         local hs, cl = IsHSOrCleaveQueued()
         if cl then
