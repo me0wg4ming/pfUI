@@ -24,6 +24,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     mhFrozenAt = nil,
     hsQueued = false, cleaveQueued = false, maulQueued = false,
     isWarrior = false,
+    isDruid = false,
     cachedHSSlots = {}, cachedCleaveSlots = {},
     useSpellQueueEvent = false,
     playerGUID = nil,
@@ -515,16 +516,17 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
 
     -- HS/Cleave color
     local curR, curG, curB = mhDefaultR, mhDefaultG, mhDefaultB
-    if sw_hsqueue and S.isWarrior then
+    if sw_hsqueue then
+      if S.maulQueued and S.isDruid then
+        curR, curG, curB = 0.2, 0.6, 1.0 -- blue-ish for druid
+      elseif S.isWarrior then
         local hs, cl = IsHSOrCleaveQueued()
-        local maul = S.maulQueued
-        if maul then
-          curR, curG, curB = 0.2, 0.6, 1.0 -- blue-ish for druid
-        elseif cl then
+        if cl then
           curR, curG, curB = 0.2, 0.9, 0.2
         elseif hs then
           curR, curG, curB = 0.9, 0.9, 0.2
         end
+      end
     end
 
     -- Render MH
@@ -839,6 +841,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     elseif event == "PLAYER_ENTERING_WORLD" then
       local _, class = UnitClass("player")
       S.isWarrior  = (class == "WARRIOR")
+      S.isDruid    = (class == "DRUID")
       S.playerGUID = GetUnitGUID("player")
       UpdateWeaponSpeeds()
       RebuildQueueSlotCache()
@@ -866,6 +869,7 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
       S.inCombat = false
       S.hsQueued     = false
       S.cleaveQueued = false
+      S.maulQueued   = false
 
     elseif event == "UNIT_DIED" then
       if arg1 and arg1 == S.playerGUID then
