@@ -37,6 +37,7 @@ local heals, ress, events, hots = {}, {}, {}, {}
 local spell_queue = { "DUMMY", "DUMMYRank 9", "TARGET" }
 local player = UnitName("player")
 local cache, gear_string = {}, ""
+local foreignCache = {}   -- [casterName][spellKey] = amount, in-memory cache for other healers
 local rejuvDuration, renewDuration = 12, 15 --default durations
 local ressGuidToName = {} -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
 local healGuidToName = {} -- [casterGuid] = casterName, for SPELL_FAILED_OTHER cleanup
@@ -329,26 +330,50 @@ pfUI.libdebuff_spell_start_other_hooks["libpredict"] = function(spellId, casterG
     return
   end
 
-  -- Heal: use GetSpellRec base values as estimate (no SP/talents — rough)
+  -- Heal cast: look up cached amount from a previous cast by this healer
   local targetName = resolveNameFromGuid(targetGuid)
   if not targetName then return end
 
-  local amount
-  if GetSpellRec then
-    local rec = GetSpellRec(spellId)
-    if rec then
-      local base = rec.effectBasePoints1
-      local dice = rec.effectDieSides1
-      if not base and rec.effectBasePoints then
-        base = rec.effectBasePoints[1]
-        dice = rec.effectDieSides and rec.effectDieSides[1] or 0
+  local rankStr = GetSpellRecField and GetSpellRecField(spellId, "rank") or ""
+  local spellKey = spellName .. (rankStr or "")
+
+  local amount = foreignCache[casterName] and foreignCache[casterName][spellKey]
+  if not amount then return end  -- no data yet, skip until we have a real value
+
+  -- Prayer of Healing: heal entire subgroup of the target
+  if spellName == PRAYER_OF_HEALING then
+    if GetNumRaidMembers() > 0 then
+      local targetGroup
+      for i = 1, GetNumRaidMembers() do
+        local rname, _, subgroup = GetRaidRosterInfo(i)
+        if rname == targetName then targetGroup = subgroup break end
       end
-      if base then
-        amount = (base + 1) + math.floor((dice or 0) / 2)
+      if not targetGroup then
+        for i = 1, GetNumRaidMembers() do
+          local rname, _, subgroup = GetRaidRosterInfo(i)
+          if rname == casterName then targetGroup = subgroup break end
+        end
+      end
+      if targetGroup then
+        for i = 1, GetNumRaidMembers() do
+          local rname, _, subgroup = GetRaidRosterInfo(i)
+          if subgroup == targetGroup then
+            libpredict:Heal(casterName, rname, amount, castTime, casterGuid)
+          end
+        end
+      end
+    else
+      -- Party: heal self + all members
+      libpredict:Heal(casterName, casterName, amount, castTime, casterGuid)
+      for i = 1, 4 do
+        local pname = UnitName("party" .. i)
+        if pname then
+          libpredict:Heal(casterName, pname, amount, castTime, casterGuid)
+        end
       end
     end
+    return
   end
-  if not amount or amount <= 0 then return end
 
   libpredict:Heal(casterName, targetName, amount, castTime, casterGuid)
 end
@@ -1138,6 +1163,7 @@ end)
 libpredict.sender:RegisterEvent("SPELL_FAILED_SELF")
 libpredict.sender:RegisterEvent("SPELL_DELAYED_SELF")
 libpredict.sender:RegisterEvent("SPELL_HEAL_BY_SELF")
+libpredict.sender:RegisterEvent("SPELL_HEAL_BY_OTHER")  -- populates foreignCache for other healers
 
 -- force cache updates
 libpredict.sender:RegisterEvent("UNIT_INVENTORY_CHANGED")
@@ -1180,6 +1206,41 @@ libpredict.sender:SetScript("OnEvent", function()
     local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
     if spellName and spell_queue[1] == spellName then
       UpdateCache(spell_queue[2], amount, isCrit)
+    end
+
+  elseif event == "SPELL_HEAL_BY_OTHER" then
+    -- Fires once per hit target for AoE heals (e.g. PoH).
+    -- Use this to build a per-caster cache of real heal amounts.
+    -- arg1=targetGuid, arg2=casterGuid, arg3=spellId, arg4=amount, arg5=critical, arg6=periodic
+    local casterGuid = arg2
+    local spellId    = arg3
+    local amount     = arg4
+    local isCrit     = arg5 == 1
+    local isPeriodic = arg6 == 1
+
+    if isPeriodic or not spellId or not amount or amount <= 0 then return end
+
+    local casterName = resolveNameFromGuid(casterGuid)
+    if not casterName or casterName == player then return end  -- own heals handled by SPELL_HEAL_BY_SELF
+
+    local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
+    if not spellName then return end
+    local rankStr = GetSpellRecField and GetSpellRecField(spellId, "rank") or ""
+    local spellKey = spellName .. (rankStr or "")
+
+    foreignCache[casterName] = foreignCache[casterName] or {}
+    local existing = foreignCache[casterName][spellKey]
+    -- Store highest non-crit value for best prediction accuracy
+    if isCrit then
+      -- Estimate base from crit (vanilla crit = 150%)
+      local base = math.floor(amount * 2 / 3)
+      if not existing or base > existing then
+        foreignCache[casterName][spellKey] = base
+      end
+    else
+      if not existing or amount > existing then
+        foreignCache[casterName][spellKey] = amount
+      end
     end
 
   elseif event == "SPELL_FAILED_SELF" then
