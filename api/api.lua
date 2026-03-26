@@ -1211,8 +1211,8 @@ function pfUI.api.BarLayoutOptions(barsize)
   end
 
   for _, option in ipairs({
-    "1 x 15", "1 x 10", "2 x 10", "2 x 5", "3 x 10", "3 x 5", "3 x 3",
-    "5 x 3", "10 x 3", "5 x 2", "10 x 2", "10 x 1", "15 x 1"
+    "1 x 12", "1 x 10", "2 x 10", "2 x 5", "3 x 10", "3 x 5", "3 x 3",
+    "5 x 3", "10 x 3", "5 x 2", "10 x 2", "10 x 1", "12 x 1"
   }) do
     add(option)
   end
@@ -1266,6 +1266,8 @@ local function ResolveBarLayout(barsize, formfactor, uneven)
 
   if a and b then
     local cols, rows = tonumber(a), tonumber(b)
+    cols = math.min(NUM_ACTIONBAR_BUTTONS, math.max(1, cols))
+    rows = math.min(NUM_ACTIONBAR_BUTTONS, math.max(1, rows))
     local orientation = string.upper(uneven or "DOWN")
     local mode = (orientation == "LEFT" or orientation == "RIGHT") and "cols" or "rows"
 
@@ -1329,10 +1331,27 @@ function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor
     col = buttonindex - ((row-1) * cols)
   end
 
-  if orientation == "UP" then
-    row = rows - row + 1
-  elseif orientation == "LEFT" then
-    col = cols - col + 1
+  -- move only the uneven remainder to the selected edge without reversing full order
+  if mode == "cols" and orientation == "LEFT" then
+    local final_col = math.ceil(barsize / rows)
+    local count = barsize - (final_col - 1) * rows
+    if count > 0 and count < rows then
+      if col == final_col then
+        col = 1
+      else
+        col = col + 1
+      end
+    end
+  elseif mode == "rows" and orientation == "UP" then
+    local final_row = math.ceil(barsize / cols)
+    local count = barsize - (final_row - 1) * cols
+    if count > 0 and count < cols then
+      if row == final_row then
+        row = 1
+      else
+        row = row + 1
+      end
+    end
   end
 
   local x = bordersize + padding + (col - 1) * step
