@@ -225,7 +225,7 @@ StaticPopupDialogs["LIBDEBUFF_NAMPOWER_UPDATE"] = {
   hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases/tag/v3.0.0")
+    pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI/wiki/How-to-install-nampower")
   end,
 }
 
@@ -238,7 +238,7 @@ StaticPopupDialogs["LIBDEBUFF_NAMPOWER_MISSING"] = {
   hideOnEscape = 0,
   preferredIndex = 3,
   OnAccept = function()
-    pfUI.chat.urlcopy.CopyText("https://gitea.com/avitasia/nampower/releases")
+    pfUI.chat.urlcopy.CopyText("https://github.com/me0wg4ming/pfUI/wiki/How-to-install-nampower")
   end,
 }
 

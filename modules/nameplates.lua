@@ -912,8 +912,13 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     nameplate.castbar:SetPoint("TOPLEFT", nameplate.health, "BOTTOMLEFT", 0, -default_border*3)
     nameplate.castbar:SetPoint("TOPRIGHT", nameplate.health, "BOTTOMRIGHT", 0, -default_border*3)
     nameplate.castbar:SetHeight(C.nameplates.heightcast)
-    nameplate.castbar:SetStatusBarTexture(hptexture)
-    nameplate.castbar:SetStatusBarColor(.9,.8,0,1)
+    -- Use the same castbar texture and color as the unit frame castbar (castbar.lua)
+    local cbtexture = pfUI.media[C.appearance.castbar.texture]
+    nameplate.castbar:SetStatusBarTexture(cbtexture or hptexture)
+    local cbr, cbg, cbb, cba = strsplit(",", C.appearance.castbar.castbarcolor)
+    nameplate.castbar:SetStatusBarColor(cbr, cbg, cbb, cba)
+    -- reset endTime cache so color/texture refresh takes effect on next cast
+    nameplate.castbar.lastEndTime = nil
     CreateBackdrop(nameplate.castbar, default_border)
 
     nameplate.castbar.text:SetFont(font, font_size, "OUTLINE")
@@ -1284,22 +1289,32 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     local targetGuid = state and state.targetGuid
     local target = (targetGuid and nameplate.cachedGuid and targetGuid == nameplate.cachedGuid) or
                    (state and state.hasTarget and frame:GetAlpha() >= 0.99) or nil
-    local isCasting = nameplate.castbar and nameplate.castbar:IsShown()
-    
-    local throttle
-    if target then
-      throttle = pfUI.throttle:Get("nameplates_target")  -- Default: 50 FPS
-    elseif visiblePlateCount > 20 then
-      throttle = pfUI.throttle:Get("nameplates_mass")    -- Default: 7 FPS for mass pulls
-    else
-      throttle = pfUI.throttle:Get("nameplates")         -- Default: 10 FPS
+    -- Target plate castbar runs on its own dedicated frame (nameplates.castbarFrame).
+    -- For non-target plates with castbar active, use castbar throttle to ensure
+    -- smooth animation without overloading the central loop.
+    local isCastingNonTarget = not target and nameplate.castbar and nameplate.castbar:IsShown()
+    if not isCastingNonTarget and not target and cfg.showcastbar and nameplate.cachedGuid then
+      local castInfo = GetCastInfo(nameplate.cachedGuid)
+      if castInfo and castInfo.spellID and castInfo.endTime and castInfo.endTime > now then
+        isCastingNonTarget = true
+      elseif pfGetCastInfo and nameplate.castUpdate then
+        isCastingNonTarget = true
+      end
     end
 
-    -- When a castbar is actively shown, use the castbar throttle if it's faster
-    -- than the general throttle, so the castbar animation stays smooth
-    local castbarThrottle = pfUI.throttle:Get("nameplates_castbar")
-    if isCasting and castbarThrottle < throttle then
-      throttle = castbarThrottle
+    local throttle
+    if target then
+      throttle = pfUI.throttle:Get("nameplates_target")
+    elseif visiblePlateCount > 20 then
+      throttle = pfUI.throttle:Get("nameplates_mass")
+    else
+      throttle = pfUI.throttle:Get("nameplates")
+    end
+
+    -- Non-target plates with active castbar use the castbar throttle
+    if isCastingNonTarget then
+      local cbThrottle = pfUI.throttle:Get("nameplates_castbar")
+      if cbThrottle < throttle then throttle = cbThrottle end
     end
 
     -- Check for pending event updates (these bypass throttle for immediate response)
@@ -1512,103 +1527,156 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       end
     end
 
-    -- OPTIMIZED: 100% Nampower - libdebuff handles all cast events (SPELL_START/GO/FAILED)
-    -- Use multiple checks for target detection (target variable, istarget flag, or zoomed state)
+    -- Target plate castbar is handled by nameplates.castbarFrame (dedicated OnUpdate,
+    -- engine framerate, decoupled from central loop). Only update non-target castbars here.
     local isTargetPlate = target or nameplate.istarget or (nameplate.health and nameplate.health.zoomed)
-    if cfg.showcastbar and ( not cfg.targetcastbar or isTargetPlate ) then
-      -- Always use the plate's own cachedGuid for the cast lookup.
-      -- Never fall back to GetUnitGUID("target") - that would show a cast from
-      -- a different mob just because it shares a name with the targeted plate.
-      local unitstr = nameplate.cachedGuid
-      local castInfo = unitstr and GetCastInfo(unitstr)
-      
-      if castInfo and castInfo.spellID then
-        -- Check if cast is still valid
-        if castInfo.startTime + castInfo.duration < now then
-          wipe(castInfo)
-          nameplate.castbar:Hide()
-        elseif castInfo.event == "CAST" or castInfo.event == "FAIL" then
-          wipe(castInfo)
-          nameplate.castbar:Hide()
-        else
-          -- Update from cached event data
+    if cfg.showcastbar and not cfg.targetcastbar and not isTargetPlate then
+      -- Non-target castbar: apply separate throttle.
+      -- In mass pulls (20+ plates) cap at 10 FPS to save performance.
+      local cbThrottle = pfUI.throttle:Get("nameplates_castbar")
+      if visiblePlateCount > 20 then
+        local massThrottle = pfUI.throttle:Get("nameplates_mass")
+        if massThrottle > cbThrottle then cbThrottle = massThrottle end
+      end
+      if (nameplate.castbar_tick or 0) + cbThrottle <= now then
+        nameplate.castbar_tick = now
+        nameplates.UpdateCastbar(nameplate, now)
+      end
+    elseif cfg.showcastbar and cfg.targetcastbar and not isTargetPlate then
+      -- targetcastbar=true means only show on target → hide all non-target castbars
+      nameplate.castbar:Hide()
+    elseif not cfg.showcastbar then
+      nameplate.castbar:Hide()
+    end
+  end
+
+  -- ============================================================================
+  -- DEDICATED TARGET CASTBAR FRAME
+  -- Runs on its own OnUpdate, decoupled from the central nameplate loop.
+  -- Mirrors the approach used in castbar.lua for the target unit frame castbar.
+  -- ============================================================================
+
+  -- Shared castbar update logic (used by both dedicated frame and central loop)
+  nameplates.UpdateCastbar = function(nameplate, now)
+    if not nameplate or not nameplate.castbar then return end
+    local unitstr = nameplate.cachedGuid
+    local castInfo = unitstr and GetCastInfo(unitstr)
+
+    if castInfo and castInfo.spellID then
+      if castInfo.startTime + castInfo.duration < now then
+        wipe(castInfo)
+        nameplate.castbar:Hide()
+      elseif castInfo.event == "CAST" or castInfo.event == "FAIL" then
+        wipe(castInfo)
+        nameplate.castbar:Hide()
+      else
+        -- Only update min/max, color and icon once per cast (when endTime changes)
+        -- identical to the endTime cache pattern in castbar.lua
+        if nameplate.castbar.lastEndTime ~= castInfo.endTime then
+          nameplate.castbar.lastEndTime = castInfo.endTime
           nameplate.castbar:SetMinMaxValues(castInfo.startTime, castInfo.endTime)
-          
-          local barValue
-          if castInfo.event == "CHANNEL" then
-            barValue = castInfo.startTime + (castInfo.endTime - now)
-          else
-            barValue = now
+          -- match cast/channel color from appearance config, same as castbar.lua
+          local isChannel = castInfo.event == "CHANNEL"
+          nameplate.castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(isChannel and "channelcolor" or "castbarcolor")]))
+          if castInfo.icon then
+            nameplate.castbar.icon.tex:SetTexture(castInfo.icon)
+            nameplate.castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
           end
-          
-          nameplate.castbar:SetValue(barValue)
-          -- Show remaining time (countdown), not elapsed time
-          local remaining = castInfo.endTime - now
-          if C.unitframes.castbardecimals == "1" then
-            nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
-          else
-            nameplate.castbar.text:SetText(string.format("%.2f", remaining))
-          end
-          
           if cfg.spellname then
             nameplate.castbar.spell:SetText(castInfo.spellName)
           else
             nameplate.castbar.spell:SetText("")
           end
-          
-          if castInfo.icon then
-            nameplate.castbar.icon.tex:SetTexture(castInfo.icon)
-            nameplate.castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
-          end
-          
-          nameplate.castbar:Show()
         end
-      else
-        -- libcast provides pfGetCastInfo/pfGetChannelInfo for vanilla.
-        -- Pass cachedGuid directly so it's always mob-specific, never name-based.
-        if unitstr then
-          local cast, _, _, texture, startTime, endTime = pfGetCastInfo(unitstr)
-          local channel
-          if not cast then
-            channel, _, _, texture, startTime, endTime = pfGetChannelInfo(unitstr)
-          end
-
-          if cast or channel then
-            local effect = cast or channel
-            local duration = endTime - startTime
-            local max = duration / 1000
-            local cur = GetTime() - startTime / 1000
-            if channel then cur = max + startTime / 1000 - GetTime() end
-
+        local barValue
+        if castInfo.event == "CHANNEL" then
+          barValue = castInfo.startTime + (castInfo.endTime - now)
+        else
+          barValue = now
+        end
+        nameplate.castbar:SetValue(barValue)
+        local remaining = castInfo.endTime - now
+        if C.unitframes.castbardecimals == "1" then
+          nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
+        else
+          nameplate.castbar.text:SetText(string.format("%.2f", remaining))
+        end
+        nameplate.castbar:Show()
+      end
+    else
+      -- libcast fallback (vanilla without Nampower)
+      if unitstr and pfGetCastInfo then
+        local cast, _, _, texture, startTime, endTime = pfGetCastInfo(unitstr)
+        local channel
+        if not cast then
+          channel, _, _, texture, startTime, endTime = pfGetChannelInfo(unitstr)
+        end
+        if cast or channel then
+          local effect = cast or channel
+          local duration = endTime - startTime
+          local max = duration / 1000
+          local cur = now - startTime / 1000
+          if channel then cur = max + startTime / 1000 - now end
+          if cur < 0 then cur = 0 end
+          if cur > max then cur = max end
+          -- Only update min/max, color and icon once per cast
+          if nameplate.castbar.lastEndTime ~= endTime then
+            nameplate.castbar.lastEndTime = endTime
             nameplate.castbar:SetMinMaxValues(0, max)
-            nameplate.castbar:SetValue(cur)
-            local remaining = channel and cur or (max - cur)
-            if C.unitframes.castbardecimals == "1" then
-              nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
-            else
-              nameplate.castbar.text:SetText(string.format("%.2f", remaining))
-            end
-            if C.nameplates.spellname == "1" then
-              nameplate.castbar.spell:SetText(effect)
-            else
-              nameplate.castbar.spell:SetText("")
-            end
+            nameplate.castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(channel and "channelcolor" or "castbarcolor")]))
             if texture then
               nameplate.castbar.icon.tex:SetTexture(texture)
               nameplate.castbar.icon.tex:SetTexCoord(.1, .9, .1, .9)
             end
-            nameplate.castbar:Show()
-          else
-            nameplate.castbar:Hide()
+            if cfg.spellname then
+              nameplate.castbar.spell:SetText(effect)
+            else
+              nameplate.castbar.spell:SetText("")
+            end
           end
+          nameplate.castbar:SetValue(cur)
+          local remaining = channel and cur or (max - cur)
+          if C.unitframes.castbardecimals == "1" then
+            nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
+          else
+            nameplate.castbar.text:SetText(string.format("%.2f", remaining))
+          end
+          nameplate.castbar:Show()
         else
+          nameplate.castbar.lastEndTime = nil
           nameplate.castbar:Hide()
         end
+      else
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
       end
-    else
-      nameplate.castbar:Hide()
     end
   end
+
+  -- Dedicated frame that updates ONLY the target plate castbar on engine framerate.
+  -- Throttled at 0.020s (~50 FPS) independent of the central nameplate loop.
+  nameplates.castbarFrame = CreateFrame("Frame", nil, UIParent)
+  nameplates.castbarFrame:SetScript("OnUpdate", function()
+    if not cfg.showcastbar then return end
+    local now = GetTime()
+    if (this.tick or 0) > now then return end
+    this.tick = now + 0.020  -- ~50 FPS, matches castbar.lua target castbar
+
+    -- find the current target plate via guidRegistry
+    local targetGuid = UnitExists("target") and GetUnitGUID("target")
+    if not targetGuid then return end
+
+    local frame = guidRegistry[targetGuid]
+    if not frame or not frame.nameplate then return end
+
+    local nameplate = frame.nameplate
+    -- only run if showcastbar is on and targetcastbar mode is respected
+    local isTargetPlate = true
+    if not cfg.targetcastbar then
+      -- targetcastbar=false means show on ALL plates, target handled here anyway
+    end
+    nameplates.UpdateCastbar(nameplate, now)
+  end)
 
   -- set nameplate game settings
   nameplates.SetGameVariables = function()
