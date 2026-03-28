@@ -45,7 +45,7 @@ local function OnEnter(self)
     local xp_perc = round(xp / xpmax * 100)
     local remaining = xpmax - xp
     local remaining_perc = round(remaining / xpmax * 100)
-    local exh_perc = GetXPExhaustion() and round(GetXPExhaustion() / xpmax / 0.75 * 100) or 0
+    local exh_perc = GetXPExhaustion() and round(GetXPExhaustion() / xpmax * 100) or 0
     local xp_persec = ((xp - data.startxp)/(GetTime() - data.starttime))
     local session = UnitXP("player") - data.startxp
     local avg_hour = floor(((UnitXP("player") - data.startxp) / (GetTime() - data.starttime)) * 60 * 60)
@@ -60,6 +60,10 @@ local function OnEnter(self)
     end
     if GetXPExhaustion() then
       table.insert(lines, { T["Rested"], "|cff5555ff+" .. exh .. " (" .. exh_perc .. "%)" })
+      if exh_perc >= 112 then
+        table.insert(lines, { "|cffff8800" .. exh_perc .. "% is the current max cap." })
+        table.insert(lines, { "|cffff8800Report to TWoW if you want a proper display." })
+      end
     end
     table.insert(lines, { "" })
     table.insert(lines, { T["This Session"], "|cffffffff" .. session })
@@ -171,7 +175,7 @@ end
       local text = "%s: %s%%"
       local xp, xpmax, ex = UnitXP("player"), UnitXPMax("player"), GetXPExhaustion()
       local xpperc = round(xp / xpmax * 100)
-      local experc = ex and round(ex / xpmax / 0.75 * 100) or 0
+      local experc = ex and round(ex / xpmax * 100) or 0
       if ex then text = "%s: %s%% (%s%% %s)" end
       self.bar.text:SetText(string.format(text, T["Experience"], xpperc, experc, T["Rested"]))
 

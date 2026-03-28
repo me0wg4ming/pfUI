@@ -78,9 +78,11 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
     -- OnUpdate script with throttle for performance optimization
     cb:SetScript("OnUpdate", function()
+      -- Cache GetTime() once per tick to avoid drift from multiple calls
+      local now = GetTime()
       -- Throttle for performance
-      if (this.tick or 0) > GetTime() then return end
-      this.tick = GetTime() + 0.020 -- ~50 FPS for smooth castbar
+      if (this.tick or 0) > now then return end
+      this.tick = now + 0.020 -- ~50 FPS for smooth castbar
 
       if this.drag and this.drag:IsShown() then
         this:SetAlpha(1)
@@ -107,6 +109,8 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       local focusGuid = nil
       if this.unitstr and string.find(this.unitstr, "^0x") then
         focusGuid = this.unitstr
+      elseif this.unitstr and this.unitstr == "player" and GetUnitGUID then
+        focusGuid = GetUnitGUID("player")
       elseif this.unitstr and this.unitstr ~= "player" then
         local guid = GetUnitGUID(this.unitstr)
         if guid then focusGuid = guid end
@@ -120,12 +124,17 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         if castData.event == "CAST" or castData.event == "FAIL" then
           castBlocked = true
           pfUI.libdebuff_casts[focusGuid] = nil
-        elseif (castData.event == "START" or castData.event == "CHANNEL") and castData.endTime and castData.endTime > GetTime() then
+        elseif (castData.event == "START" or castData.event == "CHANNEL") and castData.endTime and castData.endTime > now then
           cast = castData.spellName
           texture = castData.icon
           startTime = castData.startTime * 1000
           endTime = castData.endTime * 1000
-          nameSubtext = ""
+          -- Try to get rank from spell DB via spellID (nameSubtext is not stored in libdebuff_casts)
+          if castData.spellID and GetSpellRecField then
+            nameSubtext = GetSpellRecField(castData.spellID, "rank") or ""
+          else
+            nameSubtext = ""
+          end
           if castData.event == "CHANNEL" then
             channel = cast
           end
@@ -139,12 +148,12 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         query = UnitName("player")
       end
 
-      -- Fallback: pfGetCastInfo only when no focusGuid (Nampower not available for this unit)
-      if not cast and not castBlocked and not focusGuid and pfGetCastInfo then
+      -- Fallback: pfGetCastInfo only when no focusGuid or no cast found via libdebuff
+      if not cast and not castBlocked and pfGetCastInfo then
         cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetCastInfo(query)
       end
 
-      if not cast and not castBlocked and not focusGuid and pfGetChannelInfo then
+      if not cast and not castBlocked and pfGetChannelInfo then
         channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetChannelInfo(this.unitstr or this.unitname)
         cast = channel
       end
@@ -152,7 +161,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       if cast then
         local duration = endTime - startTime
         local max = duration / 1000
-        local cur = GetTime() - startTime / 1000
+        local cur = now - startTime / 1000
 
         this:SetAlpha(1)
 
@@ -216,7 +225,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         end
 
         if channel then
-          cur = max + startTime/1000 - GetTime()
+          cur = max + startTime/1000 - now
         end
 
         cur = cur > max and max or cur
