@@ -222,7 +222,7 @@ pfUI:RegisterSkin("Profession", "vanilla", function ()
       end
 
       -- Compatibility
-      if search then -- tbc / turtle wow
+      if search then -- turtle wow
         _G[displayed] = 21
         scrollframe:SetHeight(338)
 
