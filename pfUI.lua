@@ -79,12 +79,7 @@ pfUI.media = setmetatable({}, { __index = function(tab,key)
   return value
 end})
 
--- cache client version
-local _, _, _, client = GetBuildInfo()
-client = client or 11200
-
 pfUI.expansion = "vanilla"
-pfUI.client = client
 
 -- setup pfUI namespace
 setmetatable(pfUI.env, {__index = getfenv(0)})
