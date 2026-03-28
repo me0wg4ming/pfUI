@@ -14,7 +14,8 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ---
 
-8.3.0 (March 28, 2026)
+## 🎯 Whats new in 8.3.0 (March 28, 2026)
+
 Nameplate castbars (nameplates.lua, castbar.lua)
 the target nameplate castbar was kinda janky compared to the unit frame castbar, so i basically rewrote how it works. it now runs on its own dedicated OnUpdate frame, same as the castbar.lua target castbar does - completly decoupled from the main nameplate loop. also fixed that the castbar throttle setting in the options did literally nothing for the target plate (the comparison was always false lol). non-target plate castbars get their own throttle now too, and during big pulls (20+ plates) they get capped even more to keep things smooth
 on top of that the nameplate castbar now uses the same texture + color config as the player/target castbar instead of the hp bar texture and hardcoded yellow. and SetMinMaxValues only gets called once per cast now instead of every single tick
