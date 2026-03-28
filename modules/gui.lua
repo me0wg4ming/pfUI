@@ -135,15 +135,6 @@ pfUI:RegisterModule("gui", function ()
         frame.caption:SetText(caption)
       end
 
-      if disabled then
-        if frame.caption then
-          frame.caption:SetText(caption .. " |cffff5555[" .. T["Only"] .. " " .. string.gsub(expansion, ":", "&") .. "]")
-        end
-
-        frame:SetAlpha(.5)
-        return
-      end
-
       if category == "CVAR" then
         category = {}
         category[config] = tostring(GetCVar(config))
