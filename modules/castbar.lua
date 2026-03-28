@@ -146,12 +146,14 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         query = UnitName("player")
       end
 
-      -- Fallback: pfGetCastInfo only when no focusGuid or no cast found via libdebuff
-      if not cast and not castBlocked and pfGetCastInfo then
+      -- Fallback: pfGetCastInfo only when no focusGuid (Nampower not available for this unit).
+      -- If we have a focusGuid, libdebuff is authoritative - don't fall back to libcast
+      -- even if no cast is active (prevents false positives e.g. spellbook clicks on CD spells).
+      if not cast and not castBlocked and not focusGuid and pfGetCastInfo then
         cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetCastInfo(query)
       end
 
-      if not cast and not castBlocked and pfGetChannelInfo then
+      if not cast and not castBlocked and not focusGuid and pfGetChannelInfo then
         channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetChannelInfo(this.unitstr or this.unitname)
         cast = channel
       end
