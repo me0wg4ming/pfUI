@@ -20,6 +20,31 @@ local slots = {
   "RangedSlot",
 }
 
+-- Nampower GetEquippedItem uses its own slot numbering (0-18), NOT GetInventorySlotInfo values
+-- Docs: 1=Head 2=Neck 3=Shoulder 4=Shirt 5=Chest 6=Waist 7=Legs 8=Feet 9=Wrist 10=Hands
+--       11=Finger1 12=Finger2 13=Trinket1 14=Trinket2 15=Back 16=MainHand 17=OffHand 18=Ranged 19=Tabard
+local npSlotMap = {
+  ["HeadSlot"]          = 1,
+  ["NeckSlot"]          = 2,
+  ["ShoulderSlot"]      = 3,
+  ["ShirtSlot"]         = 4,
+  ["ChestSlot"]         = 5,
+  ["WaistSlot"]         = 6,
+  ["LegsSlot"]          = 7,
+  ["FeetSlot"]          = 8,
+  ["WristSlot"]         = 9,
+  ["HandsSlot"]         = 10,
+  ["Finger0Slot"]       = 11,
+  ["Finger1Slot"]       = 12,
+  ["Trinket0Slot"]      = 13,
+  ["Trinket1Slot"]      = 14,
+  ["BackSlot"]          = 15,
+  ["MainHandSlot"]      = 16,
+  ["SecondaryHandSlot"] = 17,
+  ["RangedSlot"]        = 18,
+  ["TabardSlot"]        = 19,
+}
+
 pfUI:RegisterSkin("Inspect", "tbc", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
@@ -82,8 +107,10 @@ pfUI:RegisterSkin("Inspect", "tbc", function ()
         for _, slot in pairs(slots) do
           local btn = _G["Inspect"..slot]
           if btn then
-            local slotId = btn:GetID()
-            local ok, npItem = pcall(GetEquippedItem, guid, slotId)
+            local slotName = string.sub(btn:GetName(), 8)  -- strip "Inspect" prefix
+            local slotId = npSlotMap[slotName]
+            local ok, npItem = slotId and pcall(GetEquippedItem, guid, slotId) or false, nil
+            if not slotId then ok, npItem = true, nil end
             if not ok then npItem = nil end
             if npItem and npItem.itemId and npItem.itemId > 0 then
               local itemId = npItem.itemId
@@ -136,20 +163,12 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
-  -- Nampower-based range check for Inspect dropdown button
-  if TargetFrameDropDown then
-    local origInit = TargetFrameDropDown.initialize
-    TargetFrameDropDown.initialize = function()
-      local inRange = pfUI.api.librange and pfUI.api.librange:UnitInInspectRange("target")
-      UnitPopupButtons["INSPECT"].dist = inRange and 0 or 1
-      if origInit then origInit() end
-    end
-  end
-
   HookAddonOrVariable("Blizzard_InspectUI", function()
+    -- Override InspectFrame_Show to remove the CanInspect() block
+    -- but keep normal range requirement for opening (button still greys out)
     InspectFrame_Show = function(unit)
       HideUIPanel(InspectFrame)
-      NotifyInspect(unit)
+      pcall(NotifyInspect, unit)
       InspectFrame.unit = unit
       ShowUIPanel(InspectFrame)
     end
@@ -200,55 +219,48 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         SetAllPointsOffset(frame.backdrop, frame, 0)
         HandleIcon(frame.backdrop, _G["Inspect"..slot.."IconTexture"])
 
-        -- Nampower-based tooltip via hyperlink
-        local funce = frame:GetScript("OnEnter")
-        frame:SetScript("OnEnter", function()
-          local unit = InspectFrame.unit
-          if not unit or not (pfUI.api.librange and pfUI.api.librange:UnitInInspectRange(unit)) then return end
-          local guid = unit and GetUnitGUID and GetUnitGUID(unit)
-          local slotId = this:GetID()
-          local ok, npItem = pcall(function() return guid and GetEquippedItem and GetEquippedItem(guid, slotId) end)
-          if not ok then npItem = nil end
-          if npItem and npItem.itemId and npItem.itemId > 0 then
-            local itemId    = npItem.itemId
-            local enchantId = npItem.permanentEnchantId or 0
-            GameTooltip:SetOwner(this, "ANCHOR_TOPRIGHT")
-            GameTooltip:SetHyperlink("item:" .. itemId .. ":" .. enchantId .. ":0:0:0:0:0:0")
-            GameTooltip:Show()
-          elseif funce then
-            funce()
-          end
-        end)
+        -- OnEnter set after npCache is defined (see below)
         frame:SetScript("OnLeave", function()
           GameTooltip:Hide()
         end)
       end
 
-      -- cache: prefetched item data per guid, keyed by slot name
       local npCache = {}
       local npCacheGuid = nil
-      local npTick -- forward declaration, initialized below
+      local npTick
 
       local function PrefetchTarget(unit)
         if not unit then return end
         local guid = GetUnitGUID and GetUnitGUID(unit)
         if not guid then return end
-        -- out of range check: 41yd via Arcane Shot range (works for all classes via Nampower)
-        if not (pfUI.api.librange and pfUI.api.librange:UnitInInspectRange(unit)) then return end
+
+        -- Check if at least one slot returns data - if not, we're out of range
+        -- Keep the existing cache in that case so items stay visible
+        local slotId = npSlotMap["HeadSlot"]
+        local testOk, testItem = pcall(GetEquippedItem, guid, slotId)
+        local hasData = testOk and testItem ~= nil
+        -- also consider: all nil could mean no items equipped, not out of range
+        -- use guid change as signal to force refresh
+        local guidChanged = npCacheGuid ~= guid
+
+        if not hasData and not guidChanged then
+          -- out of range and same target - keep cache as-is
+          return
+        end
 
         npCacheGuid = guid
-        npCache = {}
+        -- only reset cache on guid change or when we have fresh data
+        if guidChanged then npCache = {} end
 
+        local gotAny = false
         for i, vslot in pairs(slots) do
-          local slotId = GetInventorySlotInfo(vslot)
-          local ok, npItem = pcall(GetEquippedItem, guid, slotId)
-          if not ok then
-            npTick.pending = true
-            npTick.delay = 0
-            return
+          local sid = npSlotMap[vslot]
+          local ok, npItem
+          if sid then
+            ok, npItem = pcall(GetEquippedItem, guid, sid)
           end
-          local itemId = npItem and npItem.itemId and npItem.itemId > 0 and npItem.itemId
-          if itemId then
+          if ok and npItem and npItem.itemId and npItem.itemId > 0 then
+            local itemId = npItem.itemId
             local enchantId = npItem.permanentEnchantId or 0
             local displayInfoId = GetItemStatsField and GetItemStatsField(itemId, "displayInfoID")
             local texName = displayInfoId and GetItemIconTexture and GetItemIconTexture(displayInfoId)
@@ -256,33 +268,37 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
             local itemStats = GetItemStats and GetItemStats(itemId)
             local quality = itemStats and itemStats.quality
             npCache[vslot] = { itemId=itemId, enchantId=enchantId, tex=tex, quality=quality }
-          else
-            npCache[vslot] = false
+            gotAny = true
+          elseif ok then
+            -- slot is empty (in range but no item) - only update if we have data
+            if hasData then npCache[vslot] = false end
           end
+          -- if not ok: out of range, leave cache entry as-is
         end
       end
 
+      -- Set OnEnter after npCache is defined so tooltips can read from cache
+      for _, slot in pairs(slots) do
+        local frame = _G["Inspect"..slot]
+        if frame then
+          local slotKey = slot  -- capture for closure
+          local funce = frame:GetScript("OnEnter")
+          frame:SetScript("OnEnter", function()
+            local d = npCache[slotKey]
+            if d and d.itemId then
+              GameTooltip:SetOwner(this, "ANCHOR_TOPRIGHT")
+              GameTooltip:SetHyperlink("item:" .. d.itemId .. ":" .. (d.enchantId or 0) .. ":0:0:0:0:0:0")
+              GameTooltip:Show()
+            elseif funce then
+              funce()
+            end
+          end)
+        end
+      end
 
       local function UpdateSlots()
         if not InspectFrame.unit then return end
 
-        -- check if all icons are ready, retry if not
-        local allReady = true
-        for i, vslot in pairs(slots) do
-          local d = npCache[vslot]
-          if d and not d.tex then
-            allReady = false
-            break
-          end
-        end
-
-        if not allReady then
-          npTick.pending = true
-          npTick.delay = 0
-          return
-        end
-
-        -- guild text
         local guild, title, rank = GetGuildInfo(InspectFrame.unit)
         if guild then
           InspectGuildText:SetPoint("TOP", InspectLevelText, "BOTTOM", 0, -1)
@@ -331,26 +347,12 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         end
       end
 
-      -- OnUpdate frame: 20ms prefetch delay + 0.5s range check
       npTick = CreateFrame("Frame")
       npTick.delay = 0
-      npTick.range = 0
       npTick.pending = false
       npTick:Hide()
       npTick:SetScript("OnUpdate", function()
         local dt = arg1
-        -- range check throttled to 0.5s
-        npTick.range = npTick.range + dt
-        if npTick.range >= 0.5 then
-          npTick.range = 0
-          local unit = InspectFrame.unit
-          if not unit or not (pfUI.api.librange and pfUI.api.librange:UnitInInspectRange(unit)) then
-            HideUIPanel(InspectFrame)
-            npTick:Hide()
-            return
-          end
-        end
-        -- 20ms prefetch delay on item swap
         if npTick.pending then
           npTick.delay = npTick.delay + dt
           if npTick.delay >= 0.02 then
@@ -369,20 +371,19 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         end
       end
 
-      -- item swap during inspect: re-prefetch and re-apply
       hooksecurefunc("InspectPaperDollItemSlotButton_Update", function(button)
         TriggerDelay()
       end)
 
-      -- on open: prefetch and apply immediately, start tick
       hooksecurefunc("InspectPaperDollFrame_OnShow", function()
-        npTick.range = 0
         npTick:Show()
         PrefetchTarget(InspectFrame.unit)
         UpdateSlots()
       end)
 
-      -- stop tick when frame closes
+      -- Don't auto-close when out of range - keep frame open as long as possible
+      -- The original InspectFrame_OnUpdate closed the frame when target was lost,
+      -- we let it stay open so players can review gear after moving away
       hooksecurefunc("InspectFrame_OnHide", function()
         npTick:Hide()
       end)
