@@ -1657,8 +1657,10 @@ end
       -- prefer arg6 if present - some spells (e.g. Volley post-rework) still send
       -- arg8=1 but now have a real cast time in arg6, so we only fall back to arg7
       -- when arg6 is nil (true channels like Blizzard)
-      local castTime = arg6 or arg7
-      local isChannel = spellType == 1 and not arg6
+      -- arg6=0 means "no cast time" (channel), arg6=nil also means channel (e.g. Blizzard)
+      -- In Lua, 0 is truthy so we must check for nil OR zero explicitly
+      local castTime = (arg6 and arg6 > 0 and arg6) or arg7
+      local isChannel = spellType == 1 and (not arg6 or arg6 == 0)
       
       if not casterGuid or not spellId then return end
       
@@ -2536,6 +2538,7 @@ end
       end
       -- NOTE: objectsByGuid is written only in DEBUFF_ADDED (confirmed hit) and
       -- the refresh path above (slot exists = confirmed). Never here (AURA_CAST fires on miss too).
+
       if event == "AURA_CAST_ON_SELF" and pfUI.libdebuff_aura_cast_on_self_hooks then
         for _, fn in pairs(pfUI.libdebuff_aura_cast_on_self_hooks) do
           fn(spellId, casterGuid, targetGuid)
