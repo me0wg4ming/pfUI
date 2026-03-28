@@ -1,4 +1,4 @@
-pfUI:RegisterModule("tooltip", "vanilla", function ()
+pfUI:RegisterModule("tooltip", function ()
   local rawborder, default_border = GetBorderSize()
 
   pfUI.tooltip = CreateFrame('Frame', "pfTooltip", GameTooltip)

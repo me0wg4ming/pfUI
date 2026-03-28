@@ -1,4 +1,4 @@
-pfUI:RegisterModule("farmmode", "vanilla", function ()
+pfUI:RegisterModule("farmmode", function ()
   local function ToggleFarmMode()
     if pfUI.farmmap:IsShown() then
       pfUI.farmmap:Hide()

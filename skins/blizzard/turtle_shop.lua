@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Turtle Shop", "vanilla", function ()
+pfUI:RegisterSkin("Turtle Shop", function ()
   if not ShopFrame then return end
 
   local rawborder, border = GetBorderSize()

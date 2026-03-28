@@ -1,4 +1,4 @@
-pfUI:RegisterModule("targettargettarget", "vanilla", function ()
+pfUI:RegisterModule("targettargettarget", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
 

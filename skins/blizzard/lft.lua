@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Turtle LFT", "vanilla", function ()
+pfUI:RegisterSkin("Turtle LFT", function ()
   -- Only run if the LFT addon is loaded
   if not LFTFrame then return end
 

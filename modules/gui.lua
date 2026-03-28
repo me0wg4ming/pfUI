@@ -1,4 +1,4 @@
-pfUI:RegisterModule("gui", "vanilla", function ()
+pfUI:RegisterModule("gui", function ()
   local Reload, U, CreateConfig, CreateTabFrame, CreateArea, CreateGUIEntry, EntryUpdate
 
   -- "searchDB" gets populated when CreateConfig is called. The table holds

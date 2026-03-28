@@ -1,4 +1,4 @@
-pfUI:RegisterModule("bgscore", "vanilla", function ()
+pfUI:RegisterModule("bgscore", function ()
   local bgframe = WorldStateAlwaysUpFrame
   if not bgframe then
     bgframe = CreateFrame("Frame", "WorldStateAlwaysUpFrame", UIParent)

@@ -1,4 +1,4 @@
-pfUI:RegisterModule("skin", "vanilla", function ()
+pfUI:RegisterModule("skin", function ()
   -- align UIParent panels
   pfUI.panelalign = CreateFrame("Frame", "pfUIParentPanelAlign", UIParent)
   pfUI.panelalign:SetScript("OnUpdate", function()

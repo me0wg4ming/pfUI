@@ -1,4 +1,4 @@
-pfUI:RegisterModule("xpbar", "vanilla", function ()
+pfUI:RegisterModule("xpbar", function ()
   local rawborder, default_border = GetBorderSize()
   local parse_faction = SanitizePattern(FACTION_STANDING_INCREASED)
 

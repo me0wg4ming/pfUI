@@ -20,7 +20,7 @@ local slots = {
   "RangedSlot",
 }
 
-pfUI:RegisterSkin("Inspect", "vanilla", function ()
+pfUI:RegisterSkin("Inspect", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 

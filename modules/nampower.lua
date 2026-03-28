@@ -2,7 +2,7 @@
 -- Provides spell queue indicator and enhanced cast information
 -- Requires Nampower DLL: https://gitea.com/avitasia/nampower
 
-pfUI:RegisterModule("nampower", "vanilla", function ()
+pfUI:RegisterModule("nampower", function ()
   -- Only load if Nampower is available
   if not GetNampowerVersion then return end
 

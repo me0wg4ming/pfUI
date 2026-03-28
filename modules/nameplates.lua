@@ -1,4 +1,4 @@
-pfUI:RegisterModule("nameplates", "vanilla", function ()
+pfUI:RegisterModule("nameplates", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 

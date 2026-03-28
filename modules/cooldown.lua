@@ -1,4 +1,4 @@
-pfUI:RegisterModule("cooldown", "vanilla", function ()
+pfUI:RegisterModule("cooldown", function ()
   -- cache values
   local lowcolor    = {strsplit(",", C.appearance.cd.lowcolor)}
   local normalcolor = {strsplit(",", C.appearance.cd.normalcolor)}

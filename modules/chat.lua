@@ -1,4 +1,4 @@
-pfUI:RegisterModule("chat", "vanilla", function ()
+pfUI:RegisterModule("chat", function ()
   local panelfont = C.panel.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
   local panelfont_size = C.panel.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
   local rawborder, default_border = GetBorderSize("chat")

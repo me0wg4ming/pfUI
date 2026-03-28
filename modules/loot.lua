@@ -1,4 +1,4 @@
-pfUI:RegisterModule("loot", "vanilla", function ()
+pfUI:RegisterModule("loot", function ()
   local rawborder, border = GetBorderSize()
 
   pfUI.loot = CreateFrame("Frame", "pfLootFrame", UIParent)

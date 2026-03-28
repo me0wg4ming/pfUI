@@ -1,4 +1,4 @@
-pfUI:RegisterModule("afkcam", "vanilla", function ()
+pfUI:RegisterModule("afkcam", function ()
   local MARKED_AFK_CAPTURE = SanitizePattern(MARKED_AFK_MESSAGE)
   local social_chats = {
     "CHAT_MSG_SAY",

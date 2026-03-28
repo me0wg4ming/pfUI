@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Transmog", "vanilla", function ()
+pfUI:RegisterSkin("Transmog", function ()
   if not TransmogFrame then return end
 
   -- Strip all background/border textures from the main frame

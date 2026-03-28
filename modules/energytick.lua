@@ -17,7 +17,7 @@ local function getAdjustedTickTimer()
   return adjustedEnergyTick
 end
 
-pfUI:RegisterModule("energytick", "vanilla", function()
+pfUI:RegisterModule("energytick", function()
   if not pfUI.uf or not pfUI.uf.player then
     return
   end
