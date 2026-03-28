@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Auctionhouse", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Auctionhouse", "vanilla", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
   HookAddonOrVariable("Blizzard_AuctionUI", function()

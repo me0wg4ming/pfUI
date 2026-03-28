@@ -1,4 +1,4 @@
-pfUI:RegisterModule("map", "vanilla:tbc", function ()
+pfUI:RegisterModule("map", "vanilla", function ()
   table.insert(UISpecialFrames, "WorldMapFrame")
 
   local function UpdateTooltipScale()

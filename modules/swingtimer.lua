@@ -1,5 +1,5 @@
 pfUI:RegisterNewModule("swingtimer", "Swing Timer")
-pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
+pfUI:RegisterModule("swingtimer", "vanilla", function ()
   local rawborder, border = GetBorderSize()
 
   -- HitInfo flags (EVENTS.md)

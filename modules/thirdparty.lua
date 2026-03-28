@@ -1,4 +1,4 @@
-pfUI:RegisterModule("thirdparty", "vanilla:tbc", function()
+pfUI:RegisterModule("thirdparty", "vanilla", function()
   -- This module includes the core logic of thirdparty modules.
   -- Right now, in particular the functions to register addons to the
   -- dockframe of the chat panel aswell as the thirdparty root-table.

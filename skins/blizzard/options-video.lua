@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Options - Video", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Options - Video", "vanilla", function ()
   -- on new PTR, OptionsFrameCategoryList exists meaning new combined panel is used
   if OptionsFrameCategoryList then return end
   local rawborder, border = GetBorderSize()

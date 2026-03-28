@@ -319,7 +319,7 @@ end
 function pfUI:RegisterModule(name, a2, a3)
   if pfUI.module[name] then return end
   local hasv = type(a2) == "string"
-  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla:tbc:wotlk"
+  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla"
 
   -- check for client compatibility
   if not strfind(version, pfUI.expansion) then return end
@@ -334,7 +334,7 @@ end
 function pfUI:RegisterSkin(name, a2, a3)
   if pfUI.skin[name] then return end
   local hasv = type(a2) == "string"
-  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla:tbc:wotlk"
+  local func, version = hasv and a3 or a2, hasv and a2 or "vanilla"
 
   -- check for client compatibility
   if not strfind(version, pfUI.expansion) then return end

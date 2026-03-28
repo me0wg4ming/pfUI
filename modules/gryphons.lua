@@ -1,4 +1,4 @@
-pfUI:RegisterModule("gryphons", "vanilla:tbc", function ()
+pfUI:RegisterModule("gryphons", "vanilla", function ()
   pfUI.gryphons = {
     frames = {
       left = CreateFrame("Frame"),

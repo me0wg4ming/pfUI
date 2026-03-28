@@ -1,4 +1,4 @@
-pfUI:RegisterModule("pettarget", "vanilla:tbc", function ()
+pfUI:RegisterModule("pettarget", "vanilla", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
   local rawborder, default_border = GetBorderSize("unitframes")
