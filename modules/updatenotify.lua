@@ -5,17 +5,26 @@ pfUI:RegisterModule("updatenotify", "vanilla:tbc", function ()
   local loginchannels = { "BATTLEGROUND", "RAID", "GUILD" }
   local groupchannels = { "BATTLEGROUND", "RAID" }
 
+  -- Determine branch from toc version string.
+  -- experiment toc has "9.x.x (experiment version)", master does not.
+  -- Only notify players on the same branch about updates.
+  local tocversion = GetAddOnMetadata(pfUI.name, "Version") or ""
+  local localbranch = strfind(tocversion, "experiment") and "exp" or "master"
+  local versionmsg  = "VERSION:" .. localversion .. ":" .. localbranch
+
   pfUI.updater = CreateFrame("Frame")
   pfUI.updater:RegisterEvent("CHAT_MSG_ADDON")
   pfUI.updater:RegisterEvent("PLAYER_ENTERING_WORLD")
   pfUI.updater:RegisterEvent("PARTY_MEMBERS_CHANGED")
   pfUI.updater:SetScript("OnEvent", function()
     if event == "CHAT_MSG_ADDON" and arg1 == "pfUI" then
-      local v, remoteversion = pfUI.api.strsplit(":", arg2)
-      local remoteversion = tonumber(remoteversion)
-      if v == "VERSION" and remoteversion then
-        if remoteversion > localversion then
-          pfUI_init.updateavailable = remoteversion
+      local v, rv, branch = pfUI.api.strsplit(":", arg2)
+      local rv = tonumber(rv)
+      -- only process VERSION messages from the same branch
+      -- messages without a branch tag (old versions) are ignored
+      if v == "VERSION" and rv and branch == localbranch then
+        if rv > localversion then
+          pfUI_init.updateavailable = rv
         end
       end
     end
@@ -24,7 +33,7 @@ pfUI:RegisterModule("updatenotify", "vanilla:tbc", function ()
       local groupsize = GetNumRaidMembers() > 0 and GetNumRaidMembers() or GetNumPartyMembers() > 0 and GetNumPartyMembers() or 0
       if ( this.group or 0 ) < groupsize then
         for _, chan in pairs(groupchannels) do
-          SendAddonMessage("pfUI", "VERSION:" .. localversion, chan)
+          SendAddonMessage("pfUI", versionmsg, chan)
         end
       end
       this.group = groupsize
@@ -39,7 +48,7 @@ pfUI:RegisterModule("updatenotify", "vanilla:tbc", function ()
       end
 
       for _, chan in pairs(loginchannels) do
-        SendAddonMessage("pfUI", "VERSION:" .. localversion, chan)
+        SendAddonMessage("pfUI", versionmsg, chan)
       end
     end
   end)
