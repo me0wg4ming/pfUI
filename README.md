@@ -16,37 +16,47 @@ This version includes significant performance improvements, DLL-enhanced feature
 
 ## 🎯 Whats new in 8.3.0 (March 28, 2026)
 
-Nameplate castbars (nameplates.lua, castbar.lua)
+**Nameplate castbars** (nameplates.lua, castbar.lua)
+
 the target nameplate castbar was kinda janky compared to the unit frame castbar, so i basically rewrote how it works. it now runs on its own dedicated OnUpdate frame, same as the castbar.lua target castbar does - completly decoupled from the main nameplate loop. also fixed that the castbar throttle setting in the options did literally nothing for the target plate (the comparison was always false lol). non-target plate castbars get their own throttle now too, and during big pulls (20+ plates) they get capped even more to keep things smooth
+
 on top of that the nameplate castbar now uses the same texture + color config as the player/target castbar instead of the hp bar texture and hardcoded yellow. and SetMinMaxValues only gets called once per cast now instead of every single tick
+
 also fixed a bunch of stuff in castbar.lua:
+- GetTime() was called like 4 times per tick which caused the throttle to slowly drift, cached it as `now` once instead
+- "Show Rank" wasnt working at all when nampower was active because nameSubtext got hardcoded to "" in the libdebuff path. its now fetched via GetSpellRecField
+- clicking a spell thats on cooldown in the spellbook was showing a fake 3sec castbar. fixed by not falling back to libcast when we already have a focusGuid (libdebuff handles it)
 
-GetTime() was called like 4 times per tick which caused the throttle to slowly drift, cached it as now once instead
-"Show Rank" wasnt working at all when nampower was active because nameSubtext got hardcoded to "" in the libdebuff path. its now fetched via GetSpellRecField
-clicking a spell thats on cooldown in the spellbook was showing a fake 3sec castbar. fixed by not falling back to libcast when we already have a focusGuid (libdebuff handles it)
+**Map stuff** (map.lua, turtle-wow.lua)
 
-Map stuff (map.lua, turtle-wow.lua)
 added a "switch to current zone" toggle button directly on the worldmap - when its off, opening the map wont auto-jump to your current zone anymore so you can actually browse around freely
+
 also redid all the zone overlay coords for 1.18.1, they were pretty far off before. new zone added: Moonwhisper. removed the UpperKarazhan2f placeholder that wasnt doing anything
-Hunter bar (hunterbar.lua)
+
+**Hunter bar** (hunterbar.lua)
+
 the melee/ranged page swap now uses IsSpellInRange with Wing Clip and Arcane Shot as range indicators instead of scanning actionbar slots. added hysteresis so it doesnt flip back and forth rapidly in the transition zone
-New skins
 
-Transmog frame skinned (transmog.lua)
-Turtle Shop skinned (turtle_shop.lua)
+**New skins**
 
-GroupUI (turtle-wow.lua)
+- Transmog frame skinned (transmog.lua)
+- Turtle Shop skinned (turtle_shop.lua)
+
+**GroupUI** (turtle-wow.lua)
+
 rewrote the turtle GroupUI management logic, it was kind of a mess. now its documented and handles the party/raid cases correctly without interfering when pfUI UF is disabled
-misc fixes
 
-GetColorGradient now handles NaN input without erroring
-GetNoNameObject nil check before GetRegions call
-UnitInRange was referencing librange as a local that didnt exist, fixed
-energy tick spark no longer restarts when mana is already full
-macrotweak disables itself if Supermacro/SuperCleveRoidMacros/UltimaMacros are loaded
-xpbar rested tooltip shows a warning if exh% goes over 112 (twow display bug)
-libthrottle: added nameplates_castbar and swingtimer defaults
-talents skin: nil guard for MAX_NUM_TALENTS
+**misc fixes**
+
+- GetColorGradient now handles NaN input without erroring
+- GetNoNameObject nil check before GetRegions call
+- UnitInRange was referencing librange as a local that didnt exist, fixed
+- energy tick spark no longer restarts when mana is already full
+- macrotweak disables itself if Supermacro/SuperCleveRoidMacros/UltimaMacros are loaded
+- xpbar rested tooltip shows a warning if exh% goes over 112 (twow display bug)
+- libthrottle: added nameplates_castbar and swingtimer defaults
+- talents skin: nil guard for MAX_NUM_TALENTS
+- added github issue templates
 
 ---
 
