@@ -1201,8 +1201,12 @@ if hasNampower then
       local spellId = arg2
       local casterGuid = arg3
       local spellType = arg8 or 0  -- 0=Normal, 1=Channel, 2=Autorepeating
-      local isChannel = spellType == 1
-      local castTime = isChannel and arg7 or arg6  -- arg6=castTime (normal), arg7=duration (channel)
+      -- arg6=castTime, arg7=channel duration
+      -- prefer arg6 if present — some spells (e.g. Volley post-rework) still send
+      -- arg8=1 but now have a real cast time in arg6, so we only fall back to arg7
+      -- when arg6 is nil (true channels like Blizzard)
+      local castTime = arg6 or arg7
+      local isChannel = spellType == 1 and not arg6
       
       if not casterGuid or not spellId then return end
       
