@@ -79,8 +79,6 @@ pfUI.media = setmetatable({}, { __index = function(tab,key)
   return value
 end})
 
-pfUI.expansion = "vanilla"
-
 -- setup pfUI namespace
 setmetatable(pfUI.env, {__index = getfenv(0)})
 
