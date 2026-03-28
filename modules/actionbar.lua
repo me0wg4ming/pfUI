@@ -395,14 +395,6 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
         for line in gfind(body, "[^%\n]+") do
           _, _, match = string.find(line, '^#showtooltip (.+)')
 
-          -- skip any further manual macro scanning on
-          -- gameclients with native macro spell detection
-          if pfUI.client > 11200 and match then
-            self.spellslot = nil
-            self.booktype = nil
-            return
-          end
-
           -- allow the user to disable the scan
           if match and strfind(match, "disable") then
             return
@@ -491,7 +483,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     castable, autocast, token = nil, nil, nil
 
     -- set the own ID for compatibility to some vanilla addons
-    if pfUI.client <= 11200 then self:SetID(self.id) end
+    self:SetID(self.id)
 
     grid = self.bar == 12 and showgrid_pet or showgrid
 
@@ -847,68 +839,24 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
   end
 
   local function EnablePaging(bar)
-    if pfUI.client <= 11200 then
-      if not bar.pager then
-        bar.pager = CreateFrame("Frame")
-        bar.pager:RegisterEvent("PLAYER_ENTERING_WORLD")
-        bar.pager:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
-        bar.pager:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
-        bar.pager:SetScript("OnEvent", function()
-          for i=1, 10 do -- reload pageable bars
-            local pageable = C.bars["bar"..i] and C.bars["bar"..i].pageable == "1" and true or nil
-            _G.VIEWABLE_ACTION_BAR_PAGES[i] = pageable
-          end
-
-          local active = GetActiveBar()
-          for i=1,12 do
-            local id = i + (active-1)*12
-            bar[i].id = id
-            updatecache[i] = true
-          end
-        end)
-      end
-    else
-      -- append paging enabled bars to the filter list
-      for i=1,12 do bar[i]:SetScript("OnAttributeChanged", ButtonSwitch) end
-
-      -- fill all possible page states
-      local page, pages = nil, {}
-      while not pages[6] do
-        for i=1, 6 do
-          page = i == 1 and 1 or C.bars["bar"..i] and C.bars["bar"..i].pageable == "1" and i
-          if page then table.insert(pages, page) end
+    if not bar.pager then
+      bar.pager = CreateFrame("Frame")
+      bar.pager:RegisterEvent("PLAYER_ENTERING_WORLD")
+      bar.pager:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+      bar.pager:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+      bar.pager:SetScript("OnEvent", function()
+        for i=1, 10 do -- reload pageable bars
+          local pageable = C.bars["bar"..i] and C.bars["bar"..i].pageable == "1" and true or nil
+          _G.VIEWABLE_ACTION_BAR_PAGES[i] = pageable
         end
-      end
 
-      bar:SetAttribute("statemap-page", "$input")
-      bar:SetAttribute("state", (bar:GetAttribute("state-page") or 1))
-
-      -- prio posses bar
-      bar.filter = "[bonusbar: 5] 11;"
-
-      -- set bar 8 for druid stealth if enabled
-      local prowl = class == "DRUID" and C.bars["druidstealth"] == "1" and "8" or "7"
-
-      -- write default pages
-      for state, page in pairs(pages) do
-        if page ~= 1 then -- skip page 1 as it is supposed to stay dynamic for stances
-          bar.filter = string.format("%s[actionbar: %s] %s; ", bar.filter, state, page)
+        local active = GetActiveBar()
+        for i=1,12 do
+          local id = i + (active-1)*12
+          bar[i].id = id
+          updatecache[i] = true
         end
-      end
-
-      -- write page driver conditions
-      bar.filter = string.format("%s[bonusbar:1,nostealth] 7; [bonusbar:1,stealth] %s; [bonusbar:2] 10; [bonusbar:3] 9; [bonusbar:4] 10; 1", bar.filter, prowl)
-
-      -- prepend pagemaster states if enabled
-      if C.bars.pagemaster == "1" then
-        for mod, page in pairs({ ["shift"] = "6", ["ctrl"] = "5", ["alt"] = "3" }) do
-          bar.filter = string.format("[modifier:%s] %s;", mod, page) .. bar.filter
-        end
-      end
-
-      -- enable page driver conditions
-      RegisterStateDriver(bar, "page", bar.filter)
-      SecureStateHeader_Refresh(bar)
+      end)
     end
   end
 
@@ -960,7 +908,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
   end
 
   -- pagemaster / meta page switch
-  if pfUI.expansion == "vanilla" then
+  do
     local prowl, shift, ctrl, alt, default = 8, 6, 5, 3, 1
 
     -- set temporary pagemaster bindings keybinds
@@ -1323,40 +1271,26 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     if enable == "1" then
       -- handle pet bar
       if i == 12 then
-        if pfUI.client > 11200 then
-          if InCombatLockdown and InCombatLockdown() then
-            -- don't process those events during combat
-          else
-            -- set state driver for pet bars
-            bars[i]:SetAttribute("unit", "pet")
-            local visibility = pfUI.unlock and pfUI.unlock:IsShown() and "show" or petvisibility
-            if bars[i].visibility ~= visibility then
-              RegisterStateDriver(bars[i], 'visibility', visibility)
-              bars[i].visibility = visibility
-            end
-          end
+        -- only show when pet actions exists
+        if PetHasActionBar() or pfUI.unlock and pfUI.unlock:IsShown() then
+          bars[i]:Show()
         else
-          -- only show when pet actions exists
-          if PetHasActionBar() or pfUI.unlock and pfUI.unlock:IsShown() then
-            bars[i]:Show()
-          else
-            bars[i]:Hide()
-          end
+          bars[i]:Hide()
+        end
 
-          -- show/hide petbar on petbar updates
-          if init then
-            bars[i]:RegisterEvent("PET_BAR_UPDATE")
-            bars[i]:SetScript("OnEvent", function()
-              -- hide obsolete buttons
-              for i=1, NUM_PET_ACTION_SLOTS do
-               if not PetHasActionBar() and bars[12][i] then
-                 bars[12][i]:Hide()
-               end
-              end
-              -- refresh layout
-              CreateActionBar(12)
-            end)
-          end
+        -- show/hide petbar on petbar updates
+        if init then
+          bars[i]:RegisterEvent("PET_BAR_UPDATE")
+          bars[i]:SetScript("OnEvent", function()
+            -- hide obsolete buttons
+            for i=1, NUM_PET_ACTION_SLOTS do
+             if not PetHasActionBar() and bars[12][i] then
+               bars[12][i]:Hide()
+             end
+            end
+            -- refresh layout
+            CreateActionBar(12)
+          end)
         end
 
       -- handle shapeshift bar
@@ -1424,12 +1358,6 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       if bars[i][j] then
         bars[i][j]:Hide()
       end
-    end
-
-    -- add up to 0-11 button parent states to each bar
-    if i <= 10 and pfUI.client > 11200 then
-      bars[i]:SetAttribute("statebutton", "0:S0;1:S1;2:S2;3:S3;4:S4;5:S5;6:S6;7:S7;8:S8;9:S9;10:S10;11:S11;")
-      bars[i]:SetAttribute("statebutton2", "0:S0Right;1:S1Right;2:S2Right;3:S3Right;4:S4Right;5:S5Right;6:S6Right;7:S7Right;8:S8Right;9:S9Right;10:S10Right;11:S11Right;")
     end
 
     -- enable paging for the first actionbar
@@ -1601,48 +1529,16 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
   end
 
   -- Set keybinds to all actionbuttons
-  if pfUI.client <= 11200 then
-    -- In order to be able to reuse already defined keybinds, we need to remap
-    -- existing button functions to pfUI. We need to get rid of the blizzard calls
-    -- to avoid having them call texture changes and errors due to missing buttons
-    _G.ActionButtonDown = pfActionButton
-    _G.ActionButtonUp = pfActionButton
-    _G.BonusActionButtonDown = function(slot) pfActionButton(slot, nil, "BonusActionBar") end
-    _G.BonusActionButtonUp = function(slot) pfActionButton(slot, nil, "BonusActionBar") end
-    _G.MultiActionButtonDown = function(bar, slot, slf) pfActionButton(slot, slf, bar) end
-    _G.MultiActionButtonUp = function(bar, slot, slf) pfActionButton(slot, slf, bar) end
-    _G.ShapeshiftBar_ChangeForm = function(slot) pfActionButton(slot, nil, "ShapeShiftBar") end
-  else
-    local bindwraps = {
-      ["ACTIONBUTTON%d"] = 1,
-      ["SHAPESHIFTBUTTON%d"] = 11, -- ShapeShiftBar
-      ["BONUSACTIONBUTTON%d"] = 12, -- BonusActionBar
-      ["MULTIACTIONBAR1BUTTON%d"] = 6, -- MultiBarBottomLeft
-      ["MULTIACTIONBAR2BUTTON%d"] = 5, -- MultiBarBottomRight
-      ["MULTIACTIONBAR3BUTTON%d"] = 3, -- MultiBarRight
-      ["MULTIACTIONBAR4BUTTON%d"] = 4, -- MultiBarLeft
-      ["PFPAGING%d"] = 2,
-      ["PFSTANCEONE%d"] = 7,
-      ["PFSTANCETWO%d"] = 8,
-      ["PFSTANCETHREE%d"] = 9,
-      ["PFSTANCEFOUR%d"] = 10,
-    }
-
-    -- rebind all existing bindings to our own buttons
-    local keybinder = CreateFrame("Frame")
-    keybinder:RegisterEvent("UPDATE_BINDINGS")
-    keybinder:SetScript("OnEvent", function()
-      for name, bar in pairs(bindwraps) do
-        for i=1,12 do
-          local key = GetBindingKey(format(name, i))
-          local button = bars[bar][i]
-          if key and button then
-            SetOverrideBindingClick(button, false, key, button:GetName(), 'LeftButton')
-          end
-        end
-      end
-    end)
-  end
+  -- In order to be able to reuse already defined keybinds, we need to remap
+  -- existing button functions to pfUI. We need to get rid of the blizzard calls
+  -- to avoid having them call texture changes and errors due to missing buttons
+  _G.ActionButtonDown = pfActionButton
+  _G.ActionButtonUp = pfActionButton
+  _G.BonusActionButtonDown = function(slot) pfActionButton(slot, nil, "BonusActionBar") end
+  _G.BonusActionButtonUp = function(slot) pfActionButton(slot, nil, "BonusActionBar") end
+  _G.MultiActionButtonDown = function(bar, slot, slf) pfActionButton(slot, slf, bar) end
+  _G.MultiActionButtonUp = function(bar, slot, slf) pfActionButton(slot, slf, bar) end
+  _G.ShapeshiftBar_ChangeForm = function(slot) pfActionButton(slot, nil, "ShapeShiftBar") end
 
   -- handle drag-drop grid
   local grid = CreateFrame("Frame")

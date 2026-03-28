@@ -96,11 +96,7 @@ pfUI:RegisterModule("questitem", function ()
       SelectQuestLogEntry(quest)
 
       -- detect and ignore quest headers
-      if pfUI.client <= 11200 then -- vanilla
-        _, _, _, header = GetQuestLogTitle(quest)
-      elseif pfUI.client > 11200 then -- tbc
-        _, _, _, _, header = GetQuestLogTitle(quest)
-      end
+      _, _, _, header = GetQuestLogTitle(quest)
 
       if not header then
         text, objective = GetQuestLogQuestText()

@@ -714,14 +714,10 @@ pfUI:RegisterModule("loot", "vanilla", function ()
       if event == "LOOT_BIND_CONFIRM" then
         local slot = arg1
         QueueFunction(function()
-          if pfUI.client <= 12000 then
-            LootSlot(slot)
-          elseif pfUI.client <= 20400 then
-            ConfirmLootSlot(slot)
-          end
+          LootSlot(slot)
           StaticPopup_Hide("LOOT_BIND")
         end)
-      elseif event == "LOOT_OPENED" and pfUI.client <= 11200 then
+      elseif event == "LOOT_OPENED" then
         for i=1,GetNumLootItems() do
           LootSlot(i)
         end

@@ -1,7 +1,7 @@
 pfUI:RegisterSkin("Friends", "vanilla", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
-  local maxtab = pfUI.expansion == "vanilla" and 4 or 5
+  local maxtab = 4
 
   StripTextures(FriendsFrame, true)
   CreateBackdrop(FriendsFrame, nil, nil, .75)

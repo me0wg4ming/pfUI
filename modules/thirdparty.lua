@@ -4,7 +4,7 @@ pfUI:RegisterModule("thirdparty", "vanilla", function()
   -- dockframe of the chat panel aswell as the thirdparty root-table.
   -- This module is supposed to be loaded on all expansions, so only
   -- addons that can share the same glue code across expansions will go here.
-  -- For expansion related code, see: thirdparty-vanilla and thirdparty-tbc.
+  -- For expansion related code, see: thirdparty-vanilla.
 
   pfUI.thirdparty = {}
 
