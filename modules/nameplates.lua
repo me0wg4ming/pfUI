@@ -395,7 +395,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       plate.debuffs[index].cd.SetSequence = DoNothing
       plate.debuffs[index].cd.SetSequenceTime = DoNothing
     else
-      -- Use CooldownFrameTemplate for animation or TBC+
+      -- Use CooldownFrameTemplate for animation
       plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
       plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
     end
@@ -444,7 +444,6 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       local cooldown_anim = tonumber(C.nameplates.debuffanim) or 0
       nameplate.debuffs[i].cd.pfCooldownStyleText = cooldown_text
       nameplate.debuffs[i].cd.pfCooldownStyleAnimation = cooldown_anim
-      
     end
   end
 
