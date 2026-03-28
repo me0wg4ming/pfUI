@@ -1201,8 +1201,16 @@ if hasNampower then
       local spellId = arg2
       local casterGuid = arg3
       local spellType = arg8 or 0  -- 0=Normal, 1=Channel, 2=Autorepeating
-      local isChannel = spellType == 1
-      local castTime = isChannel and arg7 or arg6  -- arg6=castTime (normal), arg7=duration (channel)
+      -- arg6=castTime, arg7=channel duration
+      -- prefer arg6 if present — some spells (e.g. Volley post-rework) still send
+      -- arg8=1 but now have a real cast time in arg6, so we only fall back to arg7
+      -- when arg6 is nil (true channels like Blizzard)
+      -- arg6=castTime (ms), arg7=channel duration (ms), arg8=spellType
+      -- For channels: arg6=0 (no cast time), arg7=duration, spellType=1
+      -- For normal casts: arg6=castTime, arg7=0, spellType=0
+      -- Note: "not arg6" is wrong in Lua since 0 is truthy - use arg6 == 0 or nil
+      local castTime = (arg6 and arg6 > 0) and arg6 or arg7
+      local isChannel = spellType == 1 and (not arg6 or arg6 == 0)
       
       if not casterGuid or not spellId then return end
       

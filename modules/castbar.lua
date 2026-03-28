@@ -127,7 +127,12 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
           texture = castData.icon
           startTime = castData.startTime * 1000
           endTime = castData.endTime * 1000
-          nameSubtext = ""
+          -- Try to get rank from spell DB via spellID (nameSubtext is not stored in libdebuff_casts)
+          if castData.spellID and GetSpellRecField then
+            nameSubtext = GetSpellRecField(castData.spellID, "rank") or ""
+          else
+            nameSubtext = ""
+          end
           if castData.event == "CHANNEL" then
             channel = cast
           end
@@ -141,12 +146,14 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         query = UnitName("player")
       end
 
-      -- Fallback: pfGetCastInfo only when no focusGuid or no cast found via libdebuff
-      if not cast and not castBlocked and pfGetCastInfo then
+      -- Fallback: pfGetCastInfo only when no focusGuid (Nampower not available for this unit).
+      -- If we have a focusGuid, libdebuff is authoritative - don't fall back to libcast
+      -- even if no cast is active (prevents false positives e.g. spellbook clicks on CD spells).
+      if not cast and not castBlocked and not focusGuid and pfGetCastInfo then
         cast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetCastInfo(query)
       end
 
-      if not cast and not castBlocked and pfGetChannelInfo then
+      if not cast and not castBlocked and not focusGuid and pfGetChannelInfo then
         channel, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetChannelInfo(this.unitstr or this.unitname)
         cast = channel
       end
