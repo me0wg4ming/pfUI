@@ -127,7 +127,12 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
           texture = castData.icon
           startTime = castData.startTime * 1000
           endTime = castData.endTime * 1000
-          nameSubtext = ""
+          -- Try to get rank from spell DB via spellID (nameSubtext is not stored in libdebuff_casts)
+          if castData.spellID and GetSpellRecField then
+            nameSubtext = GetSpellRecField(castData.spellID, "rank") or ""
+          else
+            nameSubtext = ""
+          end
           if castData.event == "CHANNEL" then
             channel = cast
           end
