@@ -1,4 +1,4 @@
-pfUI:RegisterModule("roll", "vanilla:tbc", function ()
+pfUI:RegisterModule("roll", function ()
   pfUI.roll = CreateFrame("Frame", "pfLootRoll", UIParent)
   pfUI.roll.frames = {}
 

@@ -1,4 +1,4 @@
-pfUI:RegisterModule("combopoints", "vanilla:tbc", function ()
+pfUI:RegisterModule("combopoints", function ()
   local rawborder, border = GetBorderSize()
 
   -- Hide Blizzard combo point frame and unregister all events to prevent it from popping up again

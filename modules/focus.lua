@@ -1,4 +1,4 @@
-pfUI:RegisterModule("focus", "vanilla:tbc", function ()
+pfUI:RegisterModule("focus", function ()
   -- do not go further on disabled UFs
   if C.unitframes.disable == "1" then return end
 
@@ -15,8 +15,7 @@ pfUI:RegisterModule("focus", "vanilla:tbc", function ()
   pfUI.uf.focustarget:Hide()
 end)
 
--- register focus emulation commands for vanilla
-if pfUI.client > 11200 then return end
+-- register focus emulation commands
 
 -- Helper: set focus frame to a GUID
 local function SetFocusByGUID(guid)

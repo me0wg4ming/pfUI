@@ -1,4 +1,4 @@
-pfUI:RegisterModule("whisperproxy", "vanilla", function ()
+pfUI:RegisterModule("whisperproxy", function ()
   if not pfUI.chat then return end
 
   local proxy = CreateFrame("Button", "pfWhisperProxy", pfUI.chat.left.panelTop)

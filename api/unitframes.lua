@@ -573,21 +573,7 @@ function pfUI.uf:UpdateVisibility()
      self.visible = nil
   end
 
-  -- tbc visibility
-  if pfUI.client > 11200 then
-    self:SetAttribute("unit", unitstr)
-
-    -- update visibility condition on change
-    if self.visibilitycondition ~= visibility then
-      RegisterStateDriver(self, 'visibility', visibility)
-      self.visibilitycondition = visibility
-      self.visible = true
-    end
-
-    return
-  end
-
-  -- vanilla visibility
+  -- visibility
   if self.unitname and self.unitname ~= "focus" and self.unitname ~= "focustarget" then
     self:Show()
   elseif visibility == "hide" then
@@ -1049,8 +1035,6 @@ function pfUI.uf:UpdateConfig()
 
       if f:GetName() == "pfPlayer" then
         f.buffs[i]:SetScript("OnUpdate", BuffOnUpdate)
-      elseif f:GetName() == "pfTarget" and pfUI.expansion == "tbc" then
-        f.buffs[i]:SetScript("OnUpdate", TargetBuffOnUpdate)
       end
 
       f.buffs[i]:SetScript("OnEnter", BuffOnEnter)
@@ -1816,14 +1800,7 @@ end
 function pfUI.uf:EnableScripts()
   local f = self
 
-  -- handle secure unit button templates (> vanilla)
-  if pfUI.client > 11200 then
-    f.showmenu = pfUI.uf.RightClickAction
-    f:SetAttribute("*type1", "target")
-    f:SetAttribute("*type2", "showmenu")
-  else
-    f:SetScript("OnClick", pfUI.uf.OnClick)
-  end
+  f:SetScript("OnClick", pfUI.uf.OnClick)
 
   f:SetScript("OnShow", pfUI.uf.OnShow)
   f:SetScript("OnEvent", pfUI.uf.OnEvent)
@@ -2402,9 +2379,6 @@ function pfUI.uf:RefreshUnit(unit, component)
       for i=1,32 do
         local texture, count = UnitBuff(unitstr, i)
         local timeleft, buffName, _
-        if pfUI.client > 11200 then
-          buffName, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
-        end
 
         if texture then
           -- match filter
@@ -2457,12 +2431,8 @@ function pfUI.uf:RefreshUnit(unit, component)
         local texture, count = UnitBuff(unitstr, i)
         if texture then
           local timeleft, name, _
-          if pfUI.client > 11200 then
-            name, _, texture, _, _, timeleft = _G.UnitBuff(unitstr, i)
-          else
-            scanner:SetUnitBuff(unitstr, i)
-            name = scanner:Line(1) or ""
-          end
+          scanner:SetUnitBuff(unitstr, i)
+          name = scanner:Line(1) or ""
 
           -- match filter
           for _, filter in pairs(unit.indicator_custom) do
@@ -2710,34 +2680,9 @@ function pfUI.uf:EnableClickCast()
     for modifier, mconf in pairs(modifiers) do
       local bconf = bid == 1 and "" or bid
       if pfUI_config.unitframes["clickcast"..bconf..mconf] ~= "" then
-        -- prepare click casting
-        if pfUI.client > 11200 then
-          -- set attributes for tbc+
-          local prefix = modifier == "" and "" or modifier .. "-"
-
-          -- check for "/" in the beginning of the string, to detect macros
-          if string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^%/(.+)") then
-            self:SetAttribute(prefix.."type"..bid, "macro")
-            self:SetAttribute(prefix.."macrotext"..bid, pfUI_config.unitframes["clickcast"..bconf..mconf])
-            self:SetAttribute(prefix.."spell"..bid, nil)
-          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^target") then
-            self:SetAttribute(prefix.."type"..bid, "target")
-            self:SetAttribute(prefix.."macrotext"..bid, nil)
-            self:SetAttribute(prefix.."spell"..bid, nil)
-          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^menu") then
-            self:SetAttribute(prefix.."type"..bid, "showmenu")
-            self:SetAttribute(prefix.."macrotext"..bid, nil)
-            self:SetAttribute(prefix.."spell"..bid, nil)
-          else
-            self:SetAttribute(prefix.."type"..bid, "spell")
-            self:SetAttribute(prefix.."spell"..bid, pfUI_config.unitframes["clickcast"..bconf..mconf])
-            self:SetAttribute(prefix.."macro"..bid, nil)
-          end
-        else
-          -- fill clickaction table for vanillla
-          self.clickactions = self.clickactions or {}
-          self.clickactions[modifier..button] = pfUI_config.unitframes["clickcast"..bconf..mconf]
-        end
+        -- fill clickaction table for vanilla
+        self.clickactions = self.clickactions or {}
+        self.clickactions[modifier..button] = pfUI_config.unitframes["clickcast"..bconf..mconf]
       end
     end
   end

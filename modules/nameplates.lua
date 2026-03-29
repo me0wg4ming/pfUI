@@ -1,4 +1,4 @@
-pfUI:RegisterModule("nameplates", "vanilla", function ()
+pfUI:RegisterModule("nameplates", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
@@ -387,7 +387,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
     -- PERF: Use lightweight fake cooldown frame when animation disabled
     -- The Model-based CooldownFrameTemplate causes major lag with many nameplates
-    if pfUI.client <= 11200 and cfg.debuffanim ~= 1 then
+    if cfg.debuffanim ~= 1 then
       plate.debuffs[index].cd = CreateFrame("Frame", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index])
       plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
       plate.debuffs[index].cd:SetScript("OnUpdate", CooldownFrame_OnUpdateModel)
@@ -395,7 +395,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       plate.debuffs[index].cd.SetSequence = DoNothing
       plate.debuffs[index].cd.SetSequenceTime = DoNothing
     else
-      -- Use CooldownFrameTemplate for animation or TBC+
+      -- Use CooldownFrameTemplate for animation
       plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
       plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
     end
@@ -444,13 +444,6 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       local cooldown_anim = tonumber(C.nameplates.debuffanim) or 0
       nameplate.debuffs[i].cd.pfCooldownStyleText = cooldown_text
       nameplate.debuffs[i].cd.pfCooldownStyleAnimation = cooldown_anim
-      
-      -- Update scale for TBC+
-      if pfUI.client > 11200 then
-        local debuffsize = tonumber(C.nameplates.debuffsize)
-        local cdScale = debuffsize / 32
-        nameplate.debuffs[i].cd:SetScale(cdScale)
-      end
     end
   end
 
@@ -1344,9 +1337,9 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     end
 
     -- =========================================================================
-    -- VANILLA OVERLAP/CLICKTHROUGH HANDLING
+    -- OVERLAP/CLICKTHROUGH HANDLING
     -- =========================================================================
-    if pfUI.client <= 11200 then
+    do
       local useOverlap = C.nameplates["overlap"] == "1" or C.nameplates["vertical_offset"] ~= "0"
       local clickable = C.nameplates["clickthrough"] ~= "1"
 
@@ -1778,8 +1771,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     end
   end
 
-  if pfUI.client <= 11200 then
-    -- handle vanilla only settings
+  do
     local hookOnConfigChange = nameplates.OnConfigChange
     nameplates.OnConfigChange = function(self)
       hookOnConfigChange(self)

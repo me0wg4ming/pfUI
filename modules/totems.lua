@@ -1,4 +1,4 @@
-pfUI:RegisterModule("totems", "vanilla:tbc", function ()
+pfUI:RegisterModule("totems", function ()
   local _, class = UnitClass("player")
 
   local slots = {
@@ -15,7 +15,7 @@ pfUI:RegisterModule("totems", "vanilla:tbc", function ()
     totems:RefreshList()
   end)
 
-  if pfUI.client <= 11200 and class == "SHAMAN" then
+  if class == "SHAMAN" then
     -- there's no totem event in vanilla using ticks instead
     local eventemu = CreateFrame("Frame")
     eventemu:SetScript("OnUpdate", function()
@@ -39,13 +39,10 @@ end
   end
 
   totems.OnClick = function(self)
-    if pfUI.client <= 11200 and this.id and arg1 and arg1 == "LeftButton" then
-      -- Try to recast totem on left click in vanilla
+    if this.id and arg1 and arg1 == "LeftButton" then
+      -- Try to recast totem on left click
       local active, name, start, duration, icon = GetTotemInfo(this.id)
       if name then CastSpellByName(name) end
-    elseif pfUI.client > 11200 and this.id and arg1 and arg1 == "RightButton" then
-      -- Try to cancel totem on right click in tbc+
-      DestroyTotem(this.id)
     end
   end
 

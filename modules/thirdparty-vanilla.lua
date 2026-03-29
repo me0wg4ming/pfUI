@@ -1,4 +1,4 @@
-pfUI:RegisterModule("thirdparty-vanilla", "vanilla", function()
+pfUI:RegisterModule("thirdparty-vanilla", function()
   -- abort when thirdparty core module is not loaded
   if not pfUI.thirdparty then return end
   local rawborder, default_border = GetBorderSize()

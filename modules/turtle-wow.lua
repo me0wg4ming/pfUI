@@ -1,7 +1,7 @@
 -- skip module initialization on every other client than turtle-wow
 if not TargetHPText or not TargetHPPercText then return end
 
-pfUI:RegisterModule("turtle-wow", "vanilla", function ()
+pfUI:RegisterModule("turtle-wow", function ()
   -- Manage Turtle WoW's GroupUI (Turtle_GroupUI addon) vs pfUI frames.
   --
   -- Turtle uses GroupClusterFrame1-8 for BOTH party AND raid display,

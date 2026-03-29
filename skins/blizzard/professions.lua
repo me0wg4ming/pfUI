@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Profession", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
@@ -222,7 +222,7 @@ pfUI:RegisterSkin("Profession", "vanilla:tbc", function ()
       end
 
       -- Compatibility
-      if search then -- tbc / turtle wow
+      if search then -- turtle wow
         _G[displayed] = 21
         scrollframe:SetHeight(338)
 

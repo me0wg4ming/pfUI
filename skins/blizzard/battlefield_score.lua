@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Battlefield Score", "vanilla", function ()
+pfUI:RegisterSkin("Battlefield Score", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 

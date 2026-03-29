@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Everlook Broadcasting", "vanilla", function ()
+pfUI:RegisterSkin("Everlook Broadcasting", function ()
   if not EBC_Minimap then return end
 
   -- Minimap button border

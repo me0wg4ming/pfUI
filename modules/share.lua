@@ -1,4 +1,4 @@
-pfUI:RegisterModule("share", "vanilla:tbc", function ()
+pfUI:RegisterModule("share", function ()
   local function serialize(tbl, comp, name, ignored, spacing)
     local spacing = spacing or ""
     local match = nil

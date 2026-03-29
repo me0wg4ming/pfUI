@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("RaidUI", "vanilla", function ()
+pfUI:RegisterSkin("RaidUI", function ()
   HookAddonOrVariable("Blizzard_RaidUI", function()
 
     for i = 1, (NUM_RAID_GROUPS or 8) do

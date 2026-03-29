@@ -2,7 +2,7 @@
 -- Provides Line of Sight indicator, OS notifications, and enhanced targeting
 -- Requires UnitXP_SP3 DLL: https://github.com/allfoxwy/UnitXP_SP3
 
-pfUI:RegisterModule("unitxp", "vanilla", function ()
+pfUI:RegisterModule("unitxp", function ()
   -- Check if UnitXP is available
   local hasUnitXP = pcall(UnitXP, "nop", "nop")
   if not hasUnitXP then return end

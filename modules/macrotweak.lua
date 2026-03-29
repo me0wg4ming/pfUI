@@ -1,4 +1,4 @@
-pfUI:RegisterModule("macrotweak", "vanilla", function ()
+pfUI:RegisterModule("macrotweak", function ()
   local conflictAddons = { "Supermacro", "SuperCleveRoidMacros", "UltimaMacros" }
   local disabled = false
 

@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Barbershop", "vanilla", function ()
+pfUI:RegisterSkin("Barbershop", function ()
   if not BarbershopFrame then return end
 
   local rawborder, border = GetBorderSize()

@@ -11,9 +11,6 @@ setfenv(1, pfUI:GetEnvironment())
 --    Returns totem informations on the givent totem slot
 --    active, name, start, duration, icon
 
--- return instantly if we're not on a vanilla client
-if pfUI.client > 11200 then return end
-
 -- return instantly when another libtotem is already active
 if pfUI.api.libtotem then return end
 

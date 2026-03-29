@@ -1,4 +1,4 @@
-pfUI:RegisterModule("buff", "vanilla:tbc", function ()
+pfUI:RegisterModule("buff", function ()
   -- Hide Blizz
   BuffFrame:Hide()
   BuffFrame:UnregisterAllEvents()

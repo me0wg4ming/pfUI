@@ -1,4 +1,4 @@
-pfUI:RegisterModule("hdgraphic", "vanilla", function ()
+pfUI:RegisterModule("hdgraphic", function ()
   -- inject video settings to provide advanced slider values (deferred until frame is shown)
   local origOptionsFrame_OnShow = OptionsFrame_OnShow
   function OptionsFrame_OnShow()

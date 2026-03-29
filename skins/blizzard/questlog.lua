@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Quest Log", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Quest Log", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 
@@ -180,11 +180,7 @@ pfUI:RegisterSkin("Quest Log", "vanilla:tbc", function ()
         if C.questlog.showQuestLevels == "1" then
           questIndex = i + FauxScrollFrame_GetOffset(QuestLogListScrollFrame)
           if questIndex <= numEntries then
-            if pfUI.expansion == 'vanilla' then
-              text, level, questTag, isHeader = GetQuestLogTitle(questIndex)
-            else
-              text, level, questTag, _, isHeader = GetQuestLogTitle(questIndex)
-            end
+            text, level, questTag, isHeader = GetQuestLogTitle(questIndex)
             if not isHeader then
               _G["QuestLogTitle"..i]:SetText(" ".."["..(questTag and level.."+" or level).."] "..text)
             end

@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Guild Registrar", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Guild Registrar", function ()
   StripTextures(GuildRegistrarFrame)
   StripTextures(GuildRegistrarGreetingFrame)
   CreateBackdrop(GuildRegistrarFrame, nil, nil, .75)

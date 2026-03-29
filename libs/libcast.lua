@@ -41,9 +41,6 @@ setfenv(1, pfUI:GetEnvironment())
 --     spell can be set to "INTERRUPT" to force remove an action.
 --
 
--- return instantly if we're not on a vanilla client
-if pfUI.client > 11200 then return end
-
 -- return instantly when another libcast is already active
 if pfUI.api.libcast then return end
 

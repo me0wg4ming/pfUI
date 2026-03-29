@@ -33,8 +33,7 @@ do -- statusbars
       self.val_ = val
 
       if self.mode == "vertical" then
-        height = self:GetHeight()
-        if pfUI.expansion == "vanilla" then height = height / self:GetEffectiveScale() end
+        height = self:GetHeight() / self:GetEffectiveScale()
         point = height / (self.max - self.min) * (val - self.min)
 
         -- keep values in limits
@@ -52,8 +51,7 @@ do -- statusbars
         self.bg:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0)
         self.bg:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, point)
       else
-        width = self:GetWidth()
-        if pfUI.expansion == "vanilla" then width = width / self:GetEffectiveScale() end
+        width = self:GetWidth() / self:GetEffectiveScale()
         point = width / (self.max - self.min) * (val - self.min)
 
         -- keep values in limits

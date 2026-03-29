@@ -1,4 +1,4 @@
-pfUI:RegisterModule("bubbles", "vanilla:tbc", function ()
+pfUI:RegisterModule("bubbles", function ()
 
   local alpha = tonumber(C.chat.bubbles.alpha)
 

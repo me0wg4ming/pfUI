@@ -15,9 +15,6 @@ setfenv(1, pfUI:GetEnvironment())
 --    Returns debuff informations on the given effect of the specified unit.
 --    name, rank, texture, stacks, dtype, duration, timeleft, caster
 
--- return instantly if we're not on a vanilla client
-if pfUI.client > 11200 then return end
-
 -- return instantly when another libdebuff is already active
 if pfUI.api.libdebuff then return end
 

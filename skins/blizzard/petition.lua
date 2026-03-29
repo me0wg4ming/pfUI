@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Petition", "vanilla", function ()
+pfUI:RegisterSkin("Petition", function ()
   local rawborder, border = GetBorderSize()
   local bpad = rawborder > 1 and border - GetPerfectPixel() or GetPerfectPixel()
 

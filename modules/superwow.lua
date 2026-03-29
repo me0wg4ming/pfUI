@@ -38,7 +38,7 @@ SlashCmdList["PFDLLSTATUS"] = function()
   end
 end
 
-pfUI:RegisterModule("superwow", "vanilla", function ()
+pfUI:RegisterModule("superwow", function ()
   if SetAutoloot and SpellInfo and not SUPERWOW_VERSION then
     -- Turn every enchanting link that we create in the enchanting frame,
     -- from "spell:" back into "enchant:". The enchant-version is what is

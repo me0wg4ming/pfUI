@@ -1,10 +1,8 @@
-pfUI:RegisterModule("thirdparty", "vanilla:tbc", function()
+pfUI:RegisterModule("thirdparty", function()
   -- This module includes the core logic of thirdparty modules.
   -- Right now, in particular the functions to register addons to the
   -- dockframe of the chat panel aswell as the thirdparty root-table.
-  -- This module is supposed to be loaded on all expansions, so only
-  -- addons that can share the same glue code across expansions will go here.
-  -- For expansion related code, see: thirdparty-vanilla and thirdparty-tbc.
+  -- For additional integration code, see: thirdparty-vanilla.
 
   pfUI.thirdparty = {}
 

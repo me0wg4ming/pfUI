@@ -1,4 +1,4 @@
-pfUI:RegisterModule("mapreveal", "vanilla:tbc", function ()
+pfUI:RegisterModule("mapreveal", function ()
   if Cartographer then return end
   if METAMAP_TITLE then return end
 

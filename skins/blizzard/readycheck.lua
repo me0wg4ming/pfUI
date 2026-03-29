@@ -1,4 +1,4 @@
-pfUI:RegisterSkin("Readycheck", "vanilla:tbc", function ()
+pfUI:RegisterSkin("Readycheck", function ()
   HookAddonOrVariable("Blizzard_RaidUI", function()
     -- Compatibility
     local update_func

@@ -1,4 +1,4 @@
-pfUI:RegisterModule("eqcompare", "vanilla", function ()
+pfUI:RegisterModule("eqcompare", function ()
   local sides = { "Left", "Right" }
   local loc = pfUI.cache["locale"]
   for key, value in pairs(L["itemtypes"]) do setglobal(key, value) end

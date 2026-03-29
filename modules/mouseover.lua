@@ -1,4 +1,4 @@
-pfUI:RegisterModule("mouseover", "vanilla", function ()
+pfUI:RegisterModule("mouseover", function ()
   pfUI.uf.mouseover = CreateFrame("Frame", "pfMouseOver", UIParent)
 
   -- Prepare a list of units that can be used via SpellTargetUnit

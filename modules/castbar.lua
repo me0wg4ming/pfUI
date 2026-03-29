@@ -1,4 +1,4 @@
-pfUI:RegisterModule("castbar", "vanilla", function ()
+pfUI:RegisterModule("castbar", function ()
 
   local font = C.castbar.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
   local font_size = C.castbar.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
@@ -260,7 +260,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
     cb:RegisterEvent(CASTBAR_EVENT_CHANNEL_START)
     cb:SetScript("OnEvent", function()
       if this.unitstr and not UnitIsUnit(this.unitstr, "player") then return end
-      playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
+      playerarg = true
 
       if event == CASTBAR_EVENT_CAST_DELAY and playerarg then
         local isCast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetCastInfo(this.unitstr or this.unitname)
@@ -355,10 +355,8 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
     pfUI.castbar.focus.showrank = C.castbar.focus.showrank == "1" and true or nil
     pfUI.castbar.focus.spacing = default_border * 2 + tonumber(C.unitframes.focus.pspace) * GetPerfectPixel()
 
-    -- reset unitstr for vanilla focus frame emulation
-    if pfUI.client <= 11200 then
-      pfUI.castbar.focus.unitstr = nil
-    end
+    -- reset unitstr for focus frame emulation
+    pfUI.castbar.focus.unitstr = nil
 
     local anchor = pfUI.uf.focus.portrait:GetHeight() > pfUI.uf.focus:GetHeight() and pfUI.uf.focus.power or pfUI.uf.focus
     local width = C.castbar.focus.width ~= "-1" and C.castbar.focus.width or anchor:GetWidth()
