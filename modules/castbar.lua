@@ -78,11 +78,9 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
     -- OnUpdate script with throttle for performance optimization
     cb:SetScript("OnUpdate", function()
-      -- Cache GetTime() once per tick to avoid drift from multiple calls
-      local now = GetTime()
       -- Throttle for performance
-      if (this.tick or 0) > now then return end
-      this.tick = now + 0.020 -- ~50 FPS for smooth castbar
+      if (this.tick or 0) > GetTime() then return end
+      this.tick = GetTime() + 0.020 -- ~50 FPS for smooth castbar
 
       if this.drag and this.drag:IsShown() then
         this:SetAlpha(1)
@@ -115,6 +113,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         local guid = GetUnitGUID(this.unitstr)
         if guid then focusGuid = guid end
       end
+      this.focusGuid = focusGuid
 
       -- Try libdebuff_casts first for GUID-based units (works with Turtle GUID + Nampower events)
       local cast, nameSubtext, text, texture, startTime, endTime
@@ -124,7 +123,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         if castData.event == "CAST" or castData.event == "FAIL" then
           castBlocked = true
           pfUI.libdebuff_casts[focusGuid] = nil
-        elseif (castData.event == "START" or castData.event == "CHANNEL") and castData.endTime and castData.endTime > now then
+        elseif (castData.event == "START" or castData.event == "CHANNEL") and castData.endTime and castData.endTime > GetTime() then
           cast = castData.spellName
           texture = castData.icon
           startTime = castData.startTime * 1000
@@ -163,7 +162,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       if cast then
         local duration = endTime - startTime
         local max = duration / 1000
-        local cur = now - startTime / 1000
+        local cur = GetTime() - startTime / 1000
 
         this:SetAlpha(1)
 
@@ -172,7 +171,6 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
         if this.endTime ~= endTime then
           this.bar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(channel and "channelcolor" or "castbarcolor")]))
-          this.bar:SetMinMaxValues(0, duration / 1000)
           this.bar.left:SetText(spellname .. rank)
           this.fadeout = nil
           this.endTime = endTime
@@ -226,8 +224,14 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
           end
         end
 
+        local newMax = duration / 1000
+        if this.lastMax ~= newMax then
+          this.bar:SetMinMaxValues(0, newMax)
+          this.lastMax = newMax
+        end
+
         if channel then
-          cur = max + startTime/1000 - now
+          cur = max + startTime/1000 - GetTime()
         end
 
         cur = cur > max and max or cur
@@ -255,26 +259,55 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
     end)
 
     -- register for spell delay
+    -- Prefer Nampower's SPELL_DELAYED_SELF (gives casterGuid + delayMs directly).
+    -- Fall back to vanilla SPELLCAST_DELAYED if Nampower is not available.
     local playerarg = nil
+    local function ApplyPushback(delayMs)
+      if not delayMs or delayMs <= 0 or not this.endTime then return end
+      this.delay = (this.delay or 0) + delayMs / 1000
+      this.endTime = this.endTime + delayMs
+      local focusGuid = this.focusGuid
+      if focusGuid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[focusGuid] then
+        pfUI.libdebuff_casts[focusGuid].endTime = this.endTime / 1000
+      end
+    end
+
+    cb:RegisterEvent("SPELL_DELAYED_SELF")
     cb:RegisterEvent(CASTBAR_EVENT_CAST_DELAY)
     cb:RegisterEvent(CASTBAR_EVENT_CHANNEL_DELAY)
     cb:RegisterEvent(CASTBAR_EVENT_CAST_START)
     cb:RegisterEvent(CASTBAR_EVENT_CHANNEL_START)
     cb:SetScript("OnEvent", function()
       if this.unitstr and not UnitIsUnit(this.unitstr, "player") then return end
-      playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
 
-      if event == CASTBAR_EVENT_CAST_DELAY and playerarg then
-        local isCast, nameSubtext, text, texture, startTime, endTime, isTradeSkill = pfGetCastInfo(this.unitstr or this.unitname)
-        if not isCast then return end
-        if not this.endTime then return end
-        this.delay = this.delay + (endTime - this.endTime) / 1000
-      elseif event == CASTBAR_EVENT_CHANNEL_DELAY and playerarg then
-        local isChannel, _, _, _, startTime, endTime = pfGetChannelInfo(this.unitstr or this.unitname)
-        if not isChannel then return end
-        this.delay = ( this.delay or 0 ) + this.bar:GetValue() - (endTime/1000 - GetTime())
-      elseif playerarg then
-        this.delay = 0
+      if event == "SPELL_DELAYED_SELF" then
+        -- arg1=casterGuid, arg2=delayMs (Nampower, most accurate)
+        ApplyPushback(arg2)
+
+      elseif event == CASTBAR_EVENT_CAST_DELAY then
+        playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
+        if not playerarg then return end
+        -- Skip if Nampower active (SPELL_DELAYED_SELF already handled it)
+        if this.focusGuid and pfUI.libdebuff_casts then return end
+        if pfGetCastInfo then
+          local isCast, _, _, _, _, endTime = pfGetCastInfo(this.unitstr or this.unitname)
+          if not isCast or not this.endTime then return end
+          this.delay = (this.delay or 0) + (endTime - this.endTime) / 1000
+        end
+
+      elseif event == CASTBAR_EVENT_CHANNEL_DELAY then
+        playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
+        if not playerarg then return end
+        if this.focusGuid and pfUI.libdebuff_casts then return end
+        if pfGetChannelInfo then
+          local isChannel, _, _, _, _, endTime = pfGetChannelInfo(this.unitstr or this.unitname)
+          if not isChannel then return end
+          this.delay = (this.delay or 0) + this.bar:GetValue() - (endTime/1000 - GetTime())
+        end
+
+      elseif event == CASTBAR_EVENT_CAST_START or event == CASTBAR_EVENT_CHANNEL_START then
+        playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
+        if playerarg then this.delay = 0 end
       end
     end)
 
