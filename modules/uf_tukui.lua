@@ -42,18 +42,21 @@ pfUI:RegisterModule("uf_tukui", "vanilla:tbc", function ()
     pfUI.uf.player.hpRightText:ClearAllPoints()
     pfUI.uf.player.hpRightText:SetPoint("RIGHT",pfUI.uf.player.caption, "RIGHT", -default_border, 0)
 
-    pfUI.castbar.player:SetAllPoints(pfUI.uf.player.caption)
-    UpdateMovable(pfUI.castbar.player, true)
+    if pfUI.castbar and pfUI.castbar.player then
+      pfUI.castbar.player:SetAllPoints(pfUI.uf.player.caption)
+      UpdateMovable(pfUI.castbar.player, true)
 
-    local _, anchor = pfUI.castbar.player:GetPoint()
-    if anchor and anchor == pfUI.uf.player.caption then
-      pfUI.castbar.player:SetHeight(pfUI.uf.player.caption:GetHeight())
+      local _, anchor = pfUI.castbar.player:GetPoint()
+      if anchor and anchor == pfUI.uf.player.caption then
+        pfUI.castbar.player:SetHeight(pfUI.uf.player.caption:GetHeight())
+      end
+
+      if pfUI.castbar.player.bar.backdrop_shadow then
+        pfUI.castbar.player.bar.backdrop_shadow:Hide()
+      end
     end
 
     CreateBackdrop(pfUI.uf.player.caption, default_border)
-    if pfUI.castbar.player.bar.backdrop_shadow then
-      pfUI.castbar.player.bar.backdrop_shadow:Hide()
-    end
   end
 
   -- update target layout
@@ -97,18 +100,21 @@ pfUI:RegisterModule("uf_tukui", "vanilla:tbc", function ()
     pfUI.uf.target.hpRightText:ClearAllPoints()
     pfUI.uf.target.hpRightText:SetPoint("RIGHT",pfUI.uf.target.caption, "RIGHT", -default_border, 0)
 
-    pfUI.castbar.target:SetAllPoints(pfUI.uf.target.caption)
-    UpdateMovable(pfUI.castbar.target, true)
+    if pfUI.castbar and pfUI.castbar.target then
+      pfUI.castbar.target:SetAllPoints(pfUI.uf.target.caption)
+      UpdateMovable(pfUI.castbar.target, true)
 
-    local _, anchor = pfUI.castbar.target:GetPoint()
-    if anchor and anchor == pfUI.uf.target.caption then
-      pfUI.castbar.target:SetHeight(pfUI.uf.target.caption:GetHeight())
+      local _, anchor = pfUI.castbar.target:GetPoint()
+      if anchor and anchor == pfUI.uf.target.caption then
+        pfUI.castbar.target:SetHeight(pfUI.uf.target.caption:GetHeight())
+      end
+
+      if pfUI.castbar.target.bar.backdrop_shadow then
+        pfUI.castbar.target.bar.backdrop_shadow:Hide()
+      end
     end
 
     CreateBackdrop(pfUI.uf.target.caption, default_border)
-    if pfUI.castbar.target.bar.backdrop_shadow then
-      pfUI.castbar.target.bar.backdrop_shadow:Hide()
-    end
   end
 
   -- trigger updates
