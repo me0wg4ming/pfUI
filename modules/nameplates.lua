@@ -1572,11 +1572,14 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
       else
         -- Only update min/max, color and icon once per cast (when endTime changes)
         -- identical to the endTime cache pattern in castbar.lua
+        local isChannel = castInfo.event == "CHANNEL"
+        local duration = castInfo.endTime - castInfo.startTime
         if nameplate.castbar.lastEndTime ~= castInfo.endTime then
           nameplate.castbar.lastEndTime = castInfo.endTime
-          nameplate.castbar:SetMinMaxValues(castInfo.startTime, castInfo.endTime)
+          -- Use relative 0..duration range (same as castbar.lua) to avoid
+          -- floating-point precision loss with large absolute timestamps
+          nameplate.castbar:SetMinMaxValues(0, duration)
           -- match cast/channel color from appearance config, same as castbar.lua
-          local isChannel = castInfo.event == "CHANNEL"
           nameplate.castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(isChannel and "channelcolor" or "castbarcolor")]))
           if castInfo.icon then
             nameplate.castbar.icon.tex:SetTexture(castInfo.icon)
@@ -1588,12 +1591,15 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
             nameplate.castbar.spell:SetText("")
           end
         end
+        -- relative value: elapsed (cast) or remaining (channel) in seconds
         local barValue
-        if castInfo.event == "CHANNEL" then
-          barValue = castInfo.startTime + (castInfo.endTime - now)
+        if isChannel then
+          barValue = castInfo.endTime - now  -- countdown
         else
-          barValue = now
+          barValue = now - castInfo.startTime  -- elapsed
         end
+        barValue = barValue < 0 and 0 or barValue
+        barValue = barValue > duration and duration or barValue
         nameplate.castbar:SetValue(barValue)
         local remaining = castInfo.endTime - now
         if C.unitframes.castbardecimals == "1" then
