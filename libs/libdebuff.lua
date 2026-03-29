@@ -1207,10 +1207,38 @@ function libdebuff:IterDebuffs(unit, fn)
                   end
                 end
 
+                -- Determine isOurs: check slotOwnership first, then sharedOverwrite timers,
+                -- then ownDebuffs (debuff was in normal slot before)
                 local isOursSpillover = false
-                if ls and ls:IsSharedOverwrite(spellName) then
+                local ownership2 = slotOwnership[guid] and slotOwnership[guid][auraSlot]
+                if ownership2 then
+                  isOursSpillover = ownership2.isOurs or false
+                elseif ls and ls:IsSharedOverwrite(spellName) then
                   local sot = pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
                   isOursSpillover = sot and sot.isOurs or false
+                elseif ownDebuffs[guid] and ownDebuffs[guid][spellName] then
+                  isOursSpillover = true
+                end
+
+                -- Sync ownDebuffs for own spillover debuffs so UnitOwnDebuff finds them
+                if isOursSpillover then
+                  local ownEntry = ownDebuffs[guid] and ownDebuffs[guid][spellName]
+                  if not ownEntry then
+                    local st = slotTimers[guid] and slotTimers[guid][auraSlot]
+                    local sot = pfUI.libdebuff_sharedoverwrite_timers[guid] and pfUI.libdebuff_sharedoverwrite_timers[guid][spellName]
+                    local src = st or sot
+                    if src and src.duration and src.duration > 0 then
+                      ownDebuffs[guid] = ownDebuffs[guid] or {}
+                      ownDebuffs[guid][spellName] = {
+                        startTime = src.startTime,
+                        duration  = src.duration,
+                        texture   = texture,
+                        rank      = src.rank or 0,
+                        spellId   = spellId,
+                        stacks    = stacks or 1
+                      }
+                    end
+                  end
                 end
 
                 count = count + 1
@@ -1614,6 +1642,7 @@ end
     frame:RegisterEvent("AUTO_ATTACK_OTHER")
   end
   frame:RegisterEvent("SPELL_DAMAGE_EVENT_SELF")
+  frame:RegisterEvent("SPELLCAST_CHANNEL_STOP")
   frame:RegisterEvent("AURA_CAST_ON_SELF")
   frame:RegisterEvent("AURA_CAST_ON_OTHER")
   frame:RegisterEvent("DEBUFF_ADDED_OTHER")
@@ -1627,6 +1656,25 @@ end
       this:SetScript("OnEvent", nil)
       return
       
+    elseif event == "SPELLCAST_CHANNEL_STOP" then
+      -- Channel interrupted by player - clear ownDebuffs immediately without waiting
+      -- for DEBUFF_REMOVED (which has 0.5-1s server lag causing phantom debuff display)
+      local myGuid = GetPlayerGUID()
+      local castData = myGuid and pfUI.libdebuff_casts[myGuid]
+      if castData and castData.event == "CHANNEL" and castData.spellName then
+        local spellName = castData.spellName
+        local targetGuid = GetUnitGUID and GetUnitGUID("target")
+        if targetGuid and ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
+          local data = ownDebuffs[targetGuid][spellName]
+          local remaining = (data.startTime + data.duration) - GetTime()
+          if remaining > 0 then
+            ownDebuffs[targetGuid][spellName] = nil
+            pfUI.libdebuff_queue_update(targetGuid)
+          end
+        end
+        pfUI.libdebuff_casts[myGuid] = nil
+      end
+
     elseif event == "PLAYER_ENTERING_WORLD" then
       GetPlayerGUID()
       -- Clear overflow buffs (death, instance change, login)
@@ -2855,12 +2903,15 @@ end
       end
 
       -- Check if debuff is still present (stack change, not full removal)
-      -- If the spell is still in aura slots, this was a stack decrement - keep timer data
+      -- If the spell is still in aura slots, this was a stack decrement - keep timer data.
+      -- Must check ALL slots (1-48): when 16 debuff slots are full, debuffs spill into
+      -- buff slots 1-32. A DEBUFF_REMOVED for a spell still in a spillover slot must not
+      -- clear timer data.
       local isStillPresent = false
       if GetUnitField then
         local auras = GetUnitField(guid, "aura")
         if auras then
-          for checkSlot = 33, 48 do
+          for checkSlot = 1, 48 do
             if auras[checkSlot] and auras[checkSlot] == spellId then
               isStillPresent = true
               break
