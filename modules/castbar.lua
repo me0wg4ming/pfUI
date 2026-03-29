@@ -78,9 +78,11 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
 
     -- OnUpdate script with throttle for performance optimization
     cb:SetScript("OnUpdate", function()
+      -- Cache GetTime() once per tick to avoid drift from multiple calls
+      local now = GetTime()
       -- Throttle for performance
-      if (this.tick or 0) > GetTime() then return end
-      this.tick = GetTime() + 0.020 -- ~50 FPS for smooth castbar
+      if (this.tick or 0) > now then return end
+      this.tick = now + 0.020 -- ~50 FPS for smooth castbar
 
       if this.drag and this.drag:IsShown() then
         this:SetAlpha(1)
@@ -123,7 +125,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         if castData.event == "CAST" or castData.event == "FAIL" then
           castBlocked = true
           pfUI.libdebuff_casts[focusGuid] = nil
-        elseif (castData.event == "START" or castData.event == "CHANNEL") and castData.endTime and castData.endTime > GetTime() then
+        elseif (castData.event == "START" or castData.event == "CHANNEL") and castData.endTime and castData.endTime > now then
           cast = castData.spellName
           texture = castData.icon
           startTime = castData.startTime * 1000
@@ -162,7 +164,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       if cast then
         local duration = endTime - startTime
         local max = duration / 1000
-        local cur = GetTime() - startTime / 1000
+        local cur = now - startTime / 1000
 
         this:SetAlpha(1)
 
@@ -231,7 +233,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         end
 
         if channel then
-          cur = max + startTime/1000 - GetTime()
+          cur = max + startTime/1000 - now
         end
 
         cur = cur > max and max or cur
