@@ -3097,15 +3097,17 @@ function pfUI.uf:EnableClickCast()
           local prefix = modifier == "" and "" or modifier .. "-"
 
           -- check for "/" in the beginning of the string, to detect macros
-          if string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^%/(.+)") then
+          local ccval = pfUI_config.unitframes["clickcast"..bconf..mconf]
+          local ccval_lower = string.lower(ccval)
+          if string.find(ccval, "^%/(.+)") then
             self:SetAttribute(prefix.."type"..bid, "macro")
-            self:SetAttribute(prefix.."macrotext"..bid, pfUI_config.unitframes["clickcast"..bconf..mconf])
+            self:SetAttribute(prefix.."macrotext"..bid, ccval)
             self:SetAttribute(prefix.."spell"..bid, nil)
-          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^target") then
+          elseif string.find(ccval_lower, "^target") then
             self:SetAttribute(prefix.."type"..bid, "target")
             self:SetAttribute(prefix.."macrotext"..bid, nil)
             self:SetAttribute(prefix.."spell"..bid, nil)
-          elseif string.find(pfUI_config.unitframes["clickcast"..bconf..mconf], "^menu") then
+          elseif string.find(ccval_lower, "^menu") then
             self:SetAttribute(prefix.."type"..bid, "showmenu")
             self:SetAttribute(prefix.."macrotext"..bid, nil)
             self:SetAttribute(prefix.."spell"..bid, nil)
@@ -3147,10 +3149,11 @@ function pfUI.uf:ClickAction(button)
   modstring = IsShiftKeyDown() and modstring.."shift" or modstring
   modstring = modstring..button
   if this.clickactions and this.clickactions[modstring] then
-    if string.find(this.clickactions[modstring], "^menu") then
+    local action_lower = string.lower(this.clickactions[modstring])
+    if string.find(action_lower, "^menu") then
       -- show menu
       showmenu = true
-    elseif string.find(this.clickactions[modstring], "^target") then
+    elseif string.find(action_lower, "^target") then
       -- target unit
       showmenu = nil
     else
