@@ -1724,10 +1724,13 @@ end
         nameplate.castbar:Hide()
       else
         -- Only update min/max, color and icon once per cast (when endTime changes)
+        local isChannel = castInfo.event == "CHANNEL"
+        local duration = castInfo.endTime - castInfo.startTime
         if nameplate.castbar.lastEndTime ~= castInfo.endTime then
           nameplate.castbar.lastEndTime = castInfo.endTime
-          nameplate.castbar:SetMinMaxValues(castInfo.startTime, castInfo.endTime)
-          local isChannel = castInfo.event == "CHANNEL"
+          -- Use relative 0..duration range (same as castbar.lua) to avoid
+          -- floating-point precision loss with large absolute timestamps
+          nameplate.castbar:SetMinMaxValues(0, duration)
           nameplate.castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(isChannel and "channelcolor" or "castbarcolor")]))
           if castInfo.icon then
             nameplate.castbar.icon.tex:SetTexture(castInfo.icon)
@@ -1740,11 +1743,13 @@ end
           end
         end
         local barValue
-        if castInfo.event == "CHANNEL" then
-          barValue = castInfo.startTime + (castInfo.endTime - now)
+        if isChannel then
+          barValue = castInfo.endTime - now
         else
-          barValue = now
+          barValue = now - castInfo.startTime
         end
+        barValue = barValue < 0 and 0 or barValue
+        barValue = barValue > duration and duration or barValue
         nameplate.castbar:SetValue(barValue)
         local remaining = castInfo.endTime - now
         if C.unitframes.castbardecimals == "1" then
