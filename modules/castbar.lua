@@ -285,24 +285,23 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
         ApplyPushback(arg2)
 
       elseif event == CASTBAR_EVENT_CAST_DELAY then
-        playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
-        if not playerarg then return end
-        -- Skip if Nampower active (SPELL_DELAYED_SELF already handled it)
-        if this.focusGuid and pfUI.libdebuff_casts then return end
-        if pfGetCastInfo then
-          local isCast, _, _, _, _, endTime = pfGetCastInfo(this.unitstr or this.unitname)
-          if not isCast or not this.endTime then return end
-          this.delay = (this.delay or 0) + (endTime - this.endTime) / 1000
-        end
+        -- SPELLCAST_DELAYED fallback intentionally removed - addon requires Nampower.
+        -- Cast pushback is handled by SPELL_DELAYED_SELF above.
+        return
 
       elseif event == CASTBAR_EVENT_CHANNEL_DELAY then
-        playerarg = pfUI.client <= 11200 or arg1 == "player" and true or nil
-        if not playerarg then return end
-        if this.focusGuid and pfUI.libdebuff_casts then return end
-        if pfGetChannelInfo then
-          local isChannel, _, _, _, _, endTime = pfGetChannelInfo(this.unitstr or this.unitname)
-          if not isChannel then return end
-          this.delay = (this.delay or 0) + this.bar:GetValue() - (endTime/1000 - GetTime())
+        -- SPELLCAST_CHANNEL_UPDATE fires when a channel is pushed back by damage.
+        -- arg1 = new remaining time in ms. Channel ends sooner = newEndTime < this.endTime.
+        if not this.endTime or not arg1 then return end
+        local newEndTime = GetTime() * 1000 + arg1
+        local diff = this.endTime - newEndTime  -- positive = time lost to pushback
+        if diff > 50 then
+          this.delay = (this.delay or 0) + diff / 1000
+          this.endTime = newEndTime
+          local focusGuid = this.focusGuid
+          if focusGuid and pfUI.libdebuff_casts and pfUI.libdebuff_casts[focusGuid] then
+            pfUI.libdebuff_casts[focusGuid].endTime = newEndTime / 1000
+          end
         end
 
       elseif event == CASTBAR_EVENT_CAST_START or event == CASTBAR_EVENT_CHANNEL_START then
