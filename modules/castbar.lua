@@ -252,6 +252,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       else
         this.bar:SetMinMaxValues(1,100)
         this.bar:SetValue(100)
+        this.lastMax = nil
         this.fadeout = 1
         this.delay = 0
         this.itemIconApplied = nil
