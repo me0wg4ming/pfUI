@@ -2609,21 +2609,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       local formfactors = function()
         return BarLayoutOptions(tonumber(C.bars["bar"..id].buttons) or id < 11 and NUM_ACTIONBAR_BUTTONS or id > 11 and NUM_SHAPESHIFT_SLOTS or NUM_PET_ACTION_SLOTS)
       end
-      local uneven_options = function()
-        local formfactor = tostring(C.bars["bar"..id].formfactor or "")
-        local _, _, cols, rows = string.find(formfactor, "(%d+)%s*x%s*(%d+)")
-        cols, rows = tonumber(cols), tonumber(rows)
-
-        if cols == 3 and rows == 3 then
-          return { "Up", "Down", "Left", "Right" }
-        elseif cols and cols <= 3 then
-          return { "Up", "Down" }
-        elseif rows and rows <= 3 then
-          return { "Left", "Right" }
-        end
-
-        return { "Up", "Down", "Left", "Right" }
-      end
 
       CreateGUIEntry(T["Actionbar"], caption, function()
         CreateConfig(U["bars"], T["Enable"], C.bars["bar"..id], "enable", "checkbox")
@@ -2642,7 +2627,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U["bars"], T["Icon Size"], C.bars["bar"..id], "icon_size")
         CreateConfig(U["bars"], T["Spacing"], C.bars["bar"..id], "spacing", "dropdown", pfUI.gui.dropdowns.actionbarbuttons)
         CreateConfig(U["bars"], T["Layout"], C.bars["bar"..id], "formfactor", "dropdown", formfactors)
-        CreateConfig(U["bars"], T["Layout Uneven Orientation"], C.bars["bar"..id], "uneven", "dropdown", uneven_options)
         CreateConfig(U["bars"], T["Bar Background"], C.bars["bar"..id], "background", "checkbox")
         CreateConfig(U["bars"], T["Show Hotkey Text"], C.bars["bar"..id], "showkeybind", "checkbox")
 
