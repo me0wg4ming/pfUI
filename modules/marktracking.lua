@@ -140,7 +140,7 @@ pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
     row.icon:SetWidth(ROW_HEIGHT)
     row.icon:SetHeight(ROW_HEIGHT)
     row.icon:SetPoint("LEFT", row, "LEFT", 1, 0)
-    row.icon:SetTexture(pfUI.media["img:raidicons"])
+    row.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
     SetRaidTargetIconTexture(row.icon, i)
 
     -- portrait (right side)
@@ -246,6 +246,7 @@ pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
             end
           end
           row:Show()
+          SetRaidTargetIconTexture(row.icon, i)
           prevRow = row
           anyActive = true
           visibleCount = visibleCount + 1

@@ -1316,6 +1316,16 @@ function pfUI.uf.OnEvent()
     if pfUI.uf.ClearGuidTracking then pfUI.uf.ClearGuidTracking() end
   elseif this.label == "target" and event == "PLAYER_TARGET_CHANGED" and not pfScanActive == true then
     this.update_full = true
+    -- immediately update raid icon to avoid delay on target swap
+    if this.raidIcon and this.config and this.config.raidicon == "1" then
+      local raidIcon = UnitName("target") and GetRaidTargetIndex("target")
+      if raidIcon then
+        SetRaidTargetIconTexture(this.raidIcon.texture, raidIcon)
+        this.raidIcon:Show()
+      else
+        this.raidIcon:Hide()
+      end
+    end
   elseif ( this.label == "raid" or this.label == "party" or this.label == "player" ) and event == "PARTY_MEMBERS_CHANGED" then
     -- Smart update: check if THIS frame's unit actually changed
     if pfUI.uf.guidTracker and this.id then
