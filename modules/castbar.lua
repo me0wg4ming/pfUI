@@ -174,7 +174,6 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
           this.bar.left:SetText(spellname .. rank)
           this.fadeout = nil
           this.endTime = endTime
-          this.lastMax = nil  -- reset so SetMinMaxValues is called for this new cast
 
           -- set texture
           if texture and this.showicon then
@@ -253,6 +252,7 @@ pfUI:RegisterModule("castbar", "vanilla", function ()
       else
         this.bar:SetMinMaxValues(1,100)
         this.bar:SetValue(100)
+        this.lastMax = nil
         this.fadeout = 1
         this.delay = 0
         this.itemIconApplied = nil
