@@ -125,7 +125,7 @@ pfUI:RegisterSkin("Turtle LFT", "vanilla", function ()
   -- ============================================================
   --  LFTRoleCheckFrame (role selection popup)
   -- ============================================================
-  StripTextures(LFTRoleCheckFrame, true)
+  StripTextures(LFTRoleCheckFrame)
   CreateBackdrop(LFTRoleCheckFrame, nil, nil, .9)
   CreateBackdropShadow(LFTRoleCheckFrame)
   EnableMovable(LFTRoleCheckFrame)
@@ -136,7 +136,9 @@ pfUI:RegisterSkin("Turtle LFT", "vanilla", function ()
   -- ============================================================
   --  LFTGroupReadyFrame (dungeon found popup)
   -- ============================================================
-  StripTextures(LFTGroupReadyFrame, true)
+  -- Use hide=false: hide=true would also hide FontStrings (instance name, role text etc.)
+  -- which LFT_GroupReadyShow sets text on but never calls :Show() on.
+  StripTextures(LFTGroupReadyFrame)
   CreateBackdrop(LFTGroupReadyFrame, nil, nil, .9)
   CreateBackdropShadow(LFTGroupReadyFrame)
 
@@ -146,7 +148,7 @@ pfUI:RegisterSkin("Turtle LFT", "vanilla", function ()
   -- ============================================================
   --  LFTGroupReadyStatusFrame (waiting-for-others popup)
   -- ============================================================
-  StripTextures(LFTGroupReadyStatusFrame, true)
+  StripTextures(LFTGroupReadyStatusFrame)
   CreateBackdrop(LFTGroupReadyStatusFrame, nil, nil, .9)
   CreateBackdropShadow(LFTGroupReadyStatusFrame)
 end)
