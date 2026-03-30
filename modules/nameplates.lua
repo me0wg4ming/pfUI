@@ -1220,11 +1220,17 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
             plate.debuffs[index].stacks:Hide()
           end
 
-          if duration and timeleft and cfg.debufftimers then
+          if duration and timeleft and timeleft >= 0 and cfg.debufftimers then
             -- PERF: Only update cooldown if start time changed significantly
             local cd = plate.debuffs[index].cd
             local newStart = GetTime() + timeleft - duration
-            
+
+            -- Reset cachedStart if the debuff in this slot changed (slots shift when one expires)
+            if cd.cachedEffect ~= effect then
+              cd.cachedEffect = effect
+              cd.cachedStart = nil
+            end
+
             if not cd.cachedStart or abs(cd.cachedStart - newStart) > 0.5 then
               -- Update config flags only on first run or config change
               if not cd.configCached or cd.cachedAnim ~= cfg.debuffanim or cd.cachedText ~= cfg.debufftext then
@@ -1251,6 +1257,9 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     for i = index, 16 do
       if plate.debuffs[i] then
         plate.debuffs[i]:Hide()
+        if plate.debuffs[i].cd then
+          plate.debuffs[i].cd.cachedStart = nil
+        end
       end
     end
   end
