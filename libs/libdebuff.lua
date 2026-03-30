@@ -1881,9 +1881,13 @@ end
 
     elseif event == "SPELL_FAILED_OTHER" then
       local casterGuid = arg1
-      
+      local spellId = arg2
+
       if casterGuid and pfUI.libdebuff_casts[casterGuid] then
-        pfUI.libdebuff_casts[casterGuid] = nil
+        -- Only clear if spellID matches to avoid clearing a cast that already moved on
+        if pfUI.libdebuff_casts[casterGuid].spellID == spellId then
+          pfUI.libdebuff_casts[casterGuid] = nil
+        end
       end
       if pfUI.libdebuff_spell_failed_other_hooks then
         for _, fn in pairs(pfUI.libdebuff_spell_failed_other_hooks) do
