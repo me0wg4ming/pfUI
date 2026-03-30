@@ -8,7 +8,8 @@ do -- statusbars
 
   local animate = CreateFrame("Frame", "pfStatusBarAnimation", UIParent)
   animate:SetScript("OnUpdate", function()
-    stepsize = tonumber(pfUI_config.unitframes.animation_speed)
+    local unitframes = pfUI_config and pfUI_config.unitframes
+    stepsize = tonumber(unitframes and unitframes.animation_speed) or 20
 
     for bar in pairs(animations) do
       if not bar.val_ or abs(bar.val_ - bar.val) < stepsize or bar.instant then
