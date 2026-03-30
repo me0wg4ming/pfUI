@@ -288,8 +288,14 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
       return  -- skip the generic Heal call below
     end
 
-    libpredict:Heal(player, target, amount, casttime)
-    libpredict.sender:SendHealCommMsg("Heal/" .. (target or "") .. "/" .. amount .. "/" .. casttime .. "/")
+    -- If target is hostile (e.g. self-heal while targeting an enemy),
+    -- store the heal under player instead so the player frame shows prediction.
+    local healTarget = target
+    if healTarget and UnitExists("target") and (UnitCanAttack("player", "target") or not UnitIsFriend("player", "target")) then
+      healTarget = player
+    end
+    libpredict:Heal(player, healTarget, amount, casttime)
+    libpredict.sender:SendHealCommMsg("Heal/" .. (healTarget or "") .. "/" .. amount .. "/" .. casttime .. "/")
     libpredict.sender.healing = true
   end
 end
