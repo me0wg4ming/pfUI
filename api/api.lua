@@ -1203,44 +1203,27 @@ end
 function pfUI.api.BarLayoutOptions(barsize)
   assert(barsize > 0 and barsize <= NUM_ACTIONBAR_BUTTONS,"BarLayoutOptions: barsize "..tostring(barsize).." is invalid")
   local options, seen = {}, {}
-
   local function add(option)
-    if not seen[option] then
-      table.insert(options, option)
-      seen[option] = true
-    end
+    if not seen[option] then table.insert(options, option); seen[option] = true end
   end
-
   for i,layout in ipairs(pfGridmath[barsize]) do
     add(string.format("%d x %d",layout[1],layout[2]))
   end
-
   for _, option in ipairs({
     "1 x 12", "1 x 10", "2 x 10", "2 x 5", "3 x 10", "3 x 5", "3 x 3",
     "5 x 3", "10 x 3", "5 x 2", "10 x 2", "10 x 1", "12 x 1"
-  }) do
-    add(option)
-  end
-
+  }) do add(option) end
   table.sort(options, function(a, b)
     local _, _, ac, ar = string.find(a, "(%d+)%s*x%s*(%d+)")
     local _, _, bc, br = string.find(b, "(%d+)%s*x%s*(%d+)")
     ac, ar = tonumber(ac) or 1, tonumber(ar) or 1
     bc, br = tonumber(bc) or 1, tonumber(br) or 1
-
     local ah = ac >= ar and 0 or 1
     local bh = bc >= br and 0 or 1
-
     if ah ~= bh then return ah < bh end
-    if ah == 0 then -- horizontal first: wider to narrower
-      if ac ~= bc then return ac > bc end
-      return ar < br
-    else -- vertical: taller to shorter
-      if ar ~= br then return ar > br end
-      return ac < bc
-    end
+    if ah == 0 then if ac ~= bc then return ac > bc end; return ar < br
+    else if ar ~= br then return ar > br end; return ac < bc end
   end)
-
   return options
 end
 
@@ -1268,14 +1251,12 @@ end
 local function ResolveBarLayout(barsize, formfactor, uneven)
   local layout = tostring(formfactor or "")
   local _, _, a, b = string.find(layout, "(%d+)%s*x%s*(%d+)")
-
   if a and b then
     local cols, rows = tonumber(a), tonumber(b)
     cols = math.min(NUM_ACTIONBAR_BUTTONS, math.max(1, cols))
     rows = math.min(NUM_ACTIONBAR_BUTTONS, math.max(1, rows))
     local orientation = string.upper(uneven or "DOWN")
     local mode = (orientation == "LEFT" or orientation == "RIGHT") and "cols" or "rows"
-
     if mode == "rows" then
       cols = math.max(1, math.min(cols, barsize))
       rows = math.max(1, math.ceil(barsize / cols))
@@ -1283,10 +1264,8 @@ local function ResolveBarLayout(barsize, formfactor, uneven)
       rows = math.max(1, math.min(rows, barsize))
       cols = math.max(1, math.ceil(barsize / rows))
     end
-
     return cols, rows, mode, orientation
   end
-
   local index = pfUI.api.BarLayoutFormfactor(layout)
   if not index then return nil end
   local cols, rows = unpack(pfGridmath[barsize][index])
@@ -1301,9 +1280,7 @@ end
 function pfUI.api.BarLayoutSize(bar,barsize,formfactor,iconsize,bordersize,padding,uneven)
   assert(barsize > 0 and barsize <= NUM_ACTIONBAR_BUTTONS,"BarLayoutSize: barsize "..tostring(barsize).." is invalid")
   local cols, rows = ResolveBarLayout(barsize, formfactor, uneven)
-  if not cols or not rows then
-    cols, rows = unpack(pfGridmath[barsize][1])
-  end
+  if not cols or not rows then cols, rows = unpack(pfGridmath[barsize][1]) end
   local width = (iconsize + bordersize*2+padding) * cols + padding
   local height = (iconsize + bordersize*2+padding) * rows + padding
   bar._size = {width,height}
@@ -1326,7 +1303,6 @@ function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor
   end
   local parent = button:GetParent()
   local step = iconsize + bordersize*2 + padding
-
   local row, col
   if mode == "cols" then
     col = math.ceil(buttonindex / rows)
@@ -1335,39 +1311,25 @@ function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor
     row = math.ceil(buttonindex / cols)
     col = buttonindex - ((row-1) * cols)
   end
-
-  -- move only the uneven remainder to the selected edge without reversing full order
   if mode == "cols" and orientation == "LEFT" then
     local final_col = math.ceil(barsize / rows)
     local count = barsize - (final_col - 1) * rows
     if count > 0 and count < rows then
-      if col == final_col then
-        col = 1
-      else
-        col = col + 1
-      end
+      if col == final_col then col = 1 else col = col + 1 end
     end
   elseif mode == "rows" and orientation == "UP" then
     local final_row = math.ceil(barsize / cols)
     local count = barsize - (final_row - 1) * cols
     if count > 0 and count < cols then
-      if row == final_row then
-        row = 1
-      else
-        row = row + 1
-      end
+      if row == final_row then row = 1 else row = row + 1 end
     end
   end
-
   local x = bordersize + padding + (col - 1) * step
   local y = -bordersize - padding - (row - 1) * step
-
   if buttonindex == 1 then
     button._anchor = {"TOPLEFT", parent, "TOPLEFT", x, y}
   else
     button._anchor = {"TOPLEFT", parent, "TOPLEFT", x, y}
-
-    -- center partially filled final row/column
     if mode == "cols" then
       local final_col = math.ceil(barsize / rows)
       local count = barsize - (final_col - 1) * rows

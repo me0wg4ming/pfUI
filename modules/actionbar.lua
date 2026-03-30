@@ -1413,25 +1413,18 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     local spacing = C.bars["bar"..i].spacing
     local background = C.bars["bar"..i].background
     local formfactor = C.bars["bar"..i].formfactor
-    local uneven = C.bars["bar"..i].uneven
-    local _, _, cols, rows = string.find(tostring(formfactor or ""), "(%d+)%s*x%s*(%d+)")
-    cols, rows = tonumber(cols), tonumber(rows)
-    local is_square = cols == 3 and rows == 3
-    local is_vertical = cols and cols <= 3 and not is_square
-    local is_horizontal = rows and rows <= 3 and not is_square
-
-    if is_vertical then
-      if uneven ~= "Up" and uneven ~= "Down" then
-        uneven = "Up"
-      end
-    elseif is_horizontal then
-      if uneven ~= "Left" and uneven ~= "Right" then
-        uneven = "Left"
-      end
-    elseif not uneven then
-      uneven = "Up"
+    local uneven = C.bars["bar"..i].uneven or "Down"
+    -- validate uneven against bar shape and reset if incompatible
+    local _, _, fcols2, frows2 = string.find(tostring(formfactor or ""), "(%d+)%s*x%s*(%d+)")
+    fcols2, frows2 = tonumber(fcols2), tonumber(frows2)
+    local f_is_square = fcols2 == 3 and frows2 == 3
+    local f_is_vertical = fcols2 and fcols2 <= 3 and not f_is_square
+    local f_is_horizontal = frows2 and frows2 <= 3 and not f_is_square
+    if f_is_vertical then
+      if uneven ~= "Up" and uneven ~= "Down" then uneven = "Down" end
+    elseif f_is_horizontal then
+      if uneven ~= "Left" and uneven ~= "Right" then uneven = "Down" end
     end
-
     C.bars["bar"..i].uneven = uneven
     local autohide = C.bars["bar"..i].autohide
     local hide_time = C.bars["bar"..i].hide_time
