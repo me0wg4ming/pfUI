@@ -2609,6 +2609,21 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       local formfactors = function()
         return BarLayoutOptions(tonumber(C.bars["bar"..id].buttons) or id < 11 and NUM_ACTIONBAR_BUTTONS or id > 11 and NUM_SHAPESHIFT_SLOTS or NUM_PET_ACTION_SLOTS)
       end
+      local uneven_options = function()
+        local formfactor = tostring(C.bars["bar"..id].formfactor or "")
+        local _, _, cols, rows = string.find(formfactor, "(%d+)%s*x%s*(%d+)")
+        cols, rows = tonumber(cols), tonumber(rows)
+
+        if cols == 3 and rows == 3 then
+          return { "Up", "Down", "Left", "Right" }
+        elseif cols and cols <= 3 then
+          return { "Up", "Down" }
+        elseif rows and rows <= 3 then
+          return { "Left", "Right" }
+        end
+
+        return { "Up", "Down", "Left", "Right" }
+      end
 
       CreateGUIEntry(T["Actionbar"], caption, function()
         CreateConfig(U["bars"], T["Enable"], C.bars["bar"..id], "enable", "checkbox")
@@ -2626,7 +2641,27 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
 
         CreateConfig(U["bars"], T["Icon Size"], C.bars["bar"..id], "icon_size")
         CreateConfig(U["bars"], T["Spacing"], C.bars["bar"..id], "spacing", "dropdown", pfUI.gui.dropdowns.actionbarbuttons)
-        CreateConfig(U["bars"], T["Layout"], C.bars["bar"..id], "formfactor", "dropdown", formfactors)
+        local uneven_frame = nil
+        local layout_ufunc = function()
+          local formfactor = tostring(C.bars["bar"..id].formfactor or "")
+          local _, _, cols, rows = string.find(formfactor, "(%d+)%s*x%s*(%d+)")
+          cols, rows = tonumber(cols), tonumber(rows)
+          local is_square = cols == 3 and rows == 3
+          local is_vertical = cols and cols <= 3 and not is_square
+          local is_horizontal = rows and rows <= 3 and not is_square
+          local uneven = C.bars["bar"..id].uneven
+          if is_vertical then
+            if uneven ~= "Up" and uneven ~= "Down" then C.bars["bar"..id].uneven = "Down" end
+          elseif is_horizontal then
+            if uneven ~= "Left" and uneven ~= "Right" then C.bars["bar"..id].uneven = "Left" end
+          end
+          if uneven_frame and uneven_frame.input and uneven_frame.input.UpdateMenu then
+            uneven_frame.input:UpdateMenu()
+          end
+          if U["bars"] then U["bars"]() end
+        end
+        CreateConfig(layout_ufunc, T["Layout"], C.bars["bar"..id], "formfactor", "dropdown", formfactors)
+        uneven_frame = CreateConfig(U["bars"], T["Layout Uneven Orientation"], C.bars["bar"..id], "uneven", "dropdown", uneven_options)
         CreateConfig(U["bars"], T["Bar Background"], C.bars["bar"..id], "background", "checkbox")
         CreateConfig(U["bars"], T["Show Hotkey Text"], C.bars["bar"..id], "showkeybind", "checkbox")
 

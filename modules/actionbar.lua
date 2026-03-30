@@ -1276,6 +1276,19 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     local spacing = C.bars["bar"..i].spacing
     local background = C.bars["bar"..i].background
     local formfactor = C.bars["bar"..i].formfactor
+    local uneven = C.bars["bar"..i].uneven or "Down"
+    -- validate uneven against bar shape and reset if incompatible
+    local _, _, fcols2, frows2 = string.find(tostring(formfactor or ""), "(%d+)%s*x%s*(%d+)")
+    fcols2, frows2 = tonumber(fcols2), tonumber(frows2)
+    local f_is_square = fcols2 == 3 and frows2 == 3
+    local f_is_vertical = fcols2 and fcols2 <= 3 and not f_is_square
+    local f_is_horizontal = frows2 and frows2 <= 3 and not f_is_square
+    if f_is_vertical then
+      if uneven ~= "Up" and uneven ~= "Down" then uneven = "Down" end
+    elseif f_is_horizontal then
+      if uneven ~= "Left" and uneven ~= "Right" then uneven = "Down" end
+    end
+    C.bars["bar"..i].uneven = uneven
     local autohide = C.bars["bar"..i].autohide
     local hide_time = C.bars["bar"..i].hide_time
     local hide_combat = C.bars["bar"..i].hide_combat == "1" and true or nil
@@ -1298,7 +1311,8 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     end
 
     -- the stored layout is invalid, temporary fallback
-    if not pfGridmath[buttons][BarLayoutFormfactor(formfactor)] then
+    local _, _, fcols, frows = string.find(tostring(formfactor or ""), "(%d+)%s*x%s*(%d+)")
+    if not ((fcols and frows) or pfGridmath[buttons][BarLayoutFormfactor(formfactor)]) then
       formfactor = BarLayoutOptions(buttons)[1]
     end
 
@@ -1407,7 +1421,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       bars[i][j] = CreateActionButton(bars[i], i, j)
       bars[i][j].bar = i
 
-      BarButtonAnchor(bars[i][j], buttonbasename, j, buttons, formfactor, size, border, spacing)
+      BarButtonAnchor(bars[i][j], buttonbasename, j, buttons, formfactor, size, border, spacing, uneven)
       bars[i][j]:ClearAllPoints()
       bars[i][j]:SetPoint(unpack(bars[i][j]._anchor))
       bars[i][j]:Show()
@@ -1438,7 +1452,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     end
 
     -- adjust actionbar size
-    BarLayoutSize(bars[i], buttons, formfactor, size, border, spacing)
+    BarLayoutSize(bars[i], buttons, formfactor, size, border, spacing, uneven)
     bars[i]:SetWidth(bars[i]._size[1])
     bars[i]:SetHeight(bars[i]._size[2])
     bars[i]:ClearAllPoints()
