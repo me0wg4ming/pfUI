@@ -753,7 +753,6 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
     nameplate.raidicon:SetParent(plate)
     nameplate.raidicon:SetDrawLayer("OVERLAY")
-    nameplate.raidicon:SetTexture(pfUI.media["img:raidicons"])
 
     nameplate.totem = CreateFrame("Frame", nil, nameplate)
     nameplate.totem:SetPoint("CENTER", nameplate, "CENTER", 0, 0)
@@ -893,7 +892,7 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     nameplate.glow:SetVertexColor(glowr, glowg, glowb, glowa)
 
     nameplate.raidicon:ClearAllPoints()
-    nameplate.raidicon:SetPoint(C.nameplates.raidiconpos, nameplate.health, C.nameplates.raidiconpos, C.nameplates.raidiconoffx, C.nameplates.raidiconoffy)
+    nameplate.raidicon:SetPoint("BOTTOM", nameplate.health, "TOP", C.nameplates.raidiconoffx, C.nameplates.raidiconoffy)
     nameplate.level:SetFont(font, font_size, font_style)
     nameplate.raidicon:SetWidth(C.nameplates.raidiconsize)
     nameplate.raidicon:SetHeight(C.nameplates.raidiconsize)
