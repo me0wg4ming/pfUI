@@ -383,12 +383,8 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       local spellId  = data[7]
 
       -- uuid for duration/charge tracking
-      local uuid
-      if unit == "player" or (frame.config and frame.config.selfdebuff == "1") then
-        uuid = texture .. name
-      else
-        uuid = texture .. name .. slot
-      end
+      -- No slot in uuid: slots shift when debuffs expire causing timer resets
+      local uuid = texture .. name
 
       frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)
       frame.bars[bar].id = slot
