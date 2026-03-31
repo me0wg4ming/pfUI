@@ -2178,7 +2178,6 @@ pfUI_locale["enUS"]["debuffs"] = {
   ['Shield Bash - Silenced']={[0]=3.0,},
   ['Shield Slam']={[0]=2.0,},
   ['Shockwave']={[0]=2.0,},
-  ['Shred']={[0]=12.0,},
   ['Shrink']={[0]=120.0,},
   ['Shrink Ray']={[0]=20.0,},
   ['Silence']={[0]=5.0,},
