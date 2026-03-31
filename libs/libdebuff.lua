@@ -651,6 +651,7 @@ pfUI.libdebuff_get_slot_caster = GetSlotCaster
 -- ============================================================================
 
 local lastRangeCheck = 0
+local lastPendingCleanup = 0
 
 -- Recycled buffers for cleanup (avoids table creation per call)
 pfUI.libdebuff_cleanupbuf = pfUI.libdebuff_cleanupbuf or { {}, {} }
@@ -782,6 +783,22 @@ end
 
 local function CleanupOutOfRangeUnits()
   local now = GetTime()
+  -- Fast cleanup for expired pending ownDebuffs entries (every 1s)
+  if now - lastPendingCleanup >= 1 then
+    lastPendingCleanup = now
+    for guid, spells in pairs(ownDebuffs) do
+      for spellName, data in pairs(spells) do
+        if data.pending then
+          local timeleft = (data.startTime + data.duration) - now
+          if timeleft < -1 then
+            spells[spellName] = nil
+            pfUI.libdebuff_queue_update(guid)
+          end
+        end
+      end
+    end
+  end
+
   if now - lastRangeCheck < 10 then return end
   lastRangeCheck = now
   
@@ -1434,17 +1451,34 @@ function libdebuff:UnitOwnDebuff(unit, id)
       -- Build sorted list of our active debuffs
       local sortedDebuffs = {}
       local now = GetTime()
+      local toRemove = nil
       
       for spellName, data in pairs(ownDebuffs[guid]) do
         local timeleft = (data.startTime + data.duration) - now
-        if timeleft > -1 then  -- Grace period
+        if timeleft > 0 then
           local count = table.getn(sortedDebuffs) + 1
           sortedDebuffs[count] = {
             spellName = spellName,
             data = data,
             timeleft = timeleft
           }
+        elseif data.pending then
+          -- pending entries: keep briefly for downrank protection but don't show
+          if timeleft < -2 then
+            toRemove = toRemove or {}
+            toRemove[spellName] = true
+          end
+        else
+          -- confirmed entries: remove immediately
+          toRemove = toRemove or {}
+          toRemove[spellName] = true
         end
+      end
+      if toRemove then
+        for spellName in pairs(toRemove) do
+          ownDebuffs[guid][spellName] = nil
+        end
+        pfUI.libdebuff_queue_update(guid)
       end
       
       -- Sort by startTime (oldest first = lowest display slot)
@@ -1796,7 +1830,7 @@ end
       end
 
       local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
-      local spellRankString
+      local spellRankString = GetSpellRecField and GetSpellRecField(spellId, "rank")
       if not spellName then return end
 
       local isNullTarget = (not targetGuid or targetGuid == "" or targetGuid == "0x0000000000000000")
@@ -1821,6 +1855,51 @@ end
           rank = castRank,
           time = GetTime()
         }
+      end
+
+      -- selfdebuff mode: write ownDebuffs immediately on confirmed hit so buffwatch
+      -- shows our debuffs even when over the 16 debuff cap (no DEBUFF_ADDED fires)
+      if event == "SPELL_GO_SELF" and targetGuid and not isNullTarget then
+        local selfdebuffMode = pfUI_config and pfUI_config.buffbar and
+          pfUI_config.buffbar.tdebuff and pfUI_config.buffbar.tdebuff.selfdebuff == "1"
+        if selfdebuffMode then
+          local myGuid2 = GetPlayerGUID()
+          if casterGuid == myGuid2 then
+            local duration = 0
+            local pst = pendingSlotTimer[targetGuid] and pendingSlotTimer[targetGuid][spellName]
+            if pst and pst.duration and pst.duration > 0 then
+              duration = pst.duration
+            elseif libspelldata() then
+              duration = libspelldata():GetDuration(spellName, nil, myGuid2) or 0
+            end
+            if duration == 0 then
+              duration = libdebuff:GetDuration(spellName, castRank) or 0
+            end
+            if duration > 0 then
+              local texture = libdebuff:GetSpellIcon(spellId)
+              ownDebuffs[targetGuid] = ownDebuffs[targetGuid] or {}
+              -- Downrank protection: don't overwrite active higher rank
+              local existing = ownDebuffs[targetGuid][spellName]
+              local blocked = false
+              if existing and existing.rank and castRank > 0 and existing.rank > castRank then
+                local existingTimeleft = (existing.startTime + existing.duration) - GetTime()
+                if existingTimeleft > 0 then blocked = true end
+              end
+              if not blocked then
+                ownDebuffs[targetGuid][spellName] = {
+                  startTime = GetTime(),
+                  duration  = duration,
+                  texture   = texture,
+                  rank      = castRank,
+                  spellId   = spellId,
+                  stacks    = 1,
+                  pending   = true,
+                }
+                pfUI.libdebuff_queue_update(targetGuid)
+              end
+            end
+          end
+        end
       end
       
       -- Store rank for our casts
@@ -2731,12 +2810,19 @@ end
       -- For forced-duration spells: If still no caster, assume ours (passive talent procs)
       -- IMPORTANT: Skip this fallback for AoE spells (pendingAoE key present means spell has a known caster
       -- that just missed the timing window -- do NOT falsely claim ownership)
+      -- IMPORTANT: In selfdebuff mode, only assume ours if we have a pendingCast -
+      -- prevents false ownership of spells cast by others (e.g. Garrote from another Rogue)
       local isAoESpell2 = libspelldata() and libspelldata():IsAoEChannel(spellName)
       if not casterGuid and not isAoESpell2 and libspelldata() and libspelldata():HasForcedDuration(spellName) then
-        casterGuid = GetPlayerGUID()
-        isOurs = true
-        if debugStats.enabled and IsCurrentTarget(guid) then
-          DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[PASSIVE PROC]|r %s assumed ours (no caster)", spellName))
+        local selfdebuffMode = pfUI_config and pfUI_config.buffbar and
+          pfUI_config.buffbar.tdebuff and pfUI_config.buffbar.tdebuff.selfdebuff == "1"
+        local hasPendingCast = pendingCasts[guid] and pendingCasts[guid][spellName]
+        if not selfdebuffMode or hasPendingCast then
+          casterGuid = GetPlayerGUID()
+          isOurs = true
+          if debugStats.enabled and IsCurrentTarget(guid) then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff9900[PASSIVE PROC]|r %s assumed ours (no caster)", spellName))
+          end
         end
       end
       

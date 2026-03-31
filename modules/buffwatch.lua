@@ -142,6 +142,18 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
 
     this.bar:SetValue(remaining > 0 and remaining or 0)
 
+    -- selfdebuff mode: when timer expires refresh the parent bar directly
+    if remaining <= 0 and this.parent and this.parent.config and this.parent.config.selfdebuff == "1" then
+      if not this.expiredRefreshed then
+        this.expiredRefreshed = true
+        if this.parent.RefreshSelf then
+          this.parent:RefreshSelf()
+        end
+      end
+    else
+      this.expiredRefreshed = nil
+    end
+
     if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .1 end
     this.time:SetText(remaining > 0 and GetColoredTimeString(remaining) or "")
   end
@@ -258,21 +270,44 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
             sortbuf[n][7] = spellId
           end)
         else
-          libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft)
-            if not tex or string.find(tex, "QuestionMark") or not spellName or spellName == "" then return end
-            if not BuffIsVisible(config, spellName) then return end
-            timeleft = timeleft or 0
-            if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
-            n = n + 1
-            sortbuf[n] = sortbuf[n] or {}
-            sortbuf[n][1] = timeleft
-            sortbuf[n][2] = auraSlot
-            sortbuf[n][3] = spellName
-            sortbuf[n][4] = tex
-            sortbuf[n][5] = st or 1
-            sortbuf[n][6] = dtype
-            sortbuf[n][7] = spellId
-          end)
+          if selfdebuff then
+            local i = 1
+            while true do
+              local name, _, tex, st, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unit, i)
+              if not name then break end
+              if BuffIsVisible(config, name) then
+                timeleft = timeleft or 0
+                if timeleft == 0 or timeleft < threshold or threshold == -1 then
+                  n = n + 1
+                  sortbuf[n] = sortbuf[n] or {}
+                  sortbuf[n][1] = timeleft
+                  sortbuf[n][2] = i + 32
+                  sortbuf[n][3] = name
+                  sortbuf[n][4] = tex
+                  sortbuf[n][5] = st or 1
+                  sortbuf[n][6] = dtype
+                  sortbuf[n][7] = nil
+                end
+              end
+              i = i + 1
+            end
+          else
+            libdebuff:IterDebuffs(unit, function(auraSlot, spellId, spellName, tex, st, dtype, duration, timeleft)
+              if not tex or string.find(tex, "QuestionMark") or not spellName or spellName == "" then return end
+              if not BuffIsVisible(config, spellName) then return end
+              timeleft = timeleft or 0
+              if timeleft ~= 0 and timeleft >= threshold and threshold ~= -1 then return end
+              n = n + 1
+              sortbuf[n] = sortbuf[n] or {}
+              sortbuf[n][1] = timeleft
+              sortbuf[n][2] = auraSlot
+              sortbuf[n][3] = spellName
+              sortbuf[n][4] = tex
+              sortbuf[n][5] = st or 1
+              sortbuf[n][6] = dtype
+              sortbuf[n][7] = spellId
+            end)
+          end
         end
       else
         -- HELPFUL: IterBuffs
@@ -349,7 +384,7 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
 
       -- uuid for duration/charge tracking
       local uuid
-      if unit == "player" then
+      if unit == "player" or (frame.config and frame.config.selfdebuff == "1") then
         uuid = texture .. name
       else
         uuid = texture .. name .. slot
@@ -481,6 +516,10 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
     end
 
     frame.RefreshPosition = RefreshPosition
+    frame.RefreshSelf = function(self)
+      RefreshBuffBarFrame(self)
+      self:RefreshPosition()
+    end
 
     -- Own event listener on a always-visible frame (UIParent child stays visible)
     -- Vanilla WoW only fires events for visible frames - the buffbar container is never shown
