@@ -1874,15 +1874,17 @@ end
         if selfdebuffMode then
           local myGuid2 = GetPlayerGUID()
           if casterGuid == myGuid2 then
+            -- Use spellId-based lookup (accurate, no false positives like Shred)
             local duration = 0
-            local pst = pendingSlotTimer[targetGuid] and pendingSlotTimer[targetGuid][spellName]
-            if pst and pst.duration and pst.duration > 0 then
-              duration = pst.duration
-            elseif libspelldata() then
-              duration = libspelldata():GetDuration(spellName, nil, myGuid2) or 0
+            if libspelldata() and libspelldata().GetDurationBySpellId then
+              duration = libspelldata():GetDurationBySpellId(spellId, capturedCP) or 0
             end
+            -- Fallback: pendingSlotTimer from AURA_CAST_ON_OTHER (fires after us but may be set on refresh)
             if duration == 0 then
-              duration = libdebuff:GetDuration(spellName, castRank) or 0
+              local pst = pendingSlotTimer[targetGuid] and pendingSlotTimer[targetGuid][spellName]
+              if pst and pst.duration and pst.duration > 0 then
+                duration = pst.duration
+              end
             end
             if duration > 0 then
               local texture = libdebuff:GetSpellIcon(spellId)

@@ -224,6 +224,278 @@ function lib:GetOverwritePair(spellName)
   return debuffOverwritePairs[spellName]
 end
 
+
+-- ============================================================================
+-- SpellID-based debuff lookup (from Cursive addon data)
+-- Used by SPELL_GO_SELF to get duration without locales database fallback
+-- combopointAbility = true means duration is calculated from combo points
+-- ============================================================================
+-- SpellID-based debuff duration lookup
+-- Source: Cursive addon (https://github.com/TurtleWoW/Cursive)
+-- Used by SPELL_GO_SELF to get duration without relying on locales database
+-- combopointAbility = true means duration is calculated from combo points (see combopointSpells)
+local spellIdDebuffs = {
+  -- DRUID
+  -- Entangling Roots
+  [339]   = { name = "Entangling Roots",  duration = 12 },
+  [1062]  = { name = "Entangling Roots",  duration = 15 },
+  [5195]  = { name = "Entangling Roots",  duration = 18 },
+  [5196]  = { name = "Entangling Roots",  duration = 21 },
+  [9852]  = { name = "Entangling Roots",  duration = 24 },
+  [9853]  = { name = "Entangling Roots",  duration = 27 },
+  -- Hibernate
+  [2637]  = { name = "Hibernate",         duration = 20 },
+  [18657] = { name = "Hibernate",         duration = 30 },
+  [18658] = { name = "Hibernate",         duration = 40 },
+  -- Faerie Fire
+  [770]   = { name = "Faerie Fire",       duration = 40 },
+  [778]   = { name = "Faerie Fire",       duration = 40 },
+  [9749]  = { name = "Faerie Fire",       duration = 40 },
+  [9907]  = { name = "Faerie Fire",       duration = 40 },
+  [16855] = { name = "Faerie Fire",       duration = 40 },
+  [17387] = { name = "Faerie Fire",       duration = 40 },
+  [17388] = { name = "Faerie Fire",       duration = 40 },
+  [17389] = { name = "Faerie Fire",       duration = 40 },
+  [16857] = { name = "Faerie Fire",       duration = 40 },
+  [17390] = { name = "Faerie Fire",       duration = 40 },
+  [17391] = { name = "Faerie Fire",       duration = 40 },
+  [17392] = { name = "Faerie Fire",       duration = 40 },
+  -- Insect Swarm
+  [5570]  = { name = "Insect Swarm",      duration = 12 },
+  [24974] = { name = "Insect Swarm",      duration = 12 },
+  [24975] = { name = "Insect Swarm",      duration = 12 },
+  [24976] = { name = "Insect Swarm",      duration = 18 },
+  [24977] = { name = "Insect Swarm",      duration = 18 },
+  -- Moonfire
+  [8921]  = { name = "Moonfire",          duration = 9  },
+  [8924]  = { name = "Moonfire",          duration = 12 },
+  [8925]  = { name = "Moonfire",          duration = 12 },
+  [8926]  = { name = "Moonfire",          duration = 12 },
+  [8927]  = { name = "Moonfire",          duration = 12 },
+  [8928]  = { name = "Moonfire",          duration = 12 },
+  [8929]  = { name = "Moonfire",          duration = 12 },
+  [9833]  = { name = "Moonfire",          duration = 12 },
+  [9834]  = { name = "Moonfire",          duration = 12 },
+  [9835]  = { name = "Moonfire",          duration = 12 },
+  -- Rake
+  [1822]  = { name = "Rake",              duration = 9,  combopointAbility = true },
+  [1823]  = { name = "Rake",              duration = 9,  combopointAbility = true },
+  [1824]  = { name = "Rake",              duration = 9,  combopointAbility = true },
+  [9904]  = { name = "Rake",              duration = 9,  combopointAbility = true },
+  -- Rip
+  [1079]  = { name = "Rip",              duration = 8,  combopointAbility = true },
+  [9492]  = { name = "Rip",              duration = 8,  combopointAbility = true },
+  [9493]  = { name = "Rip",              duration = 8,  combopointAbility = true },
+  [9752]  = { name = "Rip",              duration = 8,  combopointAbility = true },
+  [9894]  = { name = "Rip",              duration = 8,  combopointAbility = true },
+  [9896]  = { name = "Rip",              duration = 8,  combopointAbility = true },
+  -- Bash
+  [5211]  = { name = "Bash",             duration = 2  },
+  [6798]  = { name = "Bash",             duration = 3  },
+  [8983]  = { name = "Bash",             duration = 4  },
+  -- Demoralizing Roar
+  [99]    = { name = "Demoralizing Roar", duration = 30 },
+  [1735]  = { name = "Demoralizing Roar", duration = 30 },
+  [9490]  = { name = "Demoralizing Roar", duration = 30 },
+  [9747]  = { name = "Demoralizing Roar", duration = 30 },
+  [9898]  = { name = "Demoralizing Roar", duration = 30 },
+
+  -- WARLOCK
+  -- Corruption
+  [172]   = { name = "Corruption",        duration = 12 },
+  [6222]  = { name = "Corruption",        duration = 15 },
+  [6223]  = { name = "Corruption",        duration = 18 },
+  [7648]  = { name = "Corruption",        duration = 18 },
+  [11671] = { name = "Corruption",        duration = 18 },
+  [11672] = { name = "Corruption",        duration = 18 },
+  [25311] = { name = "Corruption",        duration = 18 },
+  -- Curse of Agony
+  [980]   = { name = "Curse of Agony",    duration = 24 },
+  [1014]  = { name = "Curse of Agony",    duration = 24 },
+  [6217]  = { name = "Curse of Agony",    duration = 24 },
+  [11711] = { name = "Curse of Agony",    duration = 24 },
+  [11712] = { name = "Curse of Agony",    duration = 24 },
+  [11713] = { name = "Curse of Agony",    duration = 24 },
+  -- Siphon Life
+  [18265] = { name = "Siphon Life",       duration = 30 },
+  [18879] = { name = "Siphon Life",       duration = 30 },
+  [18880] = { name = "Siphon Life",       duration = 30 },
+  [18881] = { name = "Siphon Life",       duration = 30 },
+  -- Curse of Doom
+  [603]   = { name = "Curse of Doom",     duration = 60 },
+  -- Curse of Recklessness
+  [704]   = { name = "Curse of Recklessness", duration = 120 },
+  [7658]  = { name = "Curse of Recklessness", duration = 120 },
+  [7659]  = { name = "Curse of Recklessness", duration = 120 },
+  [11717] = { name = "Curse of Recklessness", duration = 120 },
+  -- Curse of Shadow
+  [17862] = { name = "Curse of Shadow",   duration = 300 },
+  [17937] = { name = "Curse of Shadow",   duration = 300 },
+  -- Curse of the Elements
+  [1490]  = { name = "Curse of the Elements", duration = 300 },
+  [11721] = { name = "Curse of the Elements", duration = 300 },
+  [11722] = { name = "Curse of the Elements", duration = 300 },
+  -- Curse of Tongues
+  [1714]  = { name = "Curse of Tongues",  duration = 30 },
+  [11719] = { name = "Curse of Tongues",  duration = 30 },
+  -- Curse of Weakness
+  [702]   = { name = "Curse of Weakness", duration = 120 },
+  [1108]  = { name = "Curse of Weakness", duration = 120 },
+  [6205]  = { name = "Curse of Weakness", duration = 120 },
+  [7646]  = { name = "Curse of Weakness", duration = 120 },
+  [11707] = { name = "Curse of Weakness", duration = 120 },
+  [11708] = { name = "Curse of Weakness", duration = 120 },
+  -- Curse of Exhaustion
+  [18223] = { name = "Curse of Exhaustion", duration = 12 },
+  -- Immolate
+  [348]   = { name = "Immolate",          duration = 15 },
+  [707]   = { name = "Immolate",          duration = 15 },
+  [1094]  = { name = "Immolate",          duration = 15 },
+  [2941]  = { name = "Immolate",          duration = 15 },
+  [11665] = { name = "Immolate",          duration = 15 },
+  [11667] = { name = "Immolate",          duration = 15 },
+  [11668] = { name = "Immolate",          duration = 15 },
+  [25309] = { name = "Immolate",          duration = 15 },
+  -- Fear
+  [5782]  = { name = "Fear",              duration = 10 },
+  [6213]  = { name = "Fear",              duration = 15 },
+  [6215]  = { name = "Fear",              duration = 20 },
+  -- Banish
+  [710]   = { name = "Banish",            duration = 20 },
+  [18647] = { name = "Banish",            duration = 30 },
+
+  -- PRIEST
+  -- Shadow Word: Pain
+  [589]   = { name = "Shadow Word: Pain", duration = 24 },
+  [594]   = { name = "Shadow Word: Pain", duration = 24 },
+  [970]   = { name = "Shadow Word: Pain", duration = 24 },
+  [992]   = { name = "Shadow Word: Pain", duration = 24 },
+  [2767]  = { name = "Shadow Word: Pain", duration = 24 },
+  [10892] = { name = "Shadow Word: Pain", duration = 24 },
+  [10893] = { name = "Shadow Word: Pain", duration = 24 },
+  [10894] = { name = "Shadow Word: Pain", duration = 24 },
+  -- Devouring Plague
+  [2944]  = { name = "Devouring Plague",  duration = 24 },
+  [19276] = { name = "Devouring Plague",  duration = 24 },
+  [19277] = { name = "Devouring Plague",  duration = 24 },
+  [19278] = { name = "Devouring Plague",  duration = 24 },
+  [19279] = { name = "Devouring Plague",  duration = 24 },
+  [19280] = { name = "Devouring Plague",  duration = 24 },
+  -- Mind Control
+  [605]   = { name = "Mind Control",      duration = 60 },
+  [10911] = { name = "Mind Control",      duration = 30 },
+  [10912] = { name = "Mind Control",      duration = 30 },
+  -- Vampiric Embrace
+  [15286] = { name = "Vampiric Embrace",  duration = 60 },
+
+  -- ROGUE
+  -- Garrote
+  [703]   = { name = "Garrote",           duration = 18 },
+  [8631]  = { name = "Garrote",           duration = 18 },
+  [8632]  = { name = "Garrote",           duration = 18 },
+  [8633]  = { name = "Garrote",           duration = 18 },
+  [11289] = { name = "Garrote",           duration = 18 },
+  [11290] = { name = "Garrote",           duration = 18 },
+  -- Rupture
+  [1943]  = { name = "Rupture",           duration = 6,  combopointAbility = true },
+  [8639]  = { name = "Rupture",           duration = 8,  combopointAbility = true },
+  [8640]  = { name = "Rupture",           duration = 10, combopointAbility = true },
+  [11273] = { name = "Rupture",           duration = 12, combopointAbility = true },
+  [11274] = { name = "Rupture",           duration = 14, combopointAbility = true },
+  [11275] = { name = "Rupture",           duration = 16, combopointAbility = true },
+  -- Kidney Shot
+  [408]   = { name = "Kidney Shot",       duration = 2,  combopointAbility = true },
+  [8643]  = { name = "Kidney Shot",       duration = 2,  combopointAbility = true },
+  -- Deadly Poison
+  [2818]  = { name = "Deadly Poison",     duration = 12 },
+  [2819]  = { name = "Deadly Poison",     duration = 12 },
+  [11353] = { name = "Deadly Poison",     duration = 12 },
+  [11354] = { name = "Deadly Poison",     duration = 12 },
+  [25349] = { name = "Deadly Poison",     duration = 12 },
+  -- Hemorrhage
+  [16511] = { name = "Hemorrhage",        duration = 15 },
+  -- Blind
+  [2094]  = { name = "Blind",             duration = 10 },
+  [21060] = { name = "Blind",             duration = 10 },
+  -- Sap
+  [6770]  = { name = "Sap",               duration = 25 },
+  [2070]  = { name = "Sap",               duration = 35 },
+  [11297] = { name = "Sap",               duration = 45 },
+
+  -- SHAMAN
+  -- Flame Shock
+  [8050]  = { name = "Flame Shock",       duration = 12 },
+  [8052]  = { name = "Flame Shock",       duration = 12 },
+  [8053]  = { name = "Flame Shock",       duration = 12 },
+  [10447] = { name = "Flame Shock",       duration = 12 },
+  [10448] = { name = "Flame Shock",       duration = 12 },
+  [29228] = { name = "Flame Shock",       duration = 12 },
+
+  -- WARRIOR
+  -- Rend
+  [772]   = { name = "Rend",              duration = 9  },
+  [6546]  = { name = "Rend",              duration = 12 },
+  [6547]  = { name = "Rend",              duration = 15 },
+  [6548]  = { name = "Rend",              duration = 18 },
+  [11572] = { name = "Rend",              duration = 21 },
+  [11573] = { name = "Rend",              duration = 21 },
+  [11574] = { name = "Rend",              duration = 21 },
+
+  -- HUNTER
+  -- Serpent Sting
+  [1978]  = { name = "Serpent Sting",     duration = 15 },
+  [13549] = { name = "Serpent Sting",     duration = 15 },
+  [13550] = { name = "Serpent Sting",     duration = 15 },
+  [13551] = { name = "Serpent Sting",     duration = 15 },
+  [13552] = { name = "Serpent Sting",     duration = 15 },
+  [13553] = { name = "Serpent Sting",     duration = 15 },
+  [13554] = { name = "Serpent Sting",     duration = 15 },
+  [13555] = { name = "Serpent Sting",     duration = 15 },
+  [25295] = { name = "Serpent Sting",     duration = 15 },
+  -- Scorpid Sting
+  [3043]  = { name = "Scorpid Sting",     duration = 20 },
+  [14275] = { name = "Scorpid Sting",     duration = 20 },
+  [14276] = { name = "Scorpid Sting",     duration = 20 },
+  [14277] = { name = "Scorpid Sting",     duration = 20 },
+  -- Viper Sting
+  [3034]  = { name = "Viper Sting",       duration = 8  },
+  [14279] = { name = "Viper Sting",       duration = 8  },
+  [14280] = { name = "Viper Sting",       duration = 8  },
+  -- Wyvern Sting
+  [19386] = { name = "Wyvern Sting",      duration = 12 },
+  [24132] = { name = "Wyvern Sting",      duration = 12 },
+  [24133] = { name = "Wyvern Sting",      duration = 12 },
+  -- Concussive Shot
+  [5116]  = { name = "Concussive Shot",   duration = 4  },
+  -- Hunter's Mark
+  [1130]  = { name = "Hunter's Mark",     duration = 120 },
+  [14323] = { name = "Hunter's Mark",     duration = 120 },
+  [14324] = { name = "Hunter's Mark",     duration = 120 },
+  [14325] = { name = "Hunter's Mark",     duration = 120 },
+  -- Wing Clip
+  [2974]  = { name = "Wing Clip",         duration = 10 },
+  [14267] = { name = "Wing Clip",         duration = 10 },
+  [14268] = { name = "Wing Clip",         duration = 10 },
+}
+
+function lib:GetDurationBySpellId(spellId, capturedCP)
+  local data = spellIdDebuffs[spellId]
+  if not data then return nil end
+  local duration = data.duration
+  if data.combopointAbility then
+    local cp = capturedCP or GetComboPoints() or 0
+    local cpData = combopointSpells[data.name]
+    if cpData then
+      duration = cpData.base + cp * cpData.perCP
+    end
+  end
+  return duration, data.name
+end
+
+function lib:IsTrackedDebuffSpell(spellId)
+  return spellIdDebuffs[spellId] ~= nil
+end
+
 function lib:IsComboPointAbility(spellName)
   if not spellName then return false end
   return combopointSpells[spellName] ~= nil
