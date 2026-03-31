@@ -616,6 +616,22 @@ end
 
 local function CleanupOutOfRangeUnits()
   local now = GetTime()
+  -- Cleanup expired pending entries (every 1s)
+  if not pfUI.libdebuff_last_pending_cleanup then pfUI.libdebuff_last_pending_cleanup = 0 end
+  if now - pfUI.libdebuff_last_pending_cleanup >= 1 then
+    pfUI.libdebuff_last_pending_cleanup = now
+    for guid, spells in pairs(ownDebuffs) do
+      for spellName, data in pairs(spells) do
+        if data.pending then
+          local timeleft = (data.startTime + data.duration) - now
+          if timeleft < -2 then
+            spells[spellName] = nil
+          end
+        end
+      end
+    end
+  end
+
   if now - lastRangeCheck < 10 then return end
   lastRangeCheck = now
   
@@ -959,15 +975,29 @@ function libdebuff:UnitOwnDebuff(unit, id)
       local sortedDebuffs = {}
       local now = GetTime()
       
+      local toRemove = nil
       for spellName, data in pairs(ownDebuffs[guid]) do
         local timeleft = (data.startTime + data.duration) - now
-        if timeleft > -1 then  -- Grace period
+        if timeleft > 0 then
           local count = table.getn(sortedDebuffs) + 1
           sortedDebuffs[count] = {
             spellName = spellName,
             data = data,
             timeleft = timeleft
           }
+        elseif data.pending then
+          if timeleft < -2 then
+            toRemove = toRemove or {}
+            toRemove[spellName] = true
+          end
+        else
+          toRemove = toRemove or {}
+          toRemove[spellName] = true
+        end
+      end
+      if toRemove then
+        for spellName in pairs(toRemove) do
+          ownDebuffs[guid][spellName] = nil
         end
       end
       
@@ -1111,29 +1141,41 @@ if hasNampower then
       local refreshTime = GetTime()
       local myGuid = GetPlayerGUID()
       
-      -- Refresh in ownDebuffs
+      -- Refresh in ownDebuffs - only if timer still active
       if ownDebuffs[guid] then
         if ownDebuffs[guid]["Rip"] then
-          ownDebuffs[guid]["Rip"].startTime = refreshTime
-          if debugStats.enabled then
-            DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rip refreshed (CP detected)")
+          local timeleft = (ownDebuffs[guid]["Rip"].startTime + ownDebuffs[guid]["Rip"].duration) - refreshTime
+          if timeleft > 0 then
+            ownDebuffs[guid]["Rip"].startTime = refreshTime
+            if debugStats.enabled then
+              DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rip refreshed (CP detected)")
+            end
           end
         end
         if ownDebuffs[guid]["Rake"] then
-          ownDebuffs[guid]["Rake"].startTime = refreshTime
-          if debugStats.enabled then
-            DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rake refreshed (CP detected)")
+          local timeleft = (ownDebuffs[guid]["Rake"].startTime + ownDebuffs[guid]["Rake"].duration) - refreshTime
+          if timeleft > 0 then
+            ownDebuffs[guid]["Rake"].startTime = refreshTime
+            if debugStats.enabled then
+              DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[CARNAGE]|r Rake refreshed (CP detected)")
+            end
           end
         end
       end
       
-      -- Refresh in allAuraCasts
+      -- Refresh in allAuraCasts - only if timer still active
       if allAuraCasts[guid] then
         if allAuraCasts[guid]["Rip"] and allAuraCasts[guid]["Rip"][myGuid] then
-          allAuraCasts[guid]["Rip"][myGuid].startTime = refreshTime
+          local d = allAuraCasts[guid]["Rip"][myGuid]
+          if (d.startTime + d.duration) > refreshTime then
+            d.startTime = refreshTime
+          end
         end
         if allAuraCasts[guid]["Rake"] and allAuraCasts[guid]["Rake"][myGuid] then
-          allAuraCasts[guid]["Rake"][myGuid].startTime = refreshTime
+          local d = allAuraCasts[guid]["Rake"][myGuid]
+          if (d.startTime + d.duration) > refreshTime then
+            d.startTime = refreshTime
+          end
         end
       end
       
@@ -1316,7 +1358,7 @@ if hasNampower then
       if numMissed > 0 or numHit == 0 then return end
 
       local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
-      local spellRankString
+      local spellRankString = GetSpellRecField and GetSpellRecField(spellId, "rank")
       if not spellName then return end
       
       local castRank = 0
@@ -1332,6 +1374,41 @@ if hasNampower then
           rank = castRank,
           time = GetTime()
         }
+      end
+
+      -- selfdebuff mode: write ownDebuffs immediately on confirmed hit
+      -- so buffwatch shows our debuffs even when over the 16 debuff cap
+      if event == "SPELL_GO_SELF" and targetGuid and not isNullTarget then
+        local selfdebuffMode = pfUI_config and pfUI_config.buffbar and
+          pfUI_config.buffbar.tdebuff and pfUI_config.buffbar.tdebuff.selfdebuff == "1"
+        if selfdebuffMode then
+          local myGuid2 = GetPlayerGUID()
+          if casterGuid == myGuid2 then
+            local duration = libdebuff:GetDuration(spellName, castRank) or 0
+            if duration > 0 then
+              local texture = libdebuff:GetSpellIcon(spellId)
+              ownDebuffs[targetGuid] = ownDebuffs[targetGuid] or {}
+              -- Downrank protection
+              local existing = ownDebuffs[targetGuid][spellName]
+              local blocked = false
+              if existing and existing.rank and castRank > 0 and existing.rank > castRank then
+                local existingTimeleft = (existing.startTime + existing.duration) - GetTime()
+                if existingTimeleft > 0 then blocked = true end
+              end
+              if not blocked then
+                ownDebuffs[targetGuid][spellName] = {
+                  startTime = GetTime(),
+                  duration  = duration,
+                  texture   = texture,
+                  rank      = castRank,
+                  spellId   = spellId,
+                  stacks    = 1,
+                  pending   = true,
+                }
+              end
+            end
+          end
+        end
       end
       
       -- Store rank for our casts

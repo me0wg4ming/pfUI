@@ -2341,7 +2341,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         CreateConfig(U[c], T["Debuffs Per Row"], C.unitframes[c], "debuffperrow")
 
         if c ~= "player" then
-          CreateConfig(U[c], T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.unitframes[c], "selfdebuff", "checkbox")
         end
 
         CreateConfig(U[c], T["Combat/Aggro Indicators"], nil, nil, "header")
@@ -2526,7 +2525,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Color Debuff Stacks"], C.buffbar.tdebuff, "colorstacks", "checkbox")
       CreateConfig(nil, T["Buffbar Width"], C.buffbar.tdebuff, "width")
       CreateConfig(nil, T["Buffbar Height"], C.buffbar.tdebuff, "height")
-      CreateConfig(nil, T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.buffbar.tdebuff, "selfdebuff", "checkbox")
+      CreateConfig(nil, T["Show Only Own Debuffs"], C.buffbar.tdebuff, "selfdebuff", "checkbox")
       CreateConfig(nil, T["Filter Mode"], C.buffbar.tdebuff, "filter", "dropdown", pfUI.gui.dropdowns.buffbarfilter)
       CreateConfig(nil, T["Time Threshold"], C.buffbar.tdebuff, "threshold")
       CreateConfig(nil, T["Whitelist"], C.buffbar.tdebuff, "whitelist", "list")
@@ -2906,7 +2905,6 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Show Timer Text"], C.nameplates, "debufftext", "checkbox")
       CreateConfig(Reload, T["Show Timer Animation"], C.nameplates, "debuffanim", "checkbox")
 
-      CreateConfig(U["nameplates"], T["Only Show Own Debuffs (|cffffaaaaExperimental|r)"], C.nameplates, "selfdebuff", "checkbox")
       CreateConfig(U["nameplates"], T["Filter Mode"], C.nameplates.debuffs, "filter", "dropdown", pfUI.gui.dropdowns.buffbarfilter)
       CreateConfig(U["nameplates"], T["Blacklist"], C.nameplates.debuffs, "blacklist", "list")
       CreateConfig(U["nameplates"], T["Whitelist"], C.nameplates.debuffs, "whitelist", "list")
