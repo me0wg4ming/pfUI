@@ -391,7 +391,6 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     if not self.debuffcache then self.debuffcache = {} end
     if not libdebuff then return end
 
-    local selfdebuff = unitstr and C.nameplates.selfdebuff == "1"
     local now = GetTime()
 
     -- Clear existing cache slots
@@ -405,11 +404,11 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     if unitstr and libdebuff.IterDebuffs and GetUnitGUID then
       local id = 0
       libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
-        if not effect or not timeleft or timeleft <= 0 then return end
+        if not effect or not texture then return end
         id = id + 1
         if id > 16 then return end
-        local start = now - ( (duration or 0) - ( timeleft or 0) )
-        local stop = now + timeleft
+        local stop = (timeleft and timeleft > 0) and (now + timeleft) or nil
+        local start = stop and (stop - (duration or 0)) or now
         self.debuffcache[id] = self.debuffcache[id] or {}
         self.debuffcache[id].effect = effect
         self.debuffcache[id].texture = texture
@@ -422,11 +421,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     else
       for id = 1, 16 do
         local effect, _, texture, stacks, _, duration, timeleft
-        if selfdebuff then
-          effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, id)
-        else
-          effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
-        end
+        effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
         if effect and timeleft and timeleft > 0 then
           local start = now - ( (duration or 0) - ( timeleft or 0) )
           local stop = now + timeleft
@@ -1321,11 +1316,7 @@ end
       elseif unitstr and libdebuff then
         for i = 1, 16 do
           local effect, rank, texture, stacks, dtype, duration, timeleft
-          if C.nameplates.selfdebuff == "1" then
-            effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, i)
-          else
-            effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
-          end
+          effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
           if effect then
             debuffCount = debuffCount + 1
             local b = debuffDisplayBuf[debuffCount]

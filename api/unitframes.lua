@@ -284,20 +284,6 @@ local function TargetDebuffOnUpdate()
   -- Do NOT call UnitDebuff(unit, this.id) here -- this.id is a fixed index that no
   -- longer maps correctly to aura slots after IterDebuffs took over display order.
   local parent = this:GetParent()
-  local selfdebuff = parent.config and parent.config.selfdebuff == "1"
-
-  if selfdebuff and libdebuff then
-    -- selfdebuff mode still uses UnitOwnDebuff (slot-indexed, stable)
-    local unitstr = parent.label .. (parent.id or "")
-    local name, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitOwnDebuff(unitstr, this.id)
-    if duration and timeleft then
-      CooldownFrame_SetTimer(this.cd, GetTime() + timeleft - duration, duration, 1)
-    else
-      CooldownFrame_SetTimer(this.cd, 0, 0, 0)
-    end
-    return
-  end
-
   -- IterDebuffs mode: timer data already set on frame, nothing to do here
   -- (CooldownFrame handles the sweep animation itself)
 end
@@ -2535,7 +2521,6 @@ function pfUI.uf:RefreshUnit(unit, component)
     local texture, stacks, dtype
     local perrow = unit.config.debuffperrow
     local bperrow = unit.config.buffperrow
-    local selfdebuff = unit.config.selfdebuff
 
     local invert_h, invert_v, af
     if unit.config.debuffs == "TOPLEFT" then
@@ -2593,23 +2578,6 @@ function pfUI.uf:RefreshUnit(unit, component)
         unit.debuffs[i].np_spellName = nil
         unit.debuffs[i].np_dtype     = nil
         unit.debuffs[i]:Hide()
-      elseif selfdebuff == "1" then
-        local name, rank, tex, st, dt, dur, tl, caster, spellId = libdebuff:UnitOwnDebuff(unitstr, i)
-        unit.debuffs[i].texture:SetTexture(tex)
-        local r,g,b = DebuffTypeColor.none.r,DebuffTypeColor.none.g,DebuffTypeColor.none.b
-        if dt and DebuffTypeColor[dt] then r,g,b = DebuffTypeColor[dt].r,DebuffTypeColor[dt].g,DebuffTypeColor[dt].b end
-        unit.debuffs[i].backdrop:SetBackdropBorderColor(r,g,b,1)
-        unit.debuffs[i].np_spellId   = spellId
-        unit.debuffs[i].np_auraSlot  = nil
-        unit.debuffs[i].np_spellName = name
-        unit.debuffs[i].np_dtype     = dt
-        if tex then
-          unit.debuffs[i]:Show()
-          if dur and tl then CooldownFrame_SetTimer(unit.debuffs[i].cd, GetTime() + tl - dur, dur, 1) end
-          if (st or 0) > 1 then unit.debuffs[i].stacks:SetText(st) else unit.debuffs[i].stacks:SetText("") end
-        else
-          unit.debuffs[i]:Hide()
-        end
       else
         -- Clear np_ fields before IterDebuffs fills them to avoid stale tooltip data
         unit.debuffs[i].np_spellId   = nil
@@ -2621,7 +2589,7 @@ function pfUI.uf:RefreshUnit(unit, component)
     end
 
     -- IterDebuffs: fill debuff frames directly from stable aura slots
-    if selfdebuff ~= "1" and libdebuff and libdebuff.IterDebuffs then
+    if libdebuff and libdebuff.IterDebuffs then
       local frameIdx = 0
       local debuffLimit = tonumber(unit.config.debufflimit) or 16
       local iterGuid = GetUnitGUID and GetUnitGUID(unitstr)
@@ -2889,10 +2857,8 @@ function pfUI.uf:RefreshUnit(unit, component)
       end
 
       if libdebuff and libdebuff.IterDebuffs then
-        local selfOnly = unit.config.selfdebuff == "1"
         libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, spellName, texture, count, dt, duration, timeleft, caster, isOurs)
           if not texture or string.find(texture, "QuestionMark") then return end
-          if selfOnly and not isOurs then return end
           if not spellName then return end
           local start = timeleft and duration and (GetTime() + timeleft - duration) or nil
           for _, filter in pairs(unit.indicator_custom) do
