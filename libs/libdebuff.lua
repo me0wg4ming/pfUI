@@ -482,18 +482,17 @@ local slotMapCache = pfUI.libdebuff_slotmapcache
 -- unitframes + nameplates + buffwatch all react to the same fire_unit_updated.
 local auraFC = {}
 
-local function GetCachedAuraField(guid)
-  local now = GetTime()
-  local c = auraFC[guid]
-  if c and c[4] == now and c[5] then
-    return c[1], c[2], c[3]
+-- Public API: flush aura cache for a guid (call on target swap so stale data is not shown)
+pfUI.libdebuff_flush_aura_cache = function(guid)
+  if guid and auraFC[guid] then
+    auraFC[guid] = nil
   end
+end
+
+local function GetCachedAuraField(guid)
   local auras     = GetUnitField(guid, "aura")
   local auraApps  = GetUnitField(guid, "auraApplications")
   local auraFlags = GetUnitField(guid, "auraFlags")
-  if not auraFC[guid] then auraFC[guid] = {} end
-  local e = auraFC[guid]
-  e[1], e[2], e[3], e[4], e[5] = auras, auraApps, auraFlags, now, true
   return auras, auraApps, auraFlags
 end
 
@@ -1083,7 +1082,12 @@ function libdebuff:IterDebuffs(unit, fn)
           end
 
           count = count + 1
-          fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
+          -- Skip debuffs with no timer and no ownership - likely Nampower stale data after target swap
+          if duration == nil and timeleft == -1 and not ownership then
+            -- do nothing
+          else
+            fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
+          end
         end
       end
     end

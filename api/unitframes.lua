@@ -1317,6 +1317,31 @@ function pfUI.uf.OnEvent()
     if pfUI.uf.ClearGuidTracking then pfUI.uf.ClearGuidTracking() end
   elseif this.label == "target" and event == "PLAYER_TARGET_CHANGED" and not pfScanActive == true then
     this.update_full = true
+    this.lastKnownTargetGuid = nil
+    -- immediately hide and clear debuff frames to avoid showing stale debuffs from previous target
+    if this.debuffs then
+      for i, frame in pairs(this.debuffs) do
+        if frame then
+          frame:Hide()
+          frame.np_spellId      = nil
+          frame.np_auraSlot     = nil
+          frame.np_spellName    = nil
+          frame.np_dtype        = nil
+          frame.cacheName       = nil
+          frame.np_last_spellId = nil
+          frame.np_last_start   = nil
+          frame.libdebuff_start = nil
+          frame.libdebuff_dur   = nil
+          if frame.cd then CooldownFrame_SetTimer(frame.cd, 0, 0, 0) end
+        end
+      end
+    end
+    -- immediately refresh auras from new target - but only once per swap
+    local newGuid = GetUnitGUID and GetUnitGUID("target")
+    if pfUI.libdebuff_last_target_refresh ~= tostring(newGuid) then
+      pfUI.libdebuff_last_target_refresh = tostring(newGuid)
+      pfUI.uf:RefreshUnit(this, "aura")
+    end
     -- immediately update raid icon to avoid delay on target swap
     if this.raidIcon and this.config and this.config.raidicon == "1" then
       local raidIcon = UnitName("target") and GetRaidTargetIndex("target")
@@ -2595,11 +2620,12 @@ function pfUI.uf:RefreshUnit(unit, component)
       end
     end
 
-    -- IterDebuffs: fill debuff frames directly from stable aura slots (no scanner, no RebuildDebuffSlots)
-    local usedIterDebuffs = false
+    -- IterDebuffs: fill debuff frames directly from stable aura slots
     if selfdebuff ~= "1" and libdebuff and libdebuff.IterDebuffs then
       local frameIdx = 0
       local debuffLimit = tonumber(unit.config.debufflimit) or 16
+      local iterGuid = GetUnitGUID and GetUnitGUID(unitstr)
+      if iterGuid then
       libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, spellName, tex, st, dt, dur, tl, caster, isOurs)
         -- Skip spells with no icon or QuestionMark (unknown server-side spells)
         if not tex or string.find(tex, "QuestionMark") then return end
@@ -2645,26 +2671,9 @@ function pfUI.uf:RefreshUnit(unit, component)
       end
       -- Always mark as used: IterDebuffs ran, don't fall through to Blizzard fallback
       -- (frameIdx=0 = no debuffs on unit, not out of range)
-      usedIterDebuffs = true
+      end -- iterGuid check
     end
 
-    -- Fallback to Blizzard UnitDebuff when out of range (IterDebuffs returned nothing)
-    if selfdebuff ~= "1" and unit.label ~= "player" and not usedIterDebuffs then
-      for i=1, tonumber(unit.config.debufflimit) or 16 do
-        if not unit.debuffs[i] then break end
-        local tex, stacks, dtype = UnitDebuff(unitstr, i)
-        unit.debuffs[i].texture:SetTexture(tex)
-        local r,g,b = DebuffTypeColor.none.r,DebuffTypeColor.none.g,DebuffTypeColor.none.b
-        if dtype and DebuffTypeColor[dtype] then r,g,b = DebuffTypeColor[dtype].r,DebuffTypeColor[dtype].g,DebuffTypeColor[dtype].b end
-        unit.debuffs[i].backdrop:SetBackdropBorderColor(r,g,b,1)
-        if tex then
-          unit.debuffs[i]:Show()
-          if (stacks or 0) > 1 then unit.debuffs[i].stacks:SetText(stacks) else unit.debuffs[i].stacks:SetText("") end
-        else
-          unit.debuffs[i]:Hide()
-        end
-      end
-    end
   end
 
   -- indicators
