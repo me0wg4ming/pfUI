@@ -1051,7 +1051,8 @@ function pfUI.uf:UpdateConfig()
   f.raidIcon:SetWidth(f.config.raidiconsize)
   f.raidIcon:SetHeight(f.config.raidiconsize)
   f.raidIcon:SetPoint("CENTER", f, f.config.raidiconalign, f.config.raidiconoffx, f.config.raidiconoffy)
-  f.raidIcon.texture:SetTexture(pfUI.media["img:raidicons"])
+  local raidIconTex = C.unitframes.blizzard_raidicons == "1" and "Interface\\TargetingFrame\\UI-RaidTargetingIcons" or pfUI.media["img:raidicons"]
+  f.raidIcon.texture:SetTexture(raidIconTex)
   f.raidIcon.texture:SetAllPoints(f.raidIcon)
   f.raidIcon:Hide()
 

@@ -861,6 +861,9 @@ end
 
     nameplate.raidicon:SetParent(nameplate.health)
     nameplate.raidicon:SetDrawLayer("OVERLAY")
+    if C.unitframes.blizzard_raidicons ~= "1" then
+      nameplate.raidicon:SetTexture(pfUI.media["img:raidicons"])
+    end
 
     nameplate.totem = CreateFrame("Frame", nil, nameplate)
     nameplate.totem:SetPoint("CENTER", nameplate, "CENTER", 0, 0)
