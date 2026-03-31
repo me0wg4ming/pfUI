@@ -751,8 +751,8 @@ nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     nameplate.level = nameplate:CreateFontString(nil, "OVERLAY")
     nameplate.level:SetPoint("RIGHT", nameplate.health, "LEFT", -3, 0)
 
-    nameplate.raidicon:SetParent(plate)
-    nameplate.raidicon:SetDrawLayer("OVERLAY")
+    nameplate.raidicon:SetParent(nameplate.health)
+    nameplate.raidicon:SetDrawLayer("OVERLAY", 7)
     if C.unitframes.blizzard_raidicons ~= "1" then
       nameplate.raidicon:SetTexture(pfUI.media["img:raidicons"])
     end
