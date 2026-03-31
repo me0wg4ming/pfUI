@@ -1592,12 +1592,18 @@ end
       
       for _, spellName in ipairs(affectedSpells) do
         if ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName] then
-          ownDebuffs[targetGuid][spellName].startTime = refreshTime
-          if debugStats.enabled then
-            local d = ownDebuffs[targetGuid][spellName]
+          local d = ownDebuffs[targetGuid][spellName]
+          local timeleft = (d.startTime + d.duration) - refreshTime
+          if timeleft > 0 then
+            d.startTime = refreshTime
+            if debugStats.enabled then
+              DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                "|cff00ffff[CARNAGE]|r ownDebuffs[%s] refreshed startTime=%.3f dur=%.1f",
+                spellName, refreshTime, d.duration or 0))
+            end
+          elseif debugStats.enabled then
             DEFAULT_CHAT_FRAME:AddMessage(string.format(
-              "|cff00ffff[CARNAGE]|r ownDebuffs[%s] refreshed startTime=%.3f dur=%.1f",
-              spellName, refreshTime, d.duration or 0))
+              "|cff00ffff[CARNAGE]|r ownDebuffs[%s] EXPIRED - skip refresh", spellName))
           end
         elseif debugStats.enabled then
           DEFAULT_CHAT_FRAME:AddMessage(string.format(
@@ -1610,11 +1616,14 @@ end
             if ownership.spellName == spellName and ownership.isOurs then
               local st = slotTimers[targetGuid][auraSlot]
               if st then
-                st.startTime = refreshTime
-                if debugStats.enabled then
-                  DEFAULT_CHAT_FRAME:AddMessage(string.format(
-                    "|cff00ffff[CARNAGE slotTimers]|r aura=%d %s refreshed dur=%.1f",
-                    auraSlot, spellName, st.duration or 0))
+                local timeleft = (st.startTime + st.duration) - refreshTime
+                if timeleft > 0 then
+                  st.startTime = refreshTime
+                  if debugStats.enabled then
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                      "|cff00ffff[CARNAGE slotTimers]|r aura=%d %s refreshed dur=%.1f",
+                      auraSlot, spellName, st.duration or 0))
+                  end
                 end
               end
               break
