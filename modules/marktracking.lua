@@ -140,7 +140,8 @@ pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
     row.icon:SetWidth(ROW_HEIGHT)
     row.icon:SetHeight(ROW_HEIGHT)
     row.icon:SetPoint("LEFT", row, "LEFT", 1, 0)
-    row.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+    local markTex = C.unitframes.blizzard_raidicons == "1" and "Interface\\TargetingFrame\\UI-RaidTargetingIcons" or pfUI.media["img:raidicons"]
+    row.icon:SetTexture(markTex)
     SetRaidTargetIconTexture(row.icon, i)
 
     -- portrait (right side)

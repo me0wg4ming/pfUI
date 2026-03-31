@@ -2076,6 +2076,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(nil, T["Enable Energy Ticks"], C.unitframes.player, "energy", "checkbox")
       CreateConfig(nil, T["Enable Mana Ticks"], C.unitframes.player, "manatick", "checkbox")
       CreateConfig(nil, T["Detect Enemy Buffs"], C.unitframes, "buffdetect", "checkbox", nil, nil, nil, nil, "vanilla" )
+      CreateConfig(nil, T["Raid Mark Icon Style"], C.unitframes, "blizzard_raidicons", "dropdown", function() return {"1:Original Blizzard", "0:pfUI Design"} end)
 
       CreateConfig(nil, T["Swing Timer"], nil, nil, "header")
       CreateConfig(nil, T["Swing Timer Width"], C.unitframes, "swingtimerwidth")
