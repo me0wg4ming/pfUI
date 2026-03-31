@@ -130,17 +130,67 @@ pfUI:RegisterSkin("Turtle LFT", "vanilla", function ()
   CreateBackdropShadow(LFTRoleCheckFrame)
   EnableMovable(LFTRoleCheckFrame)
 
+  -- Restore role icons (on BORDER layer, wiped by StripTextures)
+  local roleCheckIcons = {
+    [1] = "Interface\\FrameXML\\LFT\\images\\tank2",
+    [2] = "Interface\\FrameXML\\LFT\\images\\healer2",
+    [3] = "Interface\\FrameXML\\LFT\\images\\damage2",
+  }
+  for i = 1, 3 do
+    local icon = _G["LFTRoleCheckFrameRole" .. i .. "Icon"]
+    if icon then icon:SetTexture(roleCheckIcons[i]) end
+  end
+
   SkinButton(LFTRoleCheckFrameConfirmButton)
   SkinButton(LFTRoleCheckFrameDeclineButton)
 
   -- ============================================================
   --  LFTGroupReadyFrame (dungeon found popup)
   -- ============================================================
-  -- Use hide=false: hide=true would also hide FontStrings (instance name, role text etc.)
-  -- which LFT_GroupReadyShow sets text on but never calls :Show() on.
   StripTextures(LFTGroupReadyFrame)
   CreateBackdrop(LFTGroupReadyFrame, nil, nil, .9)
   CreateBackdropShadow(LFTGroupReadyFrame)
+
+  -- Restore dungeon background texture (updated dynamically by LFT_GroupReadyShow)
+  local readyBg = LFTGroupReadyFrame:CreateTexture(nil, "BACKGROUND")
+  readyBg:SetTexture("Interface\\FrameXML\\LFT\\images\\background\\ui-lfg-background-scarletmonastery")
+  readyBg:SetPoint("TOPLEFT", LFTGroupReadyFrame, "TOPLEFT", 10, -10)
+  readyBg:SetPoint("TOPRIGHT", LFTGroupReadyFrame, "TOPRIGHT", -10, -10)
+  readyBg:SetHeight(120)
+  LFTGroupReadyFrameBackground = readyBg
+
+  -- Separator line between background and lower section
+  local sep = LFTGroupReadyFrame:CreateTexture(nil, "ARTWORK")
+  sep:SetTexture("Interface\\FrameXML\\LFT\\images\\ui-lfg-separator")
+  sep:SetPoint("TOPLEFT", LFTGroupReadyFrame, "TOPLEFT", 10, -125)
+  sep:SetWidth(288)
+  sep:SetHeight(16)
+
+  -- Restore role icon (updated dynamically by LFT_GroupReadyShow)
+  LFTGroupReadyFrameRoleTexture:SetWidth(56)
+  LFTGroupReadyFrameRoleTexture:SetHeight(56)
+  LFTGroupReadyFrameRoleTexture:ClearAllPoints()
+  LFTGroupReadyFrameRoleTexture:SetPoint("LEFT", LFTGroupReadyFrame, "LEFT", 20, -20)
+  LFTGroupReadyFrameRoleTexture:Show()
+
+  -- Reposition text elements
+  LFTGroupReadyFrameInstanceName:ClearAllPoints()
+  LFTGroupReadyFrameInstanceName:SetPoint("TOP", LFTGroupReadyFrame, "TOP", 0, -30)
+
+  LFTGroupReadyFrameRoleText:ClearAllPoints()
+  LFTGroupReadyFrameRoleText:SetPoint("LEFT", LFTGroupReadyFrameRoleTexture, "RIGHT", 8, 5)
+
+  -- Reposition "Your Role" label
+  local regions = { LFTGroupReadyFrame:GetRegions() }
+  for _, r in pairs(regions) do
+    if r:GetObjectType() == "FontString" then
+      local t = r:GetText()
+      if t and string.find(t, "Your Role") or string.find(tostring(t), "LFT_GROUP_READY_YOUR_ROLE") then
+        r:ClearAllPoints()
+        r:SetPoint("LEFT", LFTGroupReadyFrameRoleTexture, "RIGHT", 8, -10)
+      end
+    end
+  end
 
   SkinButton(LFTGroupReadyFrameConfirmButton)
   SkinButton(LFTGroupReadyFrameDeclineButton)
