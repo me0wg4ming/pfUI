@@ -454,6 +454,7 @@ function pfUI:LoadConfig()
 
   local ufs = { "player", "target", "focus", "focustarget", "group", "grouptarget", "grouppet", "raid", "ttarget", "pet", "ptarget", "fallback", "tttarget" }
   for _, unit in pairs(ufs) do
+    pfUI:UpdateConfig("unitframes", unit,      "selfdebuff",       "0")
     pfUI:UpdateConfig("unitframes", unit,      "visible",          "1")
     pfUI:UpdateConfig("unitframes", unit,      "showPVP",          "0")
     pfUI:UpdateConfig("unitframes", unit,      "pvpiconsize",      "16" )
@@ -813,6 +814,7 @@ function pfUI:LoadConfig()
   pfUI:UpdateConfig("nameplates", nil,           "targetcastbar",    "0")
   pfUI:UpdateConfig("nameplates", nil,           "spellname",        "0")
   pfUI:UpdateConfig("nameplates", nil,           "showdebuffs",      "1")
+  pfUI:UpdateConfig("nameplates", nil,           "selfdebuff",       "0")
   pfUI:UpdateConfig("nameplates", nil,           "showdebuffs_hostile",  "1")
   pfUI:UpdateConfig("nameplates", nil,           "showdebuffs_friendly", "0")
   pfUI:UpdateConfig("nameplates", nil,           "guessdebuffs",     "1")

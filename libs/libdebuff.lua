@@ -409,11 +409,6 @@ end
 -- CORE: GetUnitField-based Slot Mapping (THE KEY INNOVATION!)
 -- ============================================================================
 
--- Cache for GetDebuffSlotMap to reduce GetUnitField calls
--- [guid] = {map, timestamp}
-local slotMapCache = {}
-local SLOT_MAP_CACHE_DURATION = 0.05  -- 50ms cache (1-2 frames)
-
 -- Dispel type mapping: SpellRec.dispel index -> Blizzard DebuffTypeColor key
 local dispelTypeMap = {
   [1] = "Magic",
@@ -428,27 +423,19 @@ local function GetDebuffSlotMap(guid)
   if not guid or not GetUnitField then
     return nil
   end
-  
-  -- Check cache first
-  local now = GetTime()
-  local cached = slotMapCache[guid]
-  if cached and cached.map and (now - cached.timestamp) < SLOT_MAP_CACHE_DURATION then
-    return cached.map
-  end
-  
+
   local auras = GetUnitField(guid, "aura")
   if not auras then return nil end
-  
-  -- Fetch stacks array (reusable reference - extract values immediately)
+
   local auraApps = GetUnitField(guid, "auraApplications")
-  
+
   if debugStats.enabled then
     debugStats.getunitfield_calls = debugStats.getunitfield_calls + 1
   end
-  
+
   local map = {}
   local displaySlot = 0
-  
+
   -- Debuff aura slots are 33-48
   for auraSlot = 33, 48 do
     local spellId = auras[auraSlot]
@@ -456,11 +443,7 @@ local function GetDebuffSlotMap(guid)
       displaySlot = displaySlot + 1
       local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       local texture = libdebuff:GetSpellIcon(spellId)
-      
-      -- Get stacks from auraApplications (0-indexed, so +1 for display)
       local stacks = (auraApps and auraApps[auraSlot] or 0) + 1
-      
-      -- Get debuff type from SpellRec DBC
       local dtype = nil
       if GetSpellRecField then
         local dispelId = GetSpellRecField(spellId, "dispel")
@@ -468,7 +451,6 @@ local function GetDebuffSlotMap(guid)
           dtype = dispelTypeMap[dispelId]
         end
       end
-      
       map[displaySlot] = {
         auraSlot = auraSlot,
         spellId = spellId,
@@ -479,14 +461,7 @@ local function GetDebuffSlotMap(guid)
       }
     end
   end
-  
-  -- Cache the result (separate from buffMap to avoid cross-invalidation)
-  if not slotMapCache[guid] then
-    slotMapCache[guid] = { timestamp = now }
-  end
-  slotMapCache[guid].map = map
-  slotMapCache[guid].timestamp = now
-  
+
   return map
 end
 
@@ -1779,7 +1754,6 @@ if hasNampower then
       local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
 
       -- Invalidate slot map cache for this GUID
-      slotMapCache[guid] = nil
       
       local spellName = GetSpellRecField and GetSpellRecField(spellId, "name")
       if not spellName then return end
@@ -1915,7 +1889,6 @@ if hasNampower then
       local auraSlot = auraSlot_0based and (auraSlot_0based + 1) or nil
 
       -- Invalidate slot map cache for this GUID
-      slotMapCache[guid] = nil
       
       local spellName = (GetSpellRecField and GetSpellRecField(spellId, "name")) or "?"
       
@@ -2006,7 +1979,6 @@ if hasNampower then
       if targetGuid and targetGuid ~= "" then
         -- Invalidate slot map cache on retarget
         -- Prevents stale slot mappings after untarget/retarget cycles
-        slotMapCache[targetGuid] = nil
         -- Cleanup expired timers for new target
         CleanupExpiredTimers(targetGuid)
       end
