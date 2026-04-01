@@ -1082,12 +1082,7 @@ function libdebuff:IterDebuffs(unit, fn)
           end
 
           count = count + 1
-          -- Skip debuffs with no timer and no ownership - likely Nampower stale data after target swap
-          if duration == nil and timeleft == -1 and not ownership then
-            -- do nothing
-          else
-            fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
-          end
+          fn(auraSlot, spellId, spellName, texture, stacks, dtype, duration, timeleft, caster, isOurs)
         end
       end
     end
