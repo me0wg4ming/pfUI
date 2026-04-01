@@ -383,8 +383,9 @@ pfUI:RegisterModule("buffwatch", "vanilla:tbc", function ()
       local spellId  = data[7]
 
       -- uuid for duration/charge tracking
-      -- No slot in uuid: slots shift when debuffs expire causing timer resets
-      local uuid = texture .. name
+      -- Include slot: Nampower aura slots are stable, slot ensures two identical debuffs
+      -- from different casters (e.g. two Moonfire) get distinct entries
+      local uuid = texture .. name .. slot
 
       frame.bars[bar] = frame.bars[bar] or CreateStatusBar(bar, frame)
       frame.bars[bar].id = slot
