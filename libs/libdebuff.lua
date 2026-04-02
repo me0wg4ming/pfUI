@@ -200,6 +200,11 @@ pfUI.libdebuff_unit_died_hooks = pfUI.libdebuff_unit_died_hooks or {}
 
 -- Callbacks fired after SPELL_CAST_EVENT is processed: fn(success, spellId, castType, targetGuid)
 pfUI.libdebuff_spell_cast_hooks = pfUI.libdebuff_spell_cast_hooks or {}
+
+-- Callbacks fired when a cast is identified as a downrank of an already active debuff.
+-- fn(spellName, castRank, activeRank, targetGuid, casterGuid)
+-- External addons can use this to avoid re-implementing downrank detection themselves.
+pfUI.libdebuff_downrank_blocked_hooks = pfUI.libdebuff_downrank_blocked_hooks or {}
 local AURA_CAST_DEDUPE_WINDOW = 0.1  -- Ignore duplicates within 100ms
 
 -- Captured combo points from SPELL_CAST_EVENT (before client consumes them)
@@ -1341,34 +1346,39 @@ if hasNampower then
         castRank = tonumber((string.gsub(spellRankString, "Rank ", ""))) or 0
       end
       
-      -- Store in pendingCasts for DEBUFF_ADDED correlation
-      -- Downrank protection: don't write pending if a higher rank is still active.
-      -- Without this check SuperCleveRoid (and other hook consumers) would see the
-      -- spell as "pending" even though libdebuff will later block the actual update.
+      -- Store in pendingCasts for DEBUFF_ADDED correlation.
+      -- If this cast is a downrank of an already active debuff, fire the downrank blocked hook
+      -- so external addons (e.g. SuperCleveRoidMacros) don't need to re-implement this check.
       if targetGuid then
         pendingCasts[targetGuid] = pendingCasts[targetGuid] or {}
-        local pendingBlocked = false
+        local isDownrankBlocked = false
         if castRank > 0 then
           local existingOwn = ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName]
           if existingOwn and existingOwn.rank and existingOwn.rank > castRank then
             local existingTimeleft = (existingOwn.startTime + existingOwn.duration) - GetTime()
             if existingTimeleft > 0 then
-              pendingBlocked = true
+              isDownrankBlocked = true
               if debugStats.enabled then
                 DEFAULT_CHAT_FRAME:AddMessage(string.format(
-                  "|cffff0000[PENDING BLOCKED]|r %s: Rank %d cannot enter pending (Rank %d active, %.1fs left)",
+                  "|cffff0000[DOWNRANK BLOCKED HOOK]|r %s: Rank %d blocked by Rank %d (%.1fs left)",
                   spellName, castRank, existingOwn.rank, existingTimeleft))
+              end
+              -- Fire hook so external addons know this cast was downrank-blocked
+              if pfUI.libdebuff_downrank_blocked_hooks then
+                for _, fn in pairs(pfUI.libdebuff_downrank_blocked_hooks) do
+                  fn(spellName, castRank, existingOwn.rank, targetGuid, casterGuid)
+                end
               end
             end
           end
         end
-        if not pendingBlocked then
-          pendingCasts[targetGuid][spellName] = {
-            casterGuid = casterGuid,
-            rank = castRank,
-            time = GetTime()
-          }
-        end
+        -- Always write pendingCasts — let consumers use the hook to handle downrank themselves
+        pendingCasts[targetGuid][spellName] = {
+          casterGuid = casterGuid,
+          rank = castRank,
+          time = GetTime(),
+          downrankBlocked = isDownrankBlocked
+        }
       end
 
       -- selfdebuff mode: write ownDebuffs immediately on confirmed hit
