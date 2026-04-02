@@ -152,6 +152,14 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
   end
 
+  local function RebuildOfftanks()
+    offtanks = {}
+    for k, v in pairs({strsplit("#", C.nameplates.combatofftanks)}) do
+      if v ~= "" then offtanks[string.lower(v)] = true end
+    end
+  end
+  RebuildOfftanks()
+
   -- ============================================================================
   -- OPTIMIZATION: Frame state cache
   -- ============================================================================
@@ -205,7 +213,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     if not flags then return false end
     if not HasFlag(flags, UNIT_FLAG_IN_COMBAT) then return false end
 
-    local mobTargetGuid = GetUnitField(guid, "target")
+    local mobTargetGuid = GetUnitField and GetUnitField(guid, "target")
     local hasTarget = mobTargetGuid and mobTargetGuid ~= NULL_GUID
 
     local target = guid.."target"
@@ -968,10 +976,7 @@ end
     c.OFFTANK.r, c.OFFTANK.g, c.OFFTANK.b, c.OFFTANK.a = GetStringColor(C.nameplates.combatofftank)
     c.STUN.r, c.STUN.g, c.STUN.b, c.STUN.a = GetStringColor(C.nameplates.combatstun)
 
-    offtanks = {}
-    for k, v in pairs({strsplit("#", C.nameplates.combatofftanks)}) do
-      offtanks[string.lower(v)] = true
-    end
+    RebuildOfftanks()
 
     nameplate:SetWidth(plate_width)
     nameplate:SetHeight(plate_height)
@@ -1036,8 +1041,12 @@ end
     nameplates:OnDataChanged(nameplate)
   end
 
-  nameplates.OnValueChanged = function(arg1)
-    nameplates:OnDataChanged(this:GetParent().nameplate)
+  nameplates.OnValueChanged = function()
+    local plate = this:GetParent().nameplate
+    if plate and plate.health then
+      plate.health:SetMinMaxValues(plate.original.healthbar:GetMinMaxValues())
+      plate.health:SetValue(plate.original.healthbar:GetValue())
+    end
   end
 
   nameplates.OnDataChanged = function(self, plate)
@@ -1198,8 +1207,12 @@ end
       plate.guild:Hide()
     end
 
-    plate.health:SetMinMaxValues(hpmin, hpmax)
-    plate.health:SetValue(hp)
+    -- PERF: Only update bar + HP text when values actually changed
+    if plate.cache.hp ~= hp or plate.cache.hpmax ~= hpmax then
+      plate.cache.hp = hp
+      plate.cache.hpmax = hpmax
+      plate.health:SetMinMaxValues(hpmin, hpmax)
+      plate.health:SetValue(hp)
 
     if cfg.showhp then
       local rhp, rhpmax, estimated
@@ -1246,6 +1259,7 @@ end
     else
       plate.health.text:SetText()
     end
+    end -- hp cache gate
 
     local r, g, b, a = unpack(unitcolors[unittype])
 
@@ -1358,17 +1372,13 @@ end
           end
 
           if duration and timeleft and cfg.debufftimers then
-            -- PERF: cachedStart keyed by auraSlot (stable, unique even for same spell cast by multiple casters)
-            -- fallback to spellId for non-IterDebuffs paths where auraSlot is nil
-            local cacheKey = auraSlot or spellId
             plate.cdCache = plate.cdCache or {}
             local newStart = GetTime() + timeleft - duration
-            local cached = cacheKey and plate.cdCache[cacheKey]
-
+            local slotCache = plate.cdCache[index]
+            local cachedStart = slotCache and slotCache.effect == effect and slotCache.start
             local cd = plate.debuffs[index].cd
             cd:Show()
-            if not cached or abs(cached - newStart) > 0.5 then
-              -- Update config flags only on first run or config change
+            if not cachedStart or abs(cachedStart - newStart) > 0.5 then
               if not cd.configCached or cd.cachedAnim ~= cfg.debuffanim or cd.cachedText ~= cfg.debufftext then
                 cd.pfCooldownStyleAnimation = cfg.debuffanim
                 cd.pfCooldownStyleText = cfg.debufftext
@@ -1378,7 +1388,9 @@ end
                 cd.configCached = true
               end
               CooldownFrame_SetTimer(cd, newStart, duration, 1)
-              if cacheKey then plate.cdCache[cacheKey] = newStart end
+              plate.cdCache[index] = plate.cdCache[index] or {}
+              plate.cdCache[index].effect = effect
+              plate.cdCache[index].start = newStart
             end
           end
 
@@ -1445,6 +1457,15 @@ end
         isCastingNonTarget = true
       elseif pfGetCastInfo and nameplate.castUpdate then
         isCastingNonTarget = true
+      end
+    end
+
+    -- hide castbar before throttle if no cast active
+    if not isCastingNonTarget and not target then
+      if nameplate.castbar.isShown then
+        nameplate.castbar.isShown = nil
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
       end
     end
 
@@ -1677,8 +1698,6 @@ end
     -- engine framerate, decoupled from central loop). Only update non-target castbars here.
     local isTargetPlate = target or nameplate.istarget or (nameplate.health and nameplate.health.zoomed)
     if cfg.showcastbar and not cfg.targetcastbar and not isTargetPlate then
-      -- Non-target castbar: apply separate throttle.
-      -- In mass pulls (20+ plates) cap at 10 FPS to save performance.
       local cbThrottle = pfUI.throttle:Get("nameplates_castbar")
       if visiblePlateCount > 20 then
         local massThrottle = pfUI.throttle:Get("nameplates_mass")
@@ -1689,10 +1708,17 @@ end
         nameplates.UpdateCastbar(nameplate, now)
       end
     elseif cfg.showcastbar and cfg.targetcastbar and not isTargetPlate then
-      -- targetcastbar=true means only show on target -> hide all non-target castbars
-      nameplate.castbar:Hide()
+      if nameplate.castbar.isShown then
+        nameplate.castbar.isShown = nil
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
+      end
     elseif not cfg.showcastbar then
-      nameplate.castbar:Hide()
+      if nameplate.castbar.isShown then
+        nameplate.castbar.isShown = nil
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
+      end
     end
   end
 
@@ -1750,7 +1776,7 @@ end
         else
           nameplate.castbar.text:SetText(string.format("%.2f", remaining))
         end
-        nameplate.castbar:Show()
+        if not nameplate.castbar.isShown then nameplate.castbar.isShown = true; nameplate.castbar:Show() end
       end
     else
       -- libcast fallback (vanilla without Nampower)
@@ -1789,12 +1815,14 @@ end
           else
             nameplate.castbar.text:SetText(string.format("%.2f", remaining))
           end
-          nameplate.castbar:Show()
+          if not nameplate.castbar.isShown then nameplate.castbar.isShown = true; nameplate.castbar:Show() end
         else
+          nameplate.castbar.isShown = nil
           nameplate.castbar.lastEndTime = nil
           nameplate.castbar:Hide()
         end
       else
+        nameplate.castbar.isShown = nil
         nameplate.castbar.lastEndTime = nil
         nameplate.castbar:Hide()
       end
@@ -1846,6 +1874,7 @@ end
   nameplates.UpdateConfig = function()
     -- Refresh config cache for all cfg.* values
     CacheConfig()
+    RebuildOfftanks()
     
     -- update debuff filters
     DebuffFilterPopulate()
