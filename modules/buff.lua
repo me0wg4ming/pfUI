@@ -374,11 +374,16 @@ pfUI:RegisterModule("buff", "vanilla:tbc", function ()
             timeleft = (buff.np_startTime + buff.np_duration) - now
             if timeleft <= 0 then
               timeleft = 0
-              -- Expired: remove from overflow tracking and hide
+              -- Expired: remove from overflow tracking
               if buff.np_spellId and pfUI.libdebuff_overflow_buffs then
                 pfUI.libdebuff_overflow_buffs[buff.np_spellId] = nil
               end
               buff:Hide()
+              -- Trigger full refresh so remaining overflow buffs shift forward,
+              -- same as what happens when an overflow buff is right-clicked
+              if pfUI.buff and pfUI.buff:GetScript("OnEvent") then
+                pfUI.buff:GetScript("OnEvent")()
+              end
             end
           end
         elseif buff.np_auraSlot and buff.np_spellId and GetPlayerAuraDuration
