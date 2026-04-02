@@ -1342,33 +1342,13 @@ if hasNampower then
       end
       
       -- Store in pendingCasts for DEBUFF_ADDED correlation
-      -- Downrank protection: don't write pending if a higher rank is still active.
-      -- Without this check SuperCleveRoid (and other hook consumers) would see the
-      -- spell as "pending" even though libdebuff will later block the actual update.
       if targetGuid then
         pendingCasts[targetGuid] = pendingCasts[targetGuid] or {}
-        local pendingBlocked = false
-        if castRank > 0 then
-          local existingOwn = ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName]
-          if existingOwn and existingOwn.rank and existingOwn.rank > castRank then
-            local existingTimeleft = (existingOwn.startTime + existingOwn.duration) - GetTime()
-            if existingTimeleft > 0 then
-              pendingBlocked = true
-              if debugStats.enabled then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format(
-                  "|cffff0000[PENDING BLOCKED]|r %s: Rank %d cannot enter pending (Rank %d active, %.1fs left)",
-                  spellName, castRank, existingOwn.rank, existingTimeleft))
-              end
-            end
-          end
-        end
-        if not pendingBlocked then
-          pendingCasts[targetGuid][spellName] = {
-            casterGuid = casterGuid,
-            rank = castRank,
-            time = GetTime()
-          }
-        end
+        pendingCasts[targetGuid][spellName] = {
+          casterGuid = casterGuid,
+          rank = castRank,
+          time = GetTime()
+        }
       end
 
       -- selfdebuff mode: write ownDebuffs immediately on confirmed hit
