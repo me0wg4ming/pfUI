@@ -14,31 +14,31 @@ pfUI:RegisterModule("tracking", "vanilla", function ()
   local size = tonumber(C.appearance.minimap.tracking_size)
   local pulse = C.appearance.minimap.tracking_pulse == "1"
 
-  local knownTrackingSpellTextures = {
+  local knownTrackingSpells = {
     any = {
-      "Racial_Dwarf_FindTreasure", -- Find Treasure
-      "Spell_Nature_Earthquake", -- Find Minerals
-      "INV_Misc_Flower_02", -- Find Herbs
-      "inv_tradeskillitem_03" -- Find Trees (TurtleWow Survival)
+      2481,  -- Find Treasure
+      2580,  -- Find Minerals
+      2383,  -- Find Herbs
+      52917, -- Find Trees
     },
     HUNTER = {
-      "Ability_Tracking", -- Track Beasts, 4+
-      "Spell_Holy_PrayerOfHealing", -- Track Humanoids, 10+
-      "Spell_Shadow_DarkSummoning", -- Track Undead, 18+
-      "Ability_Stealth", -- Track Hidden, 24+
-      "Spell_Frost_SummonWaterElemental", -- Track Elementals, 26+
-      "Spell_Shadow_SummonFelHunter", -- Track Deamons, 32+
-      "Ability_Racial_Avatar", -- Track Giants, 40+
-      "INV_Misc_Head_Dragon_01" -- Track Dragonkin, 50+
+      1494,  -- Track Beasts, 4+
+      19883, -- Track Humanoids, 10+
+      19884, -- Track Undead, 18+
+      19885, -- Track Hidden, 24+
+      19880, -- Track Elementals, 26+
+      19878, -- Track Demons, 32+
+      19882, -- Track Giants, 40+
+      19879  -- Track Dragonkin, 50+	  
     },
     PALADIN = {
-      "Spell_Holy_SenseUndead" -- Sense Undead, 20+
+      5502   -- Sense Undead, 20+
     },
     WARLOCK = {
-      "Spell_Shadow_Metamorphosis" -- Sense Demons, 24+
+      5500   -- Sense Demons, 24+
     },
     DRUID = {
-      "Ability_Tracking" -- Track Humanoids, 32+, Cat Form only!
+      5225   -- Track Humanoids, 32+, Cat Form only!
     }
   }
 
@@ -48,7 +48,6 @@ pfUI:RegisterModule("tracking", "vanilla", function ()
   }
 
   pfUI.tracking = CreateFrame("Button", "pfUITracking", UIParent)
-  pfUI.tracking.invalidSpells = {}
 
   pfUI.tracking:SetFrameStrata("HIGH")
   CreateBackdrop(pfUI.tracking, border)
@@ -117,58 +116,43 @@ pfUI:RegisterModule("tracking", "vanilla", function ()
     GameTooltip:Hide()
   end)
 
+  local function addSpell(spellId)
+    if state.spells[spellId] then return end
+
+    local spellName = GetSpellRecField(spellId, "name")
+    local spellIndex = GetSpellSlotTypeIdForName(spellName)
+
+    if spellIndex ~= 0 then
+      local spellIconId = GetSpellRecField(spellId, "spellIconID")
+      local spellTexture = GetSpellIconTexture(spellIconId)
+
+      state.spells[spellId] = {
+        index = spellIndex,
+        name = spellName,
+        texture = spellTexture
+      }
+    end
+  end
+
   function pfUI.tracking:RefreshSpells()
     local _, playerClass = UnitClass("player")
     local isCatForm = pfUI.tracking:PlayerIsDruidInCatForm(playerClass)
 
-    for tabIndex = 1, GetNumSpellTabs() do
-      local _, _, offset, numSpells = GetSpellTabInfo(tabIndex)
-      for spellIndex = offset + 1, offset + numSpells do
-        local spellTexture = GetSpellTexture(spellIndex, BOOKTYPE_SPELL)
-        local spellName = GetSpellName(spellIndex, BOOKTYPE_SPELL)
+	  -- scan for generic tracking icons
+    for _, spellId in pairs(knownTrackingSpells["any"]) do
+	    addSpell(spellId)
+	  end
 
-        -- disable and remove invalid spells
-        if pfUI.tracking.invalidSpells[spellName] then
-          -- delete all previously set bad spell icons
-          for _, texture in pairs(knownTrackingSpellTextures["any"]) do
-            if spellTexture and strfind(spellTexture, texture) then
-              state.spells[texture] = nil
-            end
-          end
-
-          -- unset current variable to stop here
-          spellTexture = nil
-        end
-
-        -- scan for generic tracking icons
-        for _, texture in pairs(knownTrackingSpellTextures["any"]) do
-          if spellTexture and strfind(spellTexture, texture) and not state.spells[texture] then
-            state.spells[texture] = {
-              index = spellIndex,
-              name = GetSpellName(spellIndex, BOOKTYPE_SPELL),
-              texture = spellTexture
-            }
-          end
-        end
-
-        -- scan class specific tracking icons
-        if knownTrackingSpellTextures[playerClass] then
-          for _, texture in pairs(knownTrackingSpellTextures[playerClass]) do
-            if spellTexture and strfind(spellTexture, texture) and not state.spells[texture] then
-                state.spells[texture] = {
-                  index = spellIndex,
-                  name = GetSpellName(spellIndex, BOOKTYPE_SPELL),
-                  texture = spellTexture
-                }
-            end
-          end
-        end
+    -- scan class specific tracking icons
+    if knownTrackingSpells[playerClass] then
+      for _, spellId in pairs(knownTrackingSpells[playerClass]) do
+        addSpell(spellId)
       end
     end
 
     -- remove humanoid tracking for non-cat druids
     if playerClass == "DRUID" and not isCatForm then
-      state.spells["Ability_Tracking"] = nil
+      state.spells[5225] = nil
     end
   end
 
@@ -211,7 +195,16 @@ pfUI:RegisterModule("tracking", "vanilla", function ()
   function pfUI.tracking:InitMenu()
     UIDropDownMenu_Initialize(pfUI.tracking.menu, function ()
       UIDropDownMenu_AddButton({text = T["Minimap Tracking"], isTitle = 1})
+
+      local sorted = {}
       for _, spell in pairs(state.spells) do
+        table.insert(sorted, spell)
+      end
+      table.sort(sorted, function(a, b)
+        return string.lower(a.name) < string.lower(b.name)
+      end)
+
+      for _, spell in pairs(sorted) do
         UIDropDownMenu_AddButton({
           text = spell.name,
           icon = spell.texture,
