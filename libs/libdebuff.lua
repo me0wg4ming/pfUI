@@ -1872,11 +1872,6 @@ end
             local existingTimeleft = (existingOwn.startTime + existingOwn.duration) - GetTime()
             if existingTimeleft > 0 then
               isDownrankBlocked = true
-              if debugStats.enabled then
-                DEFAULT_CHAT_FRAME:AddMessage(string.format(
-                  "|cffff0000[DOWNRANK BLOCKED HOOK]|r %s: Rank %d blocked by Rank %d (%.1fs left)",
-                  spellName, castRank, existingOwn.rank, existingTimeleft))
-              end
               -- Fire hook so external addons know this cast was downrank-blocked
               if pfUI.libdebuff_downrank_blocked_hooks then
                 for _, fn in pairs(pfUI.libdebuff_downrank_blocked_hooks) do
