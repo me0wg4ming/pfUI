@@ -220,7 +220,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     if not flags then return false end
     if not HasFlag(flags, UNIT_FLAG_IN_COMBAT) then return false end
 
-    local mobTargetGuid = GetUnitField(guid, "target")
+    local mobTargetGuid = GetUnitField and GetUnitField(guid, "target")
     local hasTarget = mobTargetGuid and mobTargetGuid ~= NULL_GUID
 
     local target = guid.."target"
@@ -1301,80 +1301,22 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
 
     -- =========================================================================
-    -- CASTBAR (inline, ShaguPlates approach — no dedicated frame overhead)
+    -- CASTBAR VISIBILITY (before throttle — show/hide must always run)
     -- =========================================================================
     local castbar = nameplate.castbar
     local showCast = cfg.showcastbar and (not cfg.targetcastbar or target)
     local castInfo = showCast and nameplate.cachedGuid and GetCastInfo(nameplate.cachedGuid)
+    local castActive = castInfo and castInfo.spellID and castInfo.endTime and now < castInfo.endTime
+                       and castInfo.event ~= "CAST" and castInfo.event ~= "FAIL"
 
-    if castInfo and castInfo.spellID and castInfo.endTime and now < castInfo.endTime
-       and castInfo.event ~= "CAST" and castInfo.event ~= "FAIL" then
-      local isChannel = castInfo.event == "CHANNEL"
-      local duration = castInfo.endTime - castInfo.startTime
+    local libcastActive = false
+    if not castActive and showCast and nameplate.cachedGuid and pfGetCastInfo then
+      local cast, _, _, _, startTime, endTime = pfGetCastInfo(nameplate.cachedGuid)
+      if not cast then cast, _, _, _, startTime, endTime = pfGetChannelInfo(nameplate.cachedGuid) end
+      libcastActive = cast ~= nil
+    end
 
-      if castbar.lastEndTime ~= castInfo.endTime then
-        castbar.lastEndTime = castInfo.endTime
-        castbar:SetMinMaxValues(0, duration)
-        castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(isChannel and "channelcolor" or "castbarcolor")]))
-        if castInfo.icon then
-          castbar.icon.tex:SetTexture(castInfo.icon)
-          castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
-        end
-        castbar.spell:SetText(cfg.spellname and castInfo.spellName or "")
-      end
-
-      local barValue = isChannel and (castInfo.endTime - now) or (now - castInfo.startTime)
-      barValue = barValue < 0 and 0 or (barValue > duration and duration or barValue)
-      castbar:SetValue(barValue)
-
-      -- PERF (ShaguPlates): Only update timer text when bucket changes
-      local timeLeft = floor((castInfo.endTime - now) * 10)
-      if castbar.lastTime ~= timeLeft then
-        castbar.lastTime = timeLeft
-        if C.unitframes.castbardecimals == "1" then
-          castbar.text:SetText(floor((castInfo.endTime - now) * 10) / 10)
-        else
-          castbar.text:SetText(string.format("%.2f", castInfo.endTime - now))
-        end
-      end
-
-      if not castbar.isShown then castbar.isShown = true; castbar:Show() end
-
-    elseif showCast and nameplate.cachedGuid and pfGetCastInfo then
-      -- libcast fallback (vanilla without Nampower)
-      local cast, _, _, texture, startTime, endTime = pfGetCastInfo(nameplate.cachedGuid)
-      local channel
-      if not cast then channel, _, _, texture, startTime, endTime = pfGetChannelInfo(nameplate.cachedGuid) end
-      if cast or channel then
-        local effect = cast or channel
-        local duration = endTime - startTime
-        local max = duration / 1000
-        local cur = now - startTime / 1000
-        if channel then cur = max + startTime / 1000 - now end
-        cur = cur < 0 and 0 or (cur > max and max or cur)
-        if castbar.lastEndTime ~= endTime then
-          castbar.lastEndTime = endTime
-          castbar:SetMinMaxValues(0, max)
-          castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(channel and "channelcolor" or "castbarcolor")]))
-          if texture then castbar.icon.tex:SetTexture(texture); castbar.icon.tex:SetTexCoord(.1,.9,.1,.9) end
-          castbar.spell:SetText(cfg.spellname and effect or "")
-        end
-        castbar:SetValue(cur)
-        local remaining = channel and cur or (max - cur)
-        local timeLeft = floor(remaining * 10)
-        if castbar.lastTime ~= timeLeft then
-          castbar.lastTime = timeLeft
-          if C.unitframes.castbardecimals == "1" then
-            castbar.text:SetText(floor(remaining * 10) / 10)
-          else
-            castbar.text:SetText(string.format("%.2f", remaining))
-          end
-        end
-        if not castbar.isShown then castbar.isShown = true; castbar:Show() end
-      else
-        if castbar.isShown then castbar.isShown = nil; castbar.lastEndTime = nil; castbar.lastTime = nil; castbar:Hide() end
-      end
-    else
+    if not castActive and not libcastActive then
       if castbar.isShown then castbar.isShown = nil; castbar.lastEndTime = nil; castbar.lastTime = nil; castbar:Hide() end
     end
 
@@ -1398,6 +1340,74 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local hasEventUpdate = nameplate.eventcache or nameplate.auraUpdate or nameplate.castUpdate or nameplate.targetUpdate or nameplate.comboUpdate
     if not hasEventUpdate and (nameplate.lasttick or 0) + throttle > now then return end
     nameplate.lasttick = now
+
+    -- =========================================================================
+    -- CASTBAR UPDATES (throttled via nameplates_castbar)
+    -- =========================================================================
+    local cbThrottle = pfUI.throttle:Get("nameplates_castbar")
+    if (nameplate.castbar_tick or 0) + cbThrottle <= now then
+      nameplate.castbar_tick = now
+
+      if castActive then
+        local isChannel = castInfo.event == "CHANNEL"
+        local duration = castInfo.endTime - castInfo.startTime
+        if castbar.lastEndTime ~= castInfo.endTime then
+          castbar.lastEndTime = castInfo.endTime
+          castbar:SetMinMaxValues(0, duration)
+          castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(isChannel and "channelcolor" or "castbarcolor")]))
+          if castInfo.icon then
+            castbar.icon.tex:SetTexture(castInfo.icon)
+            castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
+          end
+          castbar.spell:SetText(cfg.spellname and castInfo.spellName or "")
+        end
+        local barValue = isChannel and (castInfo.endTime - now) or (now - castInfo.startTime)
+        barValue = barValue < 0 and 0 or (barValue > duration and duration or barValue)
+        castbar:SetValue(barValue)
+        local timeLeft = floor((castInfo.endTime - now) * 10)
+        if castbar.lastTime ~= timeLeft then
+          castbar.lastTime = timeLeft
+          if C.unitframes.castbardecimals == "1" then
+            castbar.text:SetText(floor((castInfo.endTime - now) * 10) / 10)
+          else
+            castbar.text:SetText(string.format("%.2f", castInfo.endTime - now))
+          end
+        end
+        if not castbar.isShown then castbar.isShown = true; castbar:Show() end
+
+      elseif libcastActive and nameplate.cachedGuid and pfGetCastInfo then
+        local cast, _, _, texture, startTime, endTime = pfGetCastInfo(nameplate.cachedGuid)
+        local channel
+        if not cast then channel, _, _, texture, startTime, endTime = pfGetChannelInfo(nameplate.cachedGuid) end
+        if cast or channel then
+          local effect = cast or channel
+          local duration = endTime - startTime
+          local max = duration / 1000
+          local cur = now - startTime / 1000
+          if channel then cur = max + startTime / 1000 - now end
+          cur = cur < 0 and 0 or (cur > max and max or cur)
+          if castbar.lastEndTime ~= endTime then
+            castbar.lastEndTime = endTime
+            castbar:SetMinMaxValues(0, max)
+            castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(channel and "channelcolor" or "castbarcolor")]))
+            if texture then castbar.icon.tex:SetTexture(texture); castbar.icon.tex:SetTexCoord(.1,.9,.1,.9) end
+            castbar.spell:SetText(cfg.spellname and effect or "")
+          end
+          castbar:SetValue(cur)
+          local remaining = channel and cur or (max - cur)
+          local timeLeft = floor(remaining * 10)
+          if castbar.lastTime ~= timeLeft then
+            castbar.lastTime = timeLeft
+            if C.unitframes.castbardecimals == "1" then
+              castbar.text:SetText(floor(remaining * 10) / 10)
+            else
+              castbar.text:SetText(string.format("%.2f", remaining))
+            end
+          end
+          if not castbar.isShown then castbar.isShown = true; castbar:Show() end
+        end
+      end
+    end
 
     -- =========================================================================
     -- EVERYTHING BELOW RUNS AT THROTTLED RATE
