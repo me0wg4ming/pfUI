@@ -2935,7 +2935,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Always Show On Target Units"], C.nameplates, "target", "checkbox")
       CreateConfig(U["nameplates"], T["Vertical Healthbar"], C.nameplates, "verticalhealth", "checkbox")
 
-      CreateConfig(nil, T["SuperWoW Settings"], nil, nil, "header")
+      CreateConfig(nil, T["Nampower Settings"], nil, nil, "header")
       CreateConfig(U["nameplates"], T["Overwrite Border Color With Combat State"], C.nameplates, "outcombatstate", "checkbox")
       CreateConfig(U["nameplates"], T["Overwrite Health Color With Combat State"], C.nameplates, "barcombatstate", "checkbox")
       CreateConfig(U["nameplates"], T["Overwrite If Unit Is Attacking You"], C.nameplates, "ccombatthreat", "checkbox")
