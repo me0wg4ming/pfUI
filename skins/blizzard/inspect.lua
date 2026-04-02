@@ -70,6 +70,7 @@ pfUI:RegisterSkin("Inspect", "tbc", function ()
       end
 
       hooksecurefunc("InspectPaperDollFrame_OnShow", function()
+        updateRetries = 0
         local guild, title = GetGuildInfo(InspectFrame.unit)
         local text = guild and format(TEXT(GUILD_TITLE_TEMPLATE), title, guild) or ""
         InspectGuildText:SetText(text)
@@ -163,8 +164,11 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         end)
       end
 
+      local updateRetries = 0
+      local MAX_RETRIES = 3
+
       local function UpdateSlots()
-        if not InspectFrame.unit then return end
+        if not InspectFrame.unit then updateRetries = 0; return end
 
         local guild, title, rank = GetGuildInfo(InspectFrame.unit)
         if guild then
@@ -221,7 +225,12 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
           end
 
           if retry == true and InspectFrame.unit then
-            QueueFunction(UpdateSlots)
+            if updateRetries < MAX_RETRIES then
+              updateRetries = updateRetries + 1
+              QueueFunction(UpdateSlots)
+            end
+          else
+            updateRetries = 0
           end
         end
       end
@@ -244,7 +253,6 @@ pfUI:RegisterSkin("Inspect", "vanilla", function ()
         end
 
         UpdateSlots()
-        QueueFunction(UpdateSlots)
       end)
     end
 
