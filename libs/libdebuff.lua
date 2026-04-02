@@ -1711,14 +1711,24 @@ if hasNampower then
       -- Get texture
       local texture = libdebuff:GetSpellIcon(spellId)
       
-      -- Store in ownDebuffs only if entry already exists (confirmed hit via DEBUFF_ADDED).
-      -- AURA_CAST fires on both hit AND miss - creating a new entry here would show
-      -- phantom debuffs when the cast misses or is interrupted before hitting.
-      if not ownDebuffs[targetGuid] or not ownDebuffs[targetGuid][spellName] then return end
+      -- Write ownDebuffs if:
+      -- (a) Entry already exists (refresh of active debuff), OR
+      -- (b) pendingCasts has an entry for this spell (SPELL_GO confirmed a hit is in-flight,
+      --     not a miss). This allows the downrank hook in SPELL_GO to fire correctly on first cast.
+      -- Without (b), ownDebuffs is empty until DEBUFF_ADDED (~300ms later), meaning the downrank
+      -- check in SPELL_GO has no data to work with on the first cast.
+      local entryExists = ownDebuffs[targetGuid] and ownDebuffs[targetGuid][spellName]
+      local pendingConfirm = pendingCasts[targetGuid] and pendingCasts[targetGuid][spellName]
+      if not entryExists and not pendingConfirm then return end
 
       ownDebuffs[targetGuid] = ownDebuffs[targetGuid] or {}
       local data = ownDebuffs[targetGuid][spellName]
-      if not data then return end  -- race condition: cleared by DEBUFF_REMOVED between init and use
+      -- For first-cast path (pendingConfirm but no existing entry): create a new entry
+      if not data then
+        if not pendingConfirm then return end  -- race condition: cleared by DEBUFF_REMOVED
+        data = {}
+        ownDebuffs[targetGuid][spellName] = data
+      end
       
       -- Downrank Protection: Check if existing debuff is still active and has higher rank
       if data.startTime and data.duration and data.rank and rankNum > 0 then
