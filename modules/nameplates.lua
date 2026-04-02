@@ -2,9 +2,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- disable original castbars
   pcall(SetCVar, "ShowVKeyCastbar", 0)
 
-
   -- Local function references for performance
-  local pfGetCastInfo = pfGetCastInfo  -- provided by libcast for vanilla
+  local pfGetCastInfo = pfGetCastInfo    -- provided by libcast for vanilla
   local pfGetChannelInfo = pfGetChannelInfo  -- provided by libcast for vanilla
   local GetTime = GetTime
   local UnitExists = UnitExists
@@ -58,10 +57,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   }
 
   -- catch all nameplates
-  local childs = {}
+  local childs = {}  -- PERF: Reuse table instead of creating new one each scan
   local regions, plate
   local initialized = 0
-
+  
   -- Friendly zone nameplate disable state
   local savedHostileState = nil
   local savedFriendlyState = nil
@@ -75,21 +74,20 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- ============================================================================
   local guidRegistry = {}   -- guid -> plate (for direct event routing)
   local raidGuidCache = {}  -- guid -> name (rebuilt on RAID_ROSTER_UPDATE/PARTY_MEMBERS_CHANGED)
-
+  
   -- Helper function to safely access libdebuff cast data
   local function GetCastInfo(guid)
     return pfUI.libdebuff_casts and pfUI.libdebuff_casts[guid]
   end
-
+  
   local debuffCache = {}    -- guid -> { [spellID] = { start, duration } }
-  local threatMemory = {}   -- guid -> true if mob had player targeted
-
-  -- PERF (Nampower): Reusable per-plate debuff display buffer — avoids GC churn
-  -- from per-call table creation. Module-level, cleared before each use.
-  local debuffDisplayBuf = {}
+  -- Reusable per-plate debuff display buffer (avoid GC churn from per-call table creation)
+  local debuffDisplayBuf = {}  -- [i] = { effect, texture, stacks, dtype, duration, timeleft }
   for i = 1, 16 do debuffDisplayBuf[i] = {} end
+  local threatMemory = {}   -- guid -> true if mob had player targeted
+  local debuffSeen = {}     -- reusable table for debuff tracking (avoid GC churn)
 
-  -- PERF (Nampower): Module-level IterDebuffs callback — avoids closure allocation per call
+  -- PERF: Module-level IterDebuffs callback to avoid closure allocation per call
   local _iterDebuffCount = 0
   local function iterDebuffCallback(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
     if not texture or string.find(texture, "QuestionMark") then return end
@@ -128,7 +126,6 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     cfg.showdebuffs_friendly = C.nameplates["showdebuffs_friendly"] == "1"
     cfg.targetzoom = C.nameplates.targetzoom == "1"
     cfg.zoomval = (tonumber(C.nameplates.targetzoomval) or 0.4) + 1
-    cfg.zoominstant = C.nameplates.targetzoominstant == "1"
     cfg.width = tonumber(C.nameplates.width) or 120
     cfg.heighthealth = tonumber(C.nameplates.heighthealth) or 8
     cfg.targetglow = C.nameplates.targetglow == "1"
@@ -143,10 +140,16 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     cfg.use_unitfonts = C.nameplates.use_unitfonts == "1"
     cfg.font_size = cfg.use_unitfonts and C.global.font_unit_size or C.global.font_size
     cfg.hptextformat = C.nameplates.hptextformat
+    -- NEW: Cache debuff config
     cfg.debufftimers = C.nameplates.debufftimers == "1"
     cfg.debuffanim = tonumber(C.nameplates.debuffanim) or 0
     cfg.debufftext = tonumber(C.nameplates.debufftext) or 1
 
+    -- Rebuild offtanks lookup table
+    offtanks = {}
+    for k, v in pairs({strsplit("#", C.nameplates.combatofftanks)}) do
+      if v ~= "" then offtanks[string.lower(v)] = true end
+    end
   end
 
   local function RebuildOfftanks()
@@ -170,9 +173,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   -- cache default border color
   local er, eg, eb, ea = GetStringColor(pfUI_config.appearance.border.color)
 
-  -- ============================================================================
-  -- PERF (Nampower): Bitwise flag helper (Lua 5.0 compatible)
-  -- ============================================================================
+  -- Vanilla Lua 5.0 bitwise check: math.mod(math.floor(value / flag), 2) ~= 0
   local function HasFlag(flags, flag)
     return math.mod(math.floor(flags / flag), 2) ~= 0
   end
@@ -180,9 +181,6 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local UNIT_FLAG_IN_COMBAT = 524288  -- 0x00080000
   local NULL_GUID           = "0x0000000000000000"
 
-  -- ============================================================================
-  -- PERF (Nampower): raidGuidCache for O(1) offtank target-name lookup
-  -- ============================================================================
   local function RebuildRaidGuidCache()
     for k in pairs(raidGuidCache) do raidGuidCache[k] = nil end
     for i = 1, GetNumRaidMembers() do
@@ -197,25 +195,20 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     if pg then raidGuidCache[pg] = UnitName("player") end
   end
 
-  -- ============================================================================
-  -- PERF (Nampower): combatColorCache throttles GetCombatStateColor to 0.2s/guid.
-  -- Uses GetUnitField(flags) instead of UnitAffectingCombat(guid) and
-  -- raidGuidCache instead of UnitName(target) for O(1) offtank detection.
-  -- ============================================================================
   local combatColorCache = {}  -- guid -> { color, expires }
 
   local function GetCombatStateColor(guid)
+    -- PERF: Quick exit if player not in combat
     if not UnitAffectingCombat("player") then return false end
     if UnitCanAssist("player", guid) then return false end
 
-    -- PERF: 0.2s throttle per guid
+    -- PERF: 0.2s throttle per guid - color changes are not time-critical
     local now = frameState.now
     local cached = combatColorCache[guid]
     if cached and cached.expires > now then
       return cached.color
     end
 
-    -- PERF (Nampower): GetUnitField flags instead of UnitAffectingCombat(guid)
     local flags = GetUnitField and GetUnitField(guid, "flags")
     if not flags then return false end
     if not HasFlag(flags, UNIT_FLAG_IN_COMBAT) then return false end
@@ -236,7 +229,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       threatMemory[guid] = nil
     end
 
-    -- PERF (Nampower): O(1) GUID lookup via raidGuidCache
+    -- PERF: O(1) GUID lookup via raidGuidCache instead of O(40) loop
     local targetName = hasTarget and (UnitName(target) or raidGuidCache[mobTargetGuid])
 
     if cfg.ccombatcasting and isCasting then
@@ -265,16 +258,22 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end
 
   local function wipe(table)
-    if type(table) ~= "table" then return end
-    for k in pairs(table) do table[k] = nil end
+    if type(table) ~= "table" then
+      return
+    end
+    for k in pairs(table) do
+      table[k] = nil
+    end
   end
 
   local function IsNamePlate(frame)
     if frame:GetObjectType() ~= NAMEPLATE_FRAMETYPE then return nil end
     regions = plate:GetRegions()
+
     if not regions then return nil end
     if not regions.GetObjectType then return nil end
     if not regions.GetTexture then return nil end
+
     if regions:GetObjectType() ~= "Texture" then return nil end
     return regions:GetTexture() == "Interface\\Tooltips\\Nameplate-Border" or nil
   end
@@ -282,7 +281,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local function DisableObject(object)
     if not object then return end
     if not object.GetObjectType then return end
+
     local otype = object:GetObjectType()
+
     if otype == "Texture" then
       object:SetTexture("")
       object:SetTexCoord(0, 0, 0, 0)
@@ -302,13 +303,21 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end
 
   local function HidePlate(unittype, name, fullhp, target)
+    -- keep some plates always visible according to config
     if C.nameplates.fullhealth == "1" and not fullhp then return nil end
     if C.nameplates.target == "1" and target then return nil end
-    if C.nameplates.enemynpc == "1" and unittype == "ENEMY_NPC" then return true
-    elseif C.nameplates.enemyplayer == "1" and unittype == "ENEMY_PLAYER" then return true
-    elseif C.nameplates.neutralnpc == "1" and unittype == "NEUTRAL_NPC" then return true
-    elseif C.nameplates.friendlynpc == "1" and unittype == "FRIENDLY_NPC" then return true
-    elseif C.nameplates.friendlyplayer == "1" and unittype == "FRIENDLY_PLAYER" then return true
+
+    -- return true when something needs to be hidden
+    if C.nameplates.enemynpc == "1" and unittype == "ENEMY_NPC" then
+      return true
+    elseif C.nameplates.enemyplayer == "1" and unittype == "ENEMY_PLAYER" then
+      return true
+    elseif C.nameplates.neutralnpc == "1" and unittype == "NEUTRAL_NPC" then
+      return true
+    elseif C.nameplates.friendlynpc == "1" and unittype == "FRIENDLY_NPC" then
+      return true
+    elseif C.nameplates.friendlyplayer == "1" and unittype == "FRIENDLY_PLAYER" then
+      return true
     elseif C.nameplates.critters == "1" and unittype == "NEUTRAL_NPC" then
       for i, critter in pairs(L["critters"]) do
         if string.lower(name) == string.lower(critter) then return true end
@@ -318,6 +327,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         if string.find(name, totem) then return true end
       end
     end
+
+    -- nothing to hide
     return nil
   end
 
@@ -328,29 +339,42 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local function GetNameString(name)
     local abbrev = pfUI_config.unitframes.abbrevname == "1" or nil
     local size = 20
+
+    -- first try to only abbreviate the first word
     if abbrev and name and strlen(name) > size then
       name = string.gsub(name, "^(%S+) ", abbrevname)
     end
+
+    -- abbreviate all if it still doesn't fit
     if abbrev and name and strlen(name) > size then
       name = string.gsub(name, "(%S+) ", abbrevname)
     end
+
     return name
   end
 
+
   local function GetUnitType(red, green, blue)
-    if red > .9 and green < .2 and blue < .2 then return "ENEMY_NPC"
-    elseif red > .9 and green > .9 and blue < .2 then return "NEUTRAL_NPC"
-    elseif red < .2 and green < .2 and blue > 0.9 then return "FRIENDLY_PLAYER"
-    elseif red < .2 and green > .9 and blue < .2 then return "FRIENDLY_NPC"
+    if red > .9 and green < .2 and blue < .2 then
+      return "ENEMY_NPC"
+    elseif red > .9 and green > .9 and blue < .2 then
+      return "NEUTRAL_NPC"
+    elseif red < .2 and green < .2 and blue > 0.9 then
+      return "FRIENDLY_PLAYER"
+    elseif red < .2 and green > .9 and blue < .2 then
+      return "FRIENDLY_NPC"
     end
   end
 
   local filter, list, cache
   local function DebuffFilterPopulate()
+    -- initialize variables
     filter = C.nameplates["debuffs"]["filter"]
     if filter == "none" then return end
     list = C.nameplates["debuffs"][filter]
     cache = {}
+
+    -- populate list
     for _, val in pairs({strsplit("#", list)}) do
       cache[strlower(val)] = true
     end
@@ -359,21 +383,32 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   local function DebuffFilter(effect)
     if filter == "none" then return true end
     if not cache then DebuffFilterPopulate() end
-    if filter == "blacklist" and cache[strlower(effect)] then return nil
-    elseif filter == "blacklist" then return true
-    elseif filter == "whitelist" and cache[strlower(effect)] then return true
-    elseif filter == "whitelist" then return nil
+
+    if filter == "blacklist" and cache[strlower(effect)] then
+      return nil
+    elseif filter == "blacklist" then
+      return true
+    elseif filter == "whitelist" and cache[strlower(effect)] then
+      return true
+    elseif filter == "whitelist" then
+      return nil
     end
   end
 
   local function PlateCacheDebuffs(self, unitstr, verify)
     if not self.debuffcache then self.debuffcache = {} end
     if not libdebuff then return end
+
     local now = GetTime()
+
+    -- Clear existing cache slots
     for id = 1, 16 do
-      if self.debuffcache[id] then self.debuffcache[id].empty = true end
+      if self.debuffcache[id] then
+        self.debuffcache[id].empty = true
+      end
     end
-    -- PERF (Nampower): Use IterDebuffs if available, else fall back to slot loop
+
+    -- Use IterDebuffs if Nampower available, else fall back to slot loop
     if unitstr and libdebuff.IterDebuffs and GetUnitGUID then
       local id = 0
       libdebuff:IterDebuffs(unitstr, function(auraSlot, spellId, effect, texture, stacks, dtype, duration, timeleft)
@@ -393,11 +428,11 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       end)
     else
       for id = 1, 16 do
-        local effect, _, texture, stacks, dtype, duration, timeleft
-        effect, _, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
-        if effect and texture then
-          local stop = (timeleft and timeleft > 0) and (now + timeleft) or nil
-          local start = stop and (stop - (duration or 0)) or now
+        local effect, _, texture, stacks, _, duration, timeleft
+        effect, _, texture, stacks, _, duration, timeleft = libdebuff:UnitDebuff(unitstr, id)
+        if effect and timeleft and timeleft > 0 then
+          local start = now - ( (duration or 0) - ( timeleft or 0) )
+          local stop = now + timeleft
           self.debuffcache[id] = self.debuffcache[id] or {}
           self.debuffcache[id].effect = effect
           self.debuffcache[id].texture = texture
@@ -409,15 +444,21 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         end
       end
     end
+
     self.verify = verify
   end
 
   local function PlateUnitDebuff(self, id)
+    -- break on unknown data
     if not self.debuffcache then return end
     if not self.debuffcache[id] then return end
     if not self.debuffcache[id].stop then return end
+
+    -- break on timeout debuffs
     if self.debuffcache[id].empty then return end
     if self.debuffcache[id].stop < GetTime() then return end
+
+    -- return cached debuff
     local c = self.debuffcache[id]
     return c.effect, c.rank, c.texture, c.stacks, c.dtype, c.duration, (c.stop - GetTime())
   end
@@ -438,6 +479,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     plate.debuffs[index].stacks:SetTextColor(1,1,0)
 
     -- PERF: Use lightweight fake cooldown frame when animation disabled
+    -- The Model-based CooldownFrameTemplate causes major lag with many nameplates
     if pfUI.client <= 11200 and cfg.debuffanim ~= 1 then
       plate.debuffs[index].cd = CreateFrame("Frame", plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index])
       plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
@@ -447,11 +489,13 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       plate.debuffs[index].cd.SetSequence = DoNothing
       plate.debuffs[index].cd.SetSequenceTime = DoNothing
     else
+      -- Use CooldownFrameTemplate for animation or TBC+
       plate.debuffs[index].cd = CreateFrame(COOLDOWN_FRAME_TYPE, plate.platename.."Debuff"..index.."Cooldown", plate.debuffs[index], "CooldownFrameTemplate")
       plate.debuffs[index].cd:SetAllPoints(plate.debuffs[index])
       plate.debuffs[index].cd:SetFrameLevel(6)
     end
 
+    -- Set initial config flags (will be cached per-cooldown later)
     plate.debuffs[index].cd.pfCooldownStyleAnimation = cfg.debuffanim
     plate.debuffs[index].cd.pfCooldownStyleText = cfg.debufftext
     plate.debuffs[index].cd.pfCooldownType = "ALL"
@@ -459,6 +503,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
   local function UpdateDebuffConfig(nameplate, i)
     if not nameplate.debuffs[i] then return end
+
+    -- update debuff positions
     local width = tonumber(C.nameplates.width)
     local debuffsize = tonumber(C.nameplates.debuffsize)
     local debuffoffset = tonumber(C.nameplates.debuffoffset)
@@ -466,12 +512,14 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local font = C.nameplates.use_unitfonts == "1" and pfUI.font_unit or pfUI.font_default
     local font_size = C.nameplates.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
     local font_style = C.nameplates.name.fontstyle
+
     local aligna, alignb, offs, space
     if C.nameplates.debuffs["position"] == "BOTTOM" then
       aligna, alignb, offs, space = "TOPLEFT", "BOTTOMLEFT", -debuffoffset, -1
     else
       aligna, alignb, offs, space = "BOTTOMLEFT", "TOPLEFT", debuffoffset, 1
     end
+
     nameplate.debuffs[i].stacks:SetFont(font, font_size, font_style)
     nameplate.debuffs[i]:ClearAllPoints()
     if i == 1 then
@@ -481,51 +529,52 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     elseif i > limit and limit > 0 then
       nameplate.debuffs[i]:SetPoint(aligna, nameplate.debuffs[i-limit], alignb, 0, space)
     end
+
     nameplate.debuffs[i]:SetWidth(tonumber(C.nameplates.debuffsize))
     nameplate.debuffs[i]:SetHeight(tonumber(C.nameplates.debuffsize))
+    
+    -- Update cooldown display settings
     if nameplate.debuffs[i].cd then
-      nameplate.debuffs[i].cd.pfCooldownStyleText = tonumber(C.nameplates.debufftext) or 1
-      nameplate.debuffs[i].cd.pfCooldownStyleAnimation = tonumber(C.nameplates.debuffanim) or 0
+      local cooldown_text = tonumber(C.nameplates.debufftext) or 1
+      local cooldown_anim = tonumber(C.nameplates.debuffanim) or 0
+      nameplate.debuffs[i].cd.pfCooldownStyleText = cooldown_text
+      nameplate.debuffs[i].cd.pfCooldownStyleAnimation = cooldown_anim
+      
+      -- Update scale for TBC+
       if pfUI.client > 11200 then
-        nameplate.debuffs[i].cd:SetScale(debuffsize / 32)
+        local debuffsize = tonumber(C.nameplates.debuffsize)
+        local cdScale = debuffsize / 32
+        nameplate.debuffs[i].cd:SetScale(cdScale)
       end
     end
   end
 
   -- create nameplate core
-  local nameplates = CreateFrame("Frame", "pfNameplates", UIParent)
-  nameplates:RegisterEvent("PLAYER_ENTERING_WORLD")
-  nameplates:RegisterEvent("PLAYER_TARGET_CHANGED")
-  nameplates:RegisterEvent("PLAYER_LOGOUT")
-  nameplates:RegisterEvent("UNIT_COMBO_POINTS")
-  nameplates:RegisterEvent("PLAYER_COMBO_POINTS")
-  nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-  nameplates:RegisterEvent("RAID_ROSTER_UPDATE")
-  nameplates:RegisterEvent("PARTY_MEMBERS_CHANGED")
-  -- PERF (Nampower): UNIT_FLAGS_GUID fires instantly on flag changes (stun, combat)
-  if GetUnitField then
-    nameplates:RegisterEvent("UNIT_FLAGS_GUID")
-  end
+local nameplates = CreateFrame("Frame", "pfNameplates", UIParent)
+nameplates:RegisterEvent("PLAYER_ENTERING_WORLD")
+nameplates:RegisterEvent("PLAYER_TARGET_CHANGED")
+nameplates:RegisterEvent("PLAYER_LOGOUT")
+nameplates:RegisterEvent("UNIT_COMBO_POINTS")
+nameplates:RegisterEvent("PLAYER_COMBO_POINTS")
+nameplates:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+nameplates:RegisterEvent("RAID_ROSTER_UPDATE")
+nameplates:RegisterEvent("PARTY_MEMBERS_CHANGED")
+if GetUnitField then
+  nameplates:RegisterEvent("UNIT_FLAGS_GUID")
+end
+  
+  -- Cast tracking handled by libdebuff (SPELL_START/GO/FAILED events)
+  -- No local event registration needed
 
   -- Callback from libdebuff when auras change (GUID-based, event-driven)
   nameplates.OnAuraUpdate = function(self, guid)
     if not guid then return end
+    
+    -- GUID is actual GUID (0xF13000...) from Nampower events
     local plate = guidRegistry[guid]
     if plate and plate.nameplate then
+      -- Mark nameplate for aura update in next OnUpdate cycle
       plate.nameplate.auraUpdate = true
-      return
-    end
-    -- Fallback: plate visible but GUID not yet registered
-    for _, frame in pairs(registry) do
-      if frame.nameplate then
-        local frameGuid = frame:GetName(1)
-        if frameGuid == guid then
-          frame.nameplate.cachedGuid = frameGuid
-          guidRegistry[guid] = frame
-          frame.nameplate.auraUpdate = true
-          return
-        end
-      end
     end
   end
 
@@ -539,6 +588,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end)
 
   nameplates:SetScript("OnEvent", function()
+    -- Stop event handling during logout to prevent crash 132
     if event == "PLAYER_LOGOUT" then
       this:UnregisterAllEvents()
       this:SetScript("OnEvent", nil)
@@ -547,7 +597,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         nameplates.mouselook:SetScript("OnUpdate", nil)
       end
       return
-
+      
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
       if event == "PLAYER_ENTERING_WORLD" then
         _, PlayerGUID = UnitExists("player")
@@ -555,24 +605,44 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         this:SetGameVariables()
         RebuildRaidGuidCache()
       end
-
+      
+      -- Handle friendly zone nameplate disable feature
       local disableHostile = C.nameplates["disable_hostile_in_friendly"] == "1"
       local disableFriendly = C.nameplates["disable_friendly_in_friendly"] == "1"
-
+      
       if disableHostile or disableFriendly then
         local pvpType = GetZonePVPInfo()
         local nowFriendly = (pvpType == "friendly")
-
+        
         if nowFriendly and not inFriendlyZone then
+          -- Entering friendly zone - save current state and hide based on options
           inFriendlyZone = true
           savedHostileState = C.nameplates["showhostile"]
           savedFriendlyState = C.nameplates["showfriendly"]
-          if disableHostile then _G.NAMEPLATES_ON = nil; HideNameplates() end
-          if disableFriendly then _G.FRIENDNAMEPLATES_ON = nil; HideFriendNameplates() end
+          
+          if disableHostile then
+            _G.NAMEPLATES_ON = nil
+            HideNameplates()
+          end
+          
+          if disableFriendly then
+            _G.FRIENDNAMEPLATES_ON = nil
+            HideFriendNameplates()
+          end
         elseif not nowFriendly and inFriendlyZone then
+          -- Leaving friendly zone - restore previous state
           inFriendlyZone = false
-          if savedHostileState == "1" then _G.NAMEPLATES_ON = true; ShowNameplates() end
-          if savedFriendlyState == "1" then _G.FRIENDNAMEPLATES_ON = true; ShowFriendNameplates() end
+          
+          if savedHostileState == "1" then
+            _G.NAMEPLATES_ON = true
+            ShowNameplates()
+          end
+          
+          if savedFriendlyState == "1" then
+            _G.FRIENDNAMEPLATES_ON = true
+            ShowFriendNameplates()
+          end
+          
           savedHostileState = nil
           savedFriendlyState = nil
         end
@@ -582,13 +652,15 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       RebuildRaidGuidCache()
 
     elseif event == "UNIT_FLAGS_GUID" then
-      -- PERF (Nampower): Instant flag change notification — bypass throttle
+      -- Nampower: fires instantly when any unit's flags change (e.g. stun, combat enter/leave)
+      -- arg1 = guid — directly flag that nameplate for immediate update, bypassing throttle
       local plate = guidRegistry[arg1]
       if plate and plate.nameplate then
         plate.nameplate.eventcache = true
       end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
+      -- Flag target plate for update via GUID registry
       local targetGuid = GetUnitGUID("target")
       if targetGuid then
         local plate = guidRegistry[targetGuid]
@@ -596,9 +668,11 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
           plate.nameplate.targetUpdate = true
         end
       end
+      -- Also propagate to all plates for alpha/strata updates
       this.eventcache = true
 
     elseif event == "PLAYER_COMBO_POINTS" or event == "UNIT_COMBO_POINTS" then
+      -- Only flag the target plate for combo point update
       local targetGuid = GetUnitGUID("target")
       if targetGuid then
         local plate = guidRegistry[targetGuid]
@@ -612,19 +686,26 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   end)
 
   nameplates:SetScript("OnUpdate", function()
+    -- PERF: Throttle central OnUpdate to ~80 FPS (0.0125s)
+    -- Saves ~44% calls at 144 FPS while staying above 50 FPS target-plate rate
     local now = GetTime()
     if (this.frameTick or 0) + 0.01 > now then return end
     this.frameTick = now
 
+    -- PERF: Cache GetTime() once per frame
     frameState.now = now
     frameState.hasTarget, frameState.targetGuid = UnitExists("target")
     frameState.hasMouseover = UnitExists("mouseover")
 
+    -- propagate events to all nameplates
     if this.eventcache then
       this.eventcache = nil
-      for plate in pairs(registry) do plate.eventcache = true end
+      for plate in pairs(registry) do
+        plate.eventcache = true
+      end
     end
 
+    -- PERF: Update visible plate count periodically for adaptive throttling
     if frameState.now - lastVisibleCheck > 0.5 then
       lastVisibleCheck = frameState.now
       local count = 0
@@ -634,14 +715,21 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       visiblePlateCount = count
     end
 
+    -- Throttle ONLY the nameplate scanner
     local scanThrottle = nameplates.combat and nameplates.combat.inCombat and 0.1 or 0.05
-    if (this.tick or 0) <= frameState.now then
+    local shouldScan = (this.tick or 0) <= frameState.now
+    if shouldScan then
       this.tick = frameState.now + scanThrottle
+
+      -- detect new nameplates
       parentcount = WorldFrame:GetNumChildren()
       if initialized < parentcount then
-        for i = table.getn(childs), 1, -1 do childs[i] = nil end
-        local tmp = { WorldFrame:GetChildren() }
-        for i = 1, parentcount do childs[i] = tmp[i] end
+        -- PERF: Reuse childs table instead of creating new one
+        local newchilds = { WorldFrame:GetChildren() }
+        for i = 1, parentcount do
+          childs[i] = newchilds[i]
+        end
+
         for i = initialized + 1, parentcount do
           plate = childs[i]
           if IsNamePlate(plate) and not registry[plate] then
@@ -649,25 +737,47 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
             registry[plate] = plate
           end
         end
+
         initialized = parentcount
       end
     end
 
+    -- Central OnUpdate for all visible plates
     for plate in pairs(registry) do
       if plate:IsVisible() then
         nameplates.OnUpdate(plate, frameState)
       else
+        -- PERF: Clean up ALL caches for hidden plates to prevent memory leak
         local guid = plate.nameplate and plate.nameplate.cachedGuid
         if guid then
-          if guidRegistry[guid] == plate then guidRegistry[guid] = nil end
+          -- Remove from guidRegistry
+          if guidRegistry[guid] == plate then
+            guidRegistry[guid] = nil
+          end
+          
+          -- Clean cast cache ONLY if cast has expired
+          -- (Don't delete active casts just because plate was hidden briefly)
           local castInfo = GetCastInfo(guid)
           if castInfo and castInfo.endTime and castInfo.endTime < frameState.now then
-            if pfUI.libdebuff_casts then pfUI.libdebuff_casts[guid] = nil end
+            if pfUI.libdebuff_casts then
+              pfUI.libdebuff_casts[guid] = nil
+            end
           end
-          if debuffCache[guid] then debuffCache[guid] = nil end
-          if threatMemory[guid] then threatMemory[guid] = nil end
-          -- PERF (Nampower): Also clean combatColorCache for hidden plates
-          if combatColorCache[guid] then combatColorCache[guid] = nil end
+          
+          -- Clean debuffCache
+          if debuffCache[guid] then
+            debuffCache[guid] = nil
+          end
+          
+          -- Clean threatMemory
+          if threatMemory[guid] then
+            threatMemory[guid] = nil
+          end
+
+          -- Clean combatColorCache
+          if combatColorCache[guid] then
+            combatColorCache[guid] = nil
+          end
         end
       end
     end
@@ -689,8 +799,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     elseif event == "PLAYER_LEAVE_COMBAT" then
       this.inCombat = nil
       if PlayerFrame then PlayerFrame.inCombat = nil end
-      for k in pairs(threatMemory) do threatMemory[k] = nil end
-      for k in pairs(combatColorCache) do combatColorCache[k] = nil end
+      -- Clear threat memory when leaving combat
+      for k in pairs(threatMemory) do
+        threatMemory[k] = nil
+      end
     end
   end)
 
@@ -699,6 +811,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     platecount = platecount + 1
     platename = "pfNamePlate" .. platecount
 
+    -- create pfUI nameplate overlay
     local nameplate = CreateFrame("Button", platename, parent)
     nameplate.platename = platename
     nameplate:EnableMouse(0)
@@ -708,6 +821,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     nameplate.CacheDebuffs = PlateCacheDebuffs
     nameplate.original = {}
 
+    -- create shortcuts for all known elements and disable them
     nameplate.original.healthbar, nameplate.original.castbar = parent:GetChildren()
     DisableObject(nameplate.original.healthbar)
     DisableObject(nameplate.original.castbar)
@@ -725,10 +839,11 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
     HookScript(nameplate.original.healthbar, "OnValueChanged", nameplates.OnValueChanged)
 
+    -- adjust sizes and scaling of the nameplate
     nameplate:SetScale(UIParent:GetScale())
 
     nameplate.health = CreateFrame("StatusBar", nil, nameplate)
-    nameplate.health:SetFrameLevel(4)
+    nameplate.health:SetFrameLevel(4) -- keep above glow
     nameplate.health.text = nameplate.health:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameplate.health.text:SetAllPoints()
     nameplate.health.text:SetTextColor(1,1,1,1)
@@ -775,9 +890,13 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         combopoints[i]:SetFrameLevel(8)
         combopoints[i].tex = combopoints[i]:CreateTexture("OVERLAY")
         combopoints[i].tex:SetAllPoints()
-        if i < 3 then combopoints[i].tex:SetTexture(1, .3, .3, .75)
-        elseif i < 4 then combopoints[i].tex:SetTexture(1, 1, .3, .75)
-        else combopoints[i].tex:SetTexture(.3, 1, .3, .75)
+
+        if i < 3 then
+          combopoints[i].tex:SetTexture(1, .3, .3, .75)
+        elseif i < 4 then
+          combopoints[i].tex:SetTexture(1, 1, .3, .75)
+        else
+          combopoints[i].tex:SetTexture(.3, 1, .3, .75)
         end
       end
       nameplate.combopoints = combopoints
@@ -816,11 +935,13 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       nameplate.castbar = castbar
     end
 
+    -- Stagger tick to spread updates across frames (0.05s apart per plate)
     nameplate.tick = GetTime() + mathmod(platecount, 10) * 0.05
 
     parent.nameplate = nameplate
     HookScript(parent, "OnShow", nameplates.OnShow)
-    parent:SetScript("OnUpdate", nil)
+    -- NOTE: OnUpdate is now handled centrally, not per-plate/
+    parent:SetScript("OnUpdate", nil)  -- Disable Blizzard's OnUpdate
 
     nameplates.OnConfigChange(parent)
     nameplates.OnShow(parent)
@@ -837,43 +958,59 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local hlr, hlg, hlb, hla = GetStringColor(C.nameplates.highlightcolor)
     local hptexture = pfUI.media[C.nameplates.healthtexture]
     local rawborder, default_border = GetBorderSize("nameplates")
+
     local plate_width = C.nameplates.width + 50
     local plate_height = C.nameplates.heighthealth + font_size + 5
+    local plate_height_cast = C.nameplates.heighthealth + font_size + 5 + C.nameplates.heightcast + 5
     local combo_size = 5
+
+    local width = tonumber(C.nameplates.width)
+    local debuffsize = tonumber(C.nameplates.debuffsize)
     local healthoffset = tonumber(C.nameplates.health.offset)
     local orientation = C.nameplates.verticalhealth == "1" and "VERTICAL" or "HORIZONTAL"
 
-    local c = combatstate
+    local c = combatstate -- load combat state colors
     c.CASTING.r, c.CASTING.g, c.CASTING.b, c.CASTING.a = GetStringColor(C.nameplates.combatcasting)
     c.THREAT.r, c.THREAT.g, c.THREAT.b, c.THREAT.a = GetStringColor(C.nameplates.combatthreat)
     c.NOTHREAT.r, c.NOTHREAT.g, c.NOTHREAT.b, c.NOTHREAT.a = GetStringColor(C.nameplates.combatnothreat)
     c.OFFTANK.r, c.OFFTANK.g, c.OFFTANK.b, c.OFFTANK.a = GetStringColor(C.nameplates.combatofftank)
     c.STUN.r, c.STUN.g, c.STUN.b, c.STUN.a = GetStringColor(C.nameplates.combatstun)
 
+    RebuildOfftanks()
+
     nameplate:SetWidth(plate_width)
     nameplate:SetHeight(plate_height)
     nameplate:SetPoint("TOP", parent, "TOP", 0, 0)
+
     nameplate.name:SetFont(font, font_size, font_style)
+
     nameplate.health:SetOrientation(orientation)
     nameplate.health:SetPoint("TOP", nameplate.name, "BOTTOM", 0, healthoffset)
     nameplate.health:SetStatusBarTexture(hptexture)
     nameplate.health:SetWidth(C.nameplates.width)
     nameplate.health:SetHeight(C.nameplates.heighthealth)
     nameplate.health.hlr, nameplate.health.hlg, nameplate.health.hlb, nameplate.health.hla = hlr, hlg, hlb, hla
+
     CreateBackdrop(nameplate.health, default_border)
+
     nameplate.health.text:SetFont(font, font_size - 2, "OUTLINE")
     nameplate.health.text:SetJustifyH(C.nameplates.hptextpos)
+
     nameplate.guild:SetFont(font, font_size, font_style)
+
     nameplate.glow:SetWidth(C.nameplates.width + 60)
     nameplate.glow:SetHeight(C.nameplates.heighthealth + 30)
     nameplate.glow:SetVertexColor(glowr, glowg, glowb, glowa)
+
     nameplate.raidicon:ClearAllPoints()
     nameplate.raidicon:SetPoint("BOTTOM", nameplate.health, "TOP", C.nameplates.raidiconoffx, C.nameplates.raidiconoffy)
     nameplate.level:SetFont(font, font_size, font_style)
     nameplate.raidicon:SetWidth(C.nameplates.raidiconsize)
     nameplate.raidicon:SetHeight(C.nameplates.raidiconsize)
 
-    for i=1,16 do UpdateDebuffConfig(nameplate, i) end
+    for i=1,16 do
+      UpdateDebuffConfig(nameplate, i)
+    end
 
     for i=1,5 do
       nameplate.combopoints[i]:SetWidth(combo_size)
@@ -885,12 +1022,15 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     nameplate.castbar:SetPoint("TOPLEFT", nameplate.health, "BOTTOMLEFT", 0, -default_border*3)
     nameplate.castbar:SetPoint("TOPRIGHT", nameplate.health, "BOTTOMRIGHT", 0, -default_border*3)
     nameplate.castbar:SetHeight(C.nameplates.heightcast)
+    -- Use the same castbar texture and color as the unit frame castbar (castbar.lua)
     local cbtexture = pfUI.media[C.appearance.castbar.texture]
     nameplate.castbar:SetStatusBarTexture(cbtexture or hptexture)
     local cbr, cbg, cbb, cba = strsplit(",", C.appearance.castbar.castbarcolor)
     nameplate.castbar:SetStatusBarColor(cbr, cbg, cbb, cba)
+    -- reset endTime cache so color/texture refresh takes effect on next cast
     nameplate.castbar.lastEndTime = nil
     CreateBackdrop(nameplate.castbar, default_border)
+
     nameplate.castbar.text:SetFont(font, font_size, "OUTLINE")
     nameplate.castbar.spell:SetFont(font, font_size, "OUTLINE")
     nameplate.castbar.icon:SetPoint("BOTTOMLEFT", nameplate.castbar, "BOTTOMRIGHT", default_border*3, 0)
@@ -901,11 +1041,6 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     nameplates:OnDataChanged(nameplate)
   end
 
-  -- ============================================================================
-  -- PERF (ShaguPlates): OnValueChanged only syncs bar values — never triggers
-  -- the expensive OnDataChanged. HP text updates happen inside OnDataChanged
-  -- when the hp/hpmax cache detects an actual change.
-  -- ============================================================================
   nameplates.OnValueChanged = function()
     local plate = this:GetParent().nameplate
     if plate and plate.health then
@@ -921,13 +1056,14 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local name = plate.original.name:GetText()
     local level = plate.original.level:IsShown() and plate.original.level:GetObjectType() == "FontString" and tonumber(plate.original.level:GetText()) or "??"
     local class, ulevel, elite, player, guild = GetUnitData(name, true)
-
+    
+    -- Use database level ONLY if current level is ?? (fixes ?? after reload, but doesn't override visible levels)
     local levelFromDB = false
     if level == "??" and ulevel and ulevel > 0 then
       level = ulevel
       levelFromDB = true
     end
-
+    
     local target = plate.istarget
     local mouseover = UnitExists("mouseover") and plate.original.glow:IsShown() or nil
     local unitstr = target and "target" or mouseover and "mouseover" or nil
@@ -935,19 +1071,27 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local unittype = GetUnitType(red, green, blue) or "ENEMY_NPC"
     local font_size = C.nameplates.use_unitfonts == "1" and C.global.font_unit_size or C.global.font_size
 
-    if not unitstr then unitstr = plate.parent:GetName(1) end
+    -- use unit guid as unitstr if possible
+    if not unitstr then
+      unitstr = plate.parent:GetName(1)
+    end
 
+    -- ignore players with npc names if plate level is lower than player level
     if ulevel and ulevel > (level == "??" and -1 or level) then player = nil end
 
+    -- cache name and reset unittype on change
     if plate.cache.name ~= name then
       plate.cache.name = name
       plate.cache.player = nil
-      plate.cdCache = nil
+      plate.cdCache = nil  -- new unit, reset spell-keyed timer cache
     end
 
+    -- read and cache unittype
     if plate.cache.player then
+      -- overwrite unittype from cache if existing
       player = plate.cache.player == "PLAYER" and true or nil
     elseif unitstr then
+      -- read unit type while unitstr is set
       plate.cache.player = UnitIsPlayer(unitstr) and "PLAYER" or "NPC"
     end
 
@@ -956,23 +1100,38 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     elite = plate.original.levelicon:IsShown() and not player and "boss" or elite
     if not class then plate.wait_for_scan = true end
 
+    -- skip data updates on invisible frames
     if not visible then return end
-    if event == "PLAYER_TARGET_CHANGED" then unitstr = nil end
-    if unitstr and not string.find(unitstr, "^0x") and UnitName(unitstr) ~= name then unitstr = nil end
 
+    -- target event sometimes fires too quickly, where nameplate identifiers are not
+    -- yet updated. So while being inside this event, we cannot trust the unitstr.
+    if event == "PLAYER_TARGET_CHANGED" then unitstr = nil end
+
+    -- remove unitstr on unit name mismatch
+    if unitstr and UnitName(unitstr) ~= name then unitstr = nil end
+
+    -- use mobhealth values if addon is running
     if (MobHealth3 or MobHealthFrame) and target and name == UnitName('target') and MobHealth_GetTargetCurHP() then
       hp = MobHealth_GetTargetCurHP() > 0 and MobHealth_GetTargetCurHP() or hp
       hpmax = MobHealth_GetTargetMaxHP() > 0 and MobHealth_GetTargetMaxHP() or hpmax
     end
 
+    -- always make sure to keep plate visible
     plate:Show()
 
-    if target and cfg.targetglow then plate.glow:Show() else plate.glow:Hide() end
+    if target and cfg.targetglow then
+      plate.glow:Show() else plate.glow:Hide()
+    end
 
+    -- target indicator
     if cfg.outcombatstate then
       local guid = plate.parent:GetName(1) or ""
+
+      -- determine color based on combat state
       local color = GetCombatStateColor(guid)
       if not color then color = combatstate.NONE end
+
+      -- set border color
       plate.health.backdrop:SetBackdropBorderColor(color.r, color.g, color.b, color.a)
     elseif target and cfg.targethighlight then
       plate.health.backdrop:SetBackdropBorderColor(plate.health.hlr, plate.health.hlg, plate.health.hlb, plate.health.hla)
@@ -988,16 +1147,27 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       plate.health.backdrop:SetBackdropBorderColor(er,eg,eb,ea)
     end
 
+    -- hide frames according to the configuration
     local TotemIcon = TotemPlate(name)
+
     if TotemIcon then
+      -- create totem icon
       plate.totem.icon:SetTexture("Interface\\Icons\\" .. TotemIcon)
-      plate.glow:Hide(); plate.level:Hide(); plate.name:Hide(); plate.health:Hide(); plate.guild:Hide()
+
+      plate.glow:Hide()
+      plate.level:Hide()
+      plate.name:Hide()
+      plate.health:Hide()
+      plate.guild:Hide()
       plate.totem:Show()
     elseif HidePlate(unittype, name, (hpmax-hp == hpmin), target) then
       plate.level:SetPoint("RIGHT", plate.name, "LEFT", -3, 0)
       plate.name:SetParent(plate)
       plate.guild:SetPoint("BOTTOM", plate.name, "BOTTOM", -2, -(font_size + 2))
-      plate.level:Show(); plate.name:Show(); plate.health:Hide()
+
+      plate.level:Show()
+      plate.name:Show()
+      plate.health:Hide()
       if guild and C.nameplates.showguildname == "1" then
         plate.glow:SetPoint("CENTER", plate.name, "CENTER", 0, -(font_size / 2) - 2)
       else
@@ -1008,22 +1178,18 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       plate.level:SetPoint("RIGHT", plate.health, "LEFT", -5, 0)
       plate.name:SetParent(plate.health)
       plate.guild:SetPoint("BOTTOM", plate.health, "BOTTOM", 0, -(font_size + 4))
-      plate.level:Show(); plate.name:Show(); plate.health:Show()
+
+      plate.level:Show()
+      plate.name:Show()
+      plate.health:Show()
       plate.glow:SetPoint("CENTER", plate.health, "CENTER", 0, 0)
       plate.totem:Hide()
     end
 
-    -- PERF: Cache level string
-    local levelStr = (plate.cachedLevelVal == level and plate.cachedElite == elite) and plate.cachedLevelStr
-    if not levelStr then
-      levelStr = string.format("%s%s", level, (elitestrings[elite] or ""))
-      plate.cachedLevelStr = levelStr
-      plate.cachedLevelVal = level
-      plate.cachedElite = elite
-    end
     plate.name:SetText(GetNameString(name))
-    plate.level:SetText(levelStr)
-
+    plate.level:SetText(string.format("%s%s", level, (elitestrings[elite] or "")))
+    
+    -- Set level color from GetDifficultyColor when using DB level
     if levelFromDB and type(level) == "number" then
       local color = GetDifficultyColor(level)
       plate.level:SetTextColor(color.r + 0.3, color.g + 0.3, color.b + 0.3, 1)
@@ -1041,53 +1207,59 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       plate.guild:Hide()
     end
 
-    -- PERF (ShaguPlates): Only update bar + HP text when values actually changed
+    -- PERF: Only update bar + HP text when values actually changed
     if plate.cache.hp ~= hp or plate.cache.hpmax ~= hpmax then
       plate.cache.hp = hp
       plate.cache.hpmax = hpmax
       plate.health:SetMinMaxValues(hpmin, hpmax)
       plate.health:SetValue(hp)
 
-      if cfg.showhp then
-        local rhp, rhpmax, estimated
-        local guid = plate.parent:GetName(1)
-        if guid and GetUnitField then
-          local npHp = GetUnitField(guid, "health")
-          local npMaxHp = GetUnitField(guid, "maxHealth")
-          if npHp and npHp > 0 and npMaxHp and npMaxHp > 0 then
-            rhp, rhpmax = npHp, npMaxHp
-          end
-        end
-        if not rhp then
-          if hpmax > 100 or (round(hpmax/100*hp) ~= hp) then
-            rhp, rhpmax = hp, hpmax
-          elseif pfUI.libhealth and pfUI.libhealth.enabled then
-            rhp, rhpmax, estimated = pfUI.libhealth:GetUnitHealthByName(name,level,tonumber(hp),tonumber(hpmax))
-          end
-        end
-        -- PERF (ShaguPlates): concat instead of string.format
-        local setting = cfg.hptextformat
-        local hasdata = (rhp and rhpmax) or estimated or hpmax > 100 or (round(hpmax/100*hp) ~= hp)
-        local pct = ceil(hp/hpmax*100)
-        if setting == "curperc" and hasdata and rhp then
-          plate.health.text:SetText(Abbreviate(rhp).." | "..pct.."%")
-        elseif setting == "cur" and hasdata and rhp then
-          plate.health.text:SetText(Abbreviate(rhp))
-        elseif setting == "curmax" and hasdata and rhp then
-          plate.health.text:SetText(Abbreviate(rhp).." - "..Abbreviate(rhpmax))
-        elseif setting == "curmaxs" and hasdata and rhp then
-          plate.health.text:SetText(Abbreviate(rhp).." / "..Abbreviate(rhpmax))
-        elseif setting == "curmaxperc" and hasdata and rhp then
-          plate.health.text:SetText(Abbreviate(rhp).." - "..Abbreviate(rhpmax).." | "..pct.."%")
-        elseif setting == "curmaxpercs" and hasdata and rhp then
-          plate.health.text:SetText(Abbreviate(rhp).." / "..Abbreviate(rhpmax).." | "..pct.."%")
-        elseif setting == "deficit" and rhp then
-          plate.health.text:SetText("-"..Abbreviate(rhpmax - rhp)..(hasdata and "" or "%"))
-        else
-          plate.health.text:SetText(pct.."%")
+    if cfg.showhp then
+      local rhp, rhpmax, estimated
+      
+      -- Try Nampower first for real HP values via GUID
+      local guid = plate.parent:GetName(1)
+      if guid and GetUnitField then
+        local npHp = GetUnitField(guid, "health")
+        local npMaxHp = GetUnitField(guid, "maxHealth")
+        if npHp and npHp > 0 and npMaxHp and npMaxHp > 0 then
+          rhp, rhpmax = npHp, npMaxHp
         end
       end
+      
+      -- Fallback to existing methods
+      if not rhp then
+        if hpmax > 100 or (round(hpmax/100*hp) ~= hp) then
+          rhp, rhpmax = hp, hpmax
+        elseif pfUI.libhealth and pfUI.libhealth.enabled then
+          rhp, rhpmax, estimated = pfUI.libhealth:GetUnitHealthByName(name,level,tonumber(hp),tonumber(hpmax))
+        end
+      end
+
+      local setting = cfg.hptextformat
+      local hasdata = ( rhp and rhpmax ) or estimated or hpmax > 100 or (round(hpmax/100*hp) ~= hp)
+
+      if setting == "curperc" and hasdata and rhp then
+        plate.health.text:SetText(string.format("%s | %s%%", Abbreviate(rhp), ceil(hp/hpmax*100)))
+      elseif setting == "cur" and hasdata and rhp then
+        plate.health.text:SetText(string.format("%s", Abbreviate(rhp)))
+      elseif setting == "curmax" and hasdata and rhp then
+        plate.health.text:SetText(string.format("%s - %s", Abbreviate(rhp), Abbreviate(rhpmax)))
+      elseif setting == "curmaxs" and hasdata and rhp then
+        plate.health.text:SetText(string.format("%s / %s", Abbreviate(rhp), Abbreviate(rhpmax)))
+      elseif setting == "curmaxperc" and hasdata and rhp then
+        plate.health.text:SetText(string.format("%s - %s | %s%%", Abbreviate(rhp), Abbreviate(rhpmax), ceil(hp/hpmax*100)))
+      elseif setting == "curmaxpercs" and hasdata and rhp then
+        plate.health.text:SetText(string.format("%s / %s | %s%%", Abbreviate(rhp), Abbreviate(rhpmax), ceil(hp/hpmax*100)))
+      elseif setting == "deficit" and rhp then
+        plate.health.text:SetText(string.format("-%s" .. (hasdata and "" or "%%"), Abbreviate(rhpmax - rhp)))
+      else -- "percent" as fallback
+        plate.health.text:SetText(string.format("%s%%", ceil(hp/hpmax*100)))
+      end
+    else
+      plate.health.text:SetText()
     end
+    end -- hp cache gate
 
     local r, g, b, a = unpack(unitcolors[unittype])
 
@@ -1104,7 +1276,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     if cfg.barcombatstate then
       local guid = plate.parent:GetName(1) or ""
       local color = GetCombatStateColor(guid)
-      if color then r, g, b, a = color.r, color.g, color.b, color.a end
+
+      if color then
+        r, g, b, a = color.r, color.g, color.b, color.a
+      end
     end
 
     if r ~= plate.cache.r or g ~= plate.cache.g or b ~= plate.cache.b then
@@ -1117,35 +1292,38 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       plate.cache.namecolor = r + g + b
     end
 
+    -- update combopoints
     for i=1, 5 do plate.combopoints[i]:Hide() end
     if target and C.nameplates.cpdisplay == "1" then
       for i=1, GetComboPoints("target") do plate.combopoints[i]:Show() end
     end
 
-    -- =========================================================================
-    -- DEBUFFS
-    -- =========================================================================
+    -- update debuffs
     local index = 1
+
     local isFriendly = unittype == "FRIENDLY_PLAYER" or unittype == "FRIENDLY_NPC"
     local showDebuffsForType = cfg.showdebuffs and (isFriendly and cfg.showdebuffs_friendly or (not isFriendly and cfg.showdebuffs_hostile))
-
     if showDebuffsForType then
+      -- PERF: Cache verify string - only allocate new string when name/level actually changes
       if name ~= plate.cachedVerifyName or level ~= plate.cachedVerifyLevel then
         plate.cachedVerifyName = name
         plate.cachedVerifyLevel = level
-        plate.cachedVerify = (name or "")..":"..(level or "")
+        plate.cachedVerify = (name or "") .. ":" .. (level or "")
       end
       local verify = plate.cachedVerify
 
+      -- update cached debuffs
       if C.nameplates["guessdebuffs"] == "1" and unitstr then
         plate:CacheDebuffs(unitstr, verify)
       end
 
-      -- PERF (Nampower): reusable debuffDisplayBuf + IterDebuffs — no GC churn
+      -- update all debuff icons
+      -- Use IterDebuffs when Nampower available to avoid blind 16-slot loop
+      -- debuffDisplayBuf is a module-level reusable buffer (no GC churn)
       local debuffCount = 0
-      for i = 1, 16 do debuffDisplayBuf[i].effect = nil end
-
+      for i = 1, 16 do debuffDisplayBuf[i].effect = nil end  -- clear previous
       if unitstr and libdebuff and libdebuff.IterDebuffs and GetUnitGUID then
+
         _iterDebuffCount = 0
         libdebuff:IterDebuffs(unitstr, iterDebuffCallback)
         debuffCount = _iterDebuffCount
@@ -1153,8 +1331,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
         for i = 1, 16 do
           local effect, rank, texture, stacks, dtype, duration, timeleft
           effect, rank, texture, stacks, dtype, duration, timeleft = libdebuff:UnitDebuff(unitstr, i)
-          if not effect then break end
-          if texture then
+          if effect then
             debuffCount = debuffCount + 1
             local b = debuffDisplayBuf[debuffCount]
             b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft = effect, texture, stacks, dtype, duration, timeleft
@@ -1163,54 +1340,43 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       elseif plate.verify == verify then
         for i = 1, 16 do
           local effect, rank, texture, stacks, dtype, duration, timeleft = plate:UnitDebuff(i)
-          if not effect then break end
-          if texture then
+          if effect then
             debuffCount = debuffCount + 1
             local b = debuffDisplayBuf[debuffCount]
             b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft = effect, texture, stacks, dtype, duration, timeleft
           end
         end
       end
+      for i = 1, 16 do
+        local effect, texture, stacks, dtype, duration, timeleft
+        if debuffDisplayBuf[i].effect then
+          local b = debuffDisplayBuf[i]
+          effect, texture, stacks, dtype, duration, timeleft = b.effect, b.texture, b.stacks, b.dtype, b.duration, b.timeleft
+        end
 
-      for i = 1, debuffCount do
-        local b = debuffDisplayBuf[i]
-        if b.effect and b.texture and DebuffFilter(b.effect) then
+        if effect and texture and DebuffFilter(effect) then
           if not plate.debuffs[index] then
             CreateDebuffIcon(plate, index)
             UpdateDebuffConfig(plate, index)
           end
 
-          local debuff = plate.debuffs[index]
+          plate.debuffs[index]:Show()
+          plate.debuffs[index].icon:SetTexture(texture)
+          plate.debuffs[index].icon:SetTexCoord(.078, .92, .079, .937)
 
-          -- PERF (ShaguPlates): Only call API when value actually changed
-          if debuff.lastTexture ~= b.texture then
-            debuff.lastTexture = b.texture
-            debuff.icon:SetTexture(b.texture)
-            debuff.icon:SetTexCoord(.078, .92, .079, .937)
+          if stacks and stacks > 1 and C.nameplates.debuffs["showstacks"] == "1" then
+            plate.debuffs[index].stacks:SetText(stacks)
+            plate.debuffs[index].stacks:Show()
+          else
+            plate.debuffs[index].stacks:Hide()
           end
 
-          if not debuff.isShown then
-            debuff.isShown = true
-            debuff:Show()
-          end
-
-          if debuff.lastStacks ~= b.stacks then
-            debuff.lastStacks = b.stacks
-            if b.stacks and b.stacks > 1 and C.nameplates.debuffs["showstacks"] == "1" then
-              debuff.stacks:SetText(b.stacks)
-              debuff.stacks:Show()
-            else
-              debuff.stacks:Hide()
-            end
-          end
-
-          if b.duration and b.timeleft and cfg.debufftimers then
+          if duration and timeleft and cfg.debufftimers then
             plate.cdCache = plate.cdCache or {}
-            local newStart = GetTime() + b.timeleft - b.duration
-            -- slot-based cache: invalidates automatically when a different debuff shifts into this slot
+            local newStart = GetTime() + timeleft - duration
             local slotCache = plate.cdCache[index]
-            local cachedStart = slotCache and slotCache.effect == b.effect and slotCache.start
-            local cd = debuff.cd
+            local cachedStart = slotCache and slotCache.effect == effect and slotCache.start
+            local cd = plate.debuffs[index].cd
             cd:Show()
             if not cachedStart or abs(cachedStart - newStart) > 0.5 then
               if not cd.configCached or cd.cachedAnim ~= cfg.debuffanim or cd.cachedText ~= cfg.debufftext then
@@ -1221,9 +1387,9 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
                 cd.cachedText = cfg.debufftext
                 cd.configCached = true
               end
-              CooldownFrame_SetTimer(cd, newStart, b.duration, 1)
+              CooldownFrame_SetTimer(cd, newStart, duration, 1)
               plate.cdCache[index] = plate.cdCache[index] or {}
-              plate.cdCache[index].effect = b.effect
+              plate.cdCache[index].effect = effect
               plate.cdCache[index].start = newStart
             end
           end
@@ -1233,18 +1399,10 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       end
     end
 
-    -- PERF (ShaguPlates): Full state reset on hide
+    -- hide remaining debuffs
     for i = index, 16 do
-      local debuff = plate.debuffs[i]
-      if debuff and debuff.isShown then
-        debuff.isShown = nil
-        debuff.lastTexture = nil
-        debuff.lastStacks = nil
-        if debuff.cd then
-          debuff.cd.cachedStart = nil
-          debuff.cd.cachedEffect = nil
-        end
-        debuff:Hide()
+      if plate.debuffs[i] then
+        plate.debuffs[i]:Hide()
       end
     end
   end
@@ -1253,22 +1411,16 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local frame = frame or this
     local nameplate = frame.nameplate
 
+    -- Register GUID when plate becomes visible
     local guid = frame:GetName(1)
     if guid then
-      -- PERF (ShaguPlates): Clean up old GUID mapping when plate is reused
-      if nameplate.cachedGuid and nameplate.cachedGuid ~= guid then
-        if guidRegistry[nameplate.cachedGuid] == frame then
-          guidRegistry[nameplate.cachedGuid] = nil
-        end
-      end
       nameplate.cachedGuid = guid
       guidRegistry[guid] = frame
-
-      -- PERF (Nampower): Notify libunitscan to cache unit data without requiring mouseover
-      if pfUI.api and pfUI.api.libunitscan and pfUI.api.libunitscan.ScanGuid then
-        local unitName = nameplate.original.name:GetText()
-        local npcFlags = GetUnitField and GetUnitField(guid, "npcFlags") or 0
-        pfUI.api.libunitscan.ScanGuid(guid, unitName, npcFlags == 0)
+      -- notify libunitscan so it can cache unit data without mouseover
+      if pfUI.api.libunitscan and pfUI.api.libunitscan.ScanGuid then
+        local name = frame.nameplate.original.name:GetText()
+        local npcFlags = GetUnitField(guid, "npcFlags") or 0
+        pfUI.api.libunitscan.ScanGuid(guid, name, npcFlags == 0)
       end
     end
 
@@ -1278,7 +1430,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
   nameplates.OnUpdate = function(frame, state)
     local nameplate = frame.nameplate
     local now = state and state.now or GetTime()
-
+    
+    -- Update GUID registry (lightweight, needed for event routing)
     local guid = frame:GetName(1)
     if guid and guid ~= nameplate.cachedGuid then
       if nameplate.cachedGuid and guidRegistry[nameplate.cachedGuid] == frame then
@@ -1287,43 +1440,35 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       nameplate.cachedGuid = guid
       guidRegistry[guid] = frame
     end
-
-    -- PERF: GUID-based target detection (stable, immune to alpha transitions)
+    
+    -- PERF: Intelligent throttling based on target/castbar status and plate count
+    -- Use GUID comparison as primary target detection: instant, immune to alpha transitions,
+    -- and immediately correct on de-target (unlike istarget which updates one tick later)
     local targetGuid = state and state.targetGuid
     local target = (targetGuid and nameplate.cachedGuid and targetGuid == nameplate.cachedGuid) or
                    (state and state.hasTarget and frame:GetAlpha() >= 0.99) or nil
-
-    -- PERF (ShaguPlates): Only set alpha when value actually changed
-    local desiredAlpha = (target or not state.hasTarget) and 1 or cfg.notargalpha
-    if nameplate.cachedAlpha ~= desiredAlpha then
-      nameplate:SetAlpha(desiredAlpha)
-      nameplate.cachedAlpha = desiredAlpha
+    -- Target plate castbar runs on its own dedicated frame (nameplates.castbarFrame).
+    -- For non-target plates with castbar active, use castbar throttle to ensure
+    -- smooth animation without overloading the central loop.
+    local isCastingNonTarget = not target and nameplate.castbar and nameplate.castbar:IsShown()
+    if not isCastingNonTarget and not target and cfg.showcastbar and nameplate.cachedGuid then
+      local castInfo = GetCastInfo(nameplate.cachedGuid)
+      if castInfo and castInfo.spellID and castInfo.endTime and castInfo.endTime > now then
+        isCastingNonTarget = true
+      elseif pfGetCastInfo and nameplate.castUpdate then
+        isCastingNonTarget = true
+      end
     end
 
-    -- =========================================================================
-    -- CASTBAR VISIBILITY (before throttle — show/hide must always run)
-    -- =========================================================================
-    local castbar = nameplate.castbar
-    local showCast = cfg.showcastbar and (not cfg.targetcastbar or target)
-    local castInfo = showCast and nameplate.cachedGuid and GetCastInfo(nameplate.cachedGuid)
-    local castActive = castInfo and castInfo.spellID and castInfo.endTime and now < castInfo.endTime
-                       and castInfo.event ~= "CAST" and castInfo.event ~= "FAIL"
-
-    local libcastActive = false
-    if not castActive and showCast and nameplate.cachedGuid and pfGetCastInfo then
-      local cast, _, _, _, startTime, endTime = pfGetCastInfo(nameplate.cachedGuid)
-      if not cast then cast, _, _, _, startTime, endTime = pfGetChannelInfo(nameplate.cachedGuid) end
-      libcastActive = cast ~= nil
+    -- hide castbar before throttle if no cast active
+    if not isCastingNonTarget and not target then
+      if nameplate.castbar.isShown then
+        nameplate.castbar.isShown = nil
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
+      end
     end
 
-    if not castActive and not libcastActive then
-      if castbar.isShown then castbar.isShown = nil; castbar.lastEndTime = nil; castbar.lastTime = nil; castbar:Hide() end
-    end
-
-    -- =========================================================================
-    -- THROTTLE
-    -- =========================================================================
-    local isCastingNonTarget = not target and castbar.isShown
     local throttle
     if target then
       throttle = pfUI.throttle:Get("nameplates_target")
@@ -1332,92 +1477,30 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     else
       throttle = pfUI.throttle:Get("nameplates")
     end
+
+    -- Non-target plates with active castbar use the castbar throttle
     if isCastingNonTarget then
       local cbThrottle = pfUI.throttle:Get("nameplates_castbar")
       if cbThrottle < throttle then throttle = cbThrottle end
     end
 
+    -- Check for pending event updates (these bypass throttle for immediate response)
     local hasEventUpdate = nameplate.eventcache or nameplate.auraUpdate or nameplate.castUpdate or nameplate.targetUpdate or nameplate.comboUpdate
+
+    -- Event updates bypass throttle
     if not hasEventUpdate and (nameplate.lasttick or 0) + throttle > now then return end
     nameplate.lasttick = now
-
+    
     -- =========================================================================
-    -- CASTBAR UPDATES (throttled via nameplates_castbar)
+    -- EVERYTHING BELOW RUNS AT THROTTLED RATE (50 FPS target, 10 FPS others)
     -- =========================================================================
-    local cbThrottle = pfUI.throttle:Get("nameplates_castbar")
-    if (nameplate.castbar_tick or 0) + cbThrottle <= now then
-      nameplate.castbar_tick = now
-
-      if castActive then
-        local isChannel = castInfo.event == "CHANNEL"
-        local duration = castInfo.endTime - castInfo.startTime
-        if castbar.lastEndTime ~= castInfo.endTime then
-          castbar.lastEndTime = castInfo.endTime
-          castbar:SetMinMaxValues(0, duration)
-          castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(isChannel and "channelcolor" or "castbarcolor")]))
-          if castInfo.icon then
-            castbar.icon.tex:SetTexture(castInfo.icon)
-            castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
-          end
-          castbar.spell:SetText(cfg.spellname and castInfo.spellName or "")
-        end
-        local barValue = isChannel and (castInfo.endTime - now) or (now - castInfo.startTime)
-        barValue = barValue < 0 and 0 or (barValue > duration and duration or barValue)
-        castbar:SetValue(barValue)
-        local timeLeft = floor((castInfo.endTime - now) * 10)
-        if castbar.lastTime ~= timeLeft then
-          castbar.lastTime = timeLeft
-          if C.unitframes.castbardecimals == "1" then
-            castbar.text:SetText(floor((castInfo.endTime - now) * 10) / 10)
-          else
-            castbar.text:SetText(string.format("%.2f", castInfo.endTime - now))
-          end
-        end
-        if not castbar.isShown then castbar.isShown = true; castbar:Show() end
-
-      elseif libcastActive and nameplate.cachedGuid and pfGetCastInfo then
-        local cast, _, _, texture, startTime, endTime = pfGetCastInfo(nameplate.cachedGuid)
-        local channel
-        if not cast then channel, _, _, texture, startTime, endTime = pfGetChannelInfo(nameplate.cachedGuid) end
-        if cast or channel then
-          local effect = cast or channel
-          local duration = endTime - startTime
-          local max = duration / 1000
-          local cur = now - startTime / 1000
-          if channel then cur = max + startTime / 1000 - now end
-          cur = cur < 0 and 0 or (cur > max and max or cur)
-          if castbar.lastEndTime ~= endTime then
-            castbar.lastEndTime = endTime
-            castbar:SetMinMaxValues(0, max)
-            castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(channel and "channelcolor" or "castbarcolor")]))
-            if texture then castbar.icon.tex:SetTexture(texture); castbar.icon.tex:SetTexCoord(.1,.9,.1,.9) end
-            castbar.spell:SetText(cfg.spellname and effect or "")
-          end
-          castbar:SetValue(cur)
-          local remaining = channel and cur or (max - cur)
-          local timeLeft = floor(remaining * 10)
-          if castbar.lastTime ~= timeLeft then
-            castbar.lastTime = timeLeft
-            if C.unitframes.castbardecimals == "1" then
-              castbar.text:SetText(floor(remaining * 10) / 10)
-            else
-              castbar.text:SetText(string.format("%.2f", remaining))
-            end
-          end
-          if not castbar.isShown then castbar.isShown = true; castbar:Show() end
-        end
-      end
-    end
-
-    -- =========================================================================
-    -- EVERYTHING BELOW RUNS AT THROTTLED RATE
-    -- =========================================================================
-
+    
     local update
     local original = nameplate.original
     local name = original.name:GetText()
     local mouseover = state and state.hasMouseover and original.glow:IsShown() or nil
 
+    -- trigger queued event update
     if hasEventUpdate then
       nameplates:OnDataChanged(nameplate)
       nameplate.eventcache = nil
@@ -1427,34 +1510,47 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       nameplate.comboUpdate = nil
     end
 
-    -- VANILLA OVERLAP/CLICKTHROUGH
+    -- =========================================================================
+    -- VANILLA OVERLAP/CLICKTHROUGH HANDLING
+    -- =========================================================================
     if pfUI.client <= 11200 then
       local useOverlap = C.nameplates["overlap"] == "1" or C.nameplates["vertical_offset"] ~= "0"
       local clickable = C.nameplates["clickthrough"] ~= "1"
+
       if not clickable then
-        frame:EnableMouse(false); nameplate:EnableMouse(false)
+        frame:EnableMouse(false)
+        nameplate:EnableMouse(false)
       else
         local plate = useOverlap and nameplate or frame
         plate:EnableMouse(clickable)
       end
+
       if C.nameplates["overlap"] == "1" then
-        if frame:GetWidth() > 1 then frame:SetWidth(1); frame:SetHeight(1) end
+        if frame:GetWidth() > 1 then
+          frame:SetWidth(1)
+          frame:SetHeight(1)
+        end
       else
         if not nameplate.dwidth then
           nameplate.dwidth = floor(nameplate:GetWidth() * UIParent:GetScale())
         end
+
         if floor(frame:GetWidth()) ~= nameplate.dwidth then
           frame:SetWidth(nameplate:GetWidth() * UIParent:GetScale())
           frame:SetHeight(nameplate:GetHeight() * UIParent:GetScale())
         end
       end
+
       local mouseEnabled = nameplate:IsMouseEnabled()
       if C.nameplates["clickthrough"] == "0" and C.nameplates["overlap"] == "1" and SpellIsTargeting() == mouseEnabled then
         nameplate:EnableMouse(not mouseEnabled)
       end
     end
 
-    if nameplate.istarget ~= target then nameplate.target_strata = nil end
+    -- Cache strata changes
+    if nameplate.istarget ~= target then
+      nameplate.target_strata = nil
+    end
 
     if target and nameplate.target_strata ~= 1 then
       nameplate:SetFrameStrata("LOW")
@@ -1466,20 +1562,47 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
 
     nameplate.istarget = target
 
-    if nameplate.cache.target ~= target then nameplate.cache.target = target; update = true end
-    if nameplate.cache.mouseover ~= mouseover then nameplate.cache.mouseover = mouseover; update = true end
-    if nameplate.wait_for_scan and GetUnitData(name, true) then nameplate.wait_for_scan = nil; update = true end
+    -- Set non-target plate alpha
+    local configAlpha = cfg.notargalpha or 0.5
+    local desiredAlpha = (target or not state.hasTarget) and 1 or configAlpha
 
+    if nameplate.cachedAlpha ~= desiredAlpha then
+      nameplate:SetAlpha(desiredAlpha)
+      nameplate.cachedAlpha = desiredAlpha
+    end
+
+    -- queue update on visual target update
+    if nameplate.cache.target ~= target then
+      nameplate.cache.target = target
+      update = true
+    end
+
+    -- queue update on visual mouseover update
+    if nameplate.cache.mouseover ~= mouseover then
+      nameplate.cache.mouseover = mouseover
+      update = true
+    end
+
+    -- trigger update when unit was found
+    if nameplate.wait_for_scan and GetUnitData(name, true) then
+      nameplate.wait_for_scan = nil
+      update = true
+    end
+
+    -- trigger update when name color changed (includes combat state check)
     local r, g, b = original.name:GetTextColor()
     local inCombatWithPlayer = false
     if cfg.namefightcolor then
-      local g2 = nameplate.cachedGuid
-      if g2 then inCombatWithPlayer = UnitAffectingCombat(g2) and UnitAffectingCombat("player") end
+      local guid = nameplate.cachedGuid
+      if guid then
+        inCombatWithPlayer = UnitAffectingCombat(guid) and UnitAffectingCombat("player")
+      end
     end
-
+    
     if r + g + b ~= nameplate.cache.namecolor or (cfg.namefightcolor and nameplate.cache.inCombat ~= inCombatWithPlayer) then
       nameplate.cache.namecolor = r + g + b
       nameplate.cache.inCombat = inCombatWithPlayer
+
       if cfg.namefightcolor then
         if (r > .9 and g < .2 and b < .2) or inCombatWithPlayer then
           nameplate.name:SetTextColor(1,0.4,0.2,1)
@@ -1492,6 +1615,7 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       update = true
     end
 
+    -- trigger update when level color changed
     local r, g, b = original.level:GetTextColor()
     r, g, b = r + .3, g + .3, b + .3
     if r + g + b ~= nameplate.cache.levelcolor then
@@ -1500,133 +1624,350 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
       update = true
     end
 
+    -- PERF: scan for debuff timeouts using indexed access instead of pairs()
     if nameplate.debuffcache then
       for id = 1, 16 do
         local data = nameplate.debuffcache[id]
-        if data and (not data.stop or data.stop < now) and not data.empty then
+        if data and ( not data.stop or data.stop < now ) and not data.empty then
           data.empty = true
           update = true
         end
       end
     end
 
-    if not nameplate.tick or nameplate.tick < now then update = true end
+    -- use timer based updates
+    if not nameplate.tick or nameplate.tick < now then
+      update = true
+    end
 
+    -- run full updates if required
     if update then
       nameplates:OnDataChanged(nameplate)
       nameplate.tick = now + .5
     end
 
-    -- =========================================================================
-    -- ZOOM (ShaguPlates: instant zoom option)
-    -- =========================================================================
+    -- Zoom animation
     if target and cfg.targetzoom then
-      local wc = cfg.width * cfg.zoomval
-      local hc = cfg.heighthealth * (cfg.zoomval * .9)
-      if cfg.zoominstant then
-        if not nameplate.health.zoomed then
-          nameplate.health:SetWidth(wc); nameplate.health:SetHeight(hc); nameplate.health.zoomed = true
-        end
-      else
-        if not nameplate.health.zoomed then
-          nameplate.health.targetWidth = wc; nameplate.health.targetHeight = hc
-        end
-        local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
-        local twc, thc = nameplate.health.targetWidth, nameplate.health.targetHeight
-        if twc and thc then
-          if twc > w + 0.5 then nameplate.health:SetWidth(w*1.05); nameplate.health.zoomTransition = true
-          elseif thc > h + 0.5 then nameplate.health:SetHeight(h*1.05); nameplate.health.zoomTransition = true
-          else
-            if nameplate.health.zoomTransition then
-              nameplate.health:SetWidth(twc); nameplate.health:SetHeight(thc); nameplate.health.zoomTransition = nil
-            end
-            nameplate.health.zoomed = true
+      if not nameplate.health.zoomed then
+        local zoomval = cfg.zoomval
+        local wc = cfg.width * zoomval
+        local hc = cfg.heighthealth * (zoomval * .9)
+        nameplate.health.targetWidth = wc
+        nameplate.health.targetHeight = hc
+      end
+      
+      local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
+      local wc, hc = nameplate.health.targetWidth, nameplate.health.targetHeight
+      
+      if wc and hc then
+        if wc > w + 0.5 then
+          nameplate.health:SetWidth(w*1.05)
+          nameplate.health.zoomTransition = true
+        elseif hc > h + 0.5 then
+          nameplate.health:SetHeight(h*1.05)
+          nameplate.health.zoomTransition = true
+        else
+          if nameplate.health.zoomTransition then
+            nameplate.health:SetWidth(wc)
+            nameplate.health:SetHeight(hc)
+            nameplate.health.zoomTransition = nil
           end
+          nameplate.health.zoomed = true
         end
       end
     elseif nameplate.health.zoomed or nameplate.health.zoomTransition then
-      if cfg.zoominstant then
-        nameplate.health:SetWidth(cfg.width); nameplate.health:SetHeight(cfg.heighthealth)
-        nameplate.health.zoomTransition = nil; nameplate.health.zoomed = nil
-        nameplate.health.targetWidth = nil; nameplate.health.targetHeight = nil
+      local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
+      local wc = cfg.width
+      local hc = cfg.heighthealth
+
+      if w > wc + 0.5 then
+        nameplate.health:SetWidth(w*.95)
+      elseif h > hc + 0.5 then
+        nameplate.health:SetHeight(h*0.95)
       else
-        local w, h = nameplate.health:GetWidth(), nameplate.health:GetHeight()
-        if w > cfg.width + 0.5 then nameplate.health:SetWidth(w*.95)
-        elseif h > cfg.heighthealth + 0.5 then nameplate.health:SetHeight(h*0.95)
-        else
-          nameplate.health:SetWidth(cfg.width); nameplate.health:SetHeight(cfg.heighthealth)
-          nameplate.health.zoomTransition = nil; nameplate.health.zoomed = nil
-          nameplate.health.targetWidth = nil; nameplate.health.targetHeight = nil
-        end
+        nameplate.health:SetWidth(wc)
+        nameplate.health:SetHeight(hc)
+        nameplate.health.zoomTransition = nil
+        nameplate.health.zoomed = nil
+        nameplate.health.targetWidth = nil
+        nameplate.health.targetHeight = nil
+      end
+    end
+
+    -- Target plate castbar is handled by nameplates.castbarFrame (dedicated OnUpdate,
+    -- engine framerate, decoupled from central loop). Only update non-target castbars here.
+    local isTargetPlate = target or nameplate.istarget or (nameplate.health and nameplate.health.zoomed)
+    if cfg.showcastbar and not cfg.targetcastbar and not isTargetPlate then
+      local cbThrottle = pfUI.throttle:Get("nameplates_castbar")
+      if visiblePlateCount > 20 then
+        local massThrottle = pfUI.throttle:Get("nameplates_mass")
+        if massThrottle > cbThrottle then cbThrottle = massThrottle end
+      end
+      if (nameplate.castbar_tick or 0) + cbThrottle <= now then
+        nameplate.castbar_tick = now
+        nameplates.UpdateCastbar(nameplate, now)
+      end
+    elseif cfg.showcastbar and cfg.targetcastbar and not isTargetPlate then
+      if nameplate.castbar.isShown then
+        nameplate.castbar.isShown = nil
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
+      end
+    elseif not cfg.showcastbar then
+      if nameplate.castbar.isShown then
+        nameplate.castbar.isShown = nil
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
       end
     end
   end
 
-  nameplates.SetGameVariables = function()
-    if C.nameplates["showhostile"] == "1" then
-      _G.NAMEPLATES_ON = true; ShowNameplates()
+  -- ============================================================================
+  -- DEDICATED TARGET CASTBAR FRAME
+  -- Runs on its own OnUpdate, decoupled from the central nameplate loop.
+  -- Mirrors the approach used in castbar.lua for the target unit frame castbar.
+  -- ============================================================================
+
+  -- Shared castbar update logic (used by both dedicated frame and central loop)
+  nameplates.UpdateCastbar = function(nameplate, now)
+    if not nameplate or not nameplate.castbar then return end
+    local unitstr = nameplate.cachedGuid
+    local castInfo = unitstr and GetCastInfo(unitstr)
+
+    if castInfo and castInfo.spellID then
+      if castInfo.startTime + castInfo.duration < now then
+        wipe(castInfo)
+        nameplate.castbar:Hide()
+      elseif castInfo.event == "CAST" or castInfo.event == "FAIL" then
+        wipe(castInfo)
+        nameplate.castbar:Hide()
+      else
+        -- Only update min/max, color and icon once per cast (when endTime changes)
+        local isChannel = castInfo.event == "CHANNEL"
+        local duration = castInfo.endTime - castInfo.startTime
+        if nameplate.castbar.lastEndTime ~= castInfo.endTime then
+          nameplate.castbar.lastEndTime = castInfo.endTime
+          -- Use relative 0..duration range (same as castbar.lua) to avoid
+          -- floating-point precision loss with large absolute timestamps
+          nameplate.castbar:SetMinMaxValues(0, duration)
+          nameplate.castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(isChannel and "channelcolor" or "castbarcolor")]))
+          if castInfo.icon then
+            nameplate.castbar.icon.tex:SetTexture(castInfo.icon)
+            nameplate.castbar.icon.tex:SetTexCoord(.1,.9,.1,.9)
+          end
+          if cfg.spellname then
+            nameplate.castbar.spell:SetText(castInfo.spellName)
+          else
+            nameplate.castbar.spell:SetText("")
+          end
+        end
+        local barValue
+        if isChannel then
+          barValue = castInfo.endTime - now
+        else
+          barValue = now - castInfo.startTime
+        end
+        barValue = barValue < 0 and 0 or barValue
+        barValue = barValue > duration and duration or barValue
+        nameplate.castbar:SetValue(barValue)
+        local remaining = castInfo.endTime - now
+        if C.unitframes.castbardecimals == "1" then
+          nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
+        else
+          nameplate.castbar.text:SetText(string.format("%.2f", remaining))
+        end
+        if not nameplate.castbar.isShown then nameplate.castbar.isShown = true; nameplate.castbar:Show() end
+      end
     else
-      _G.NAMEPLATES_ON = nil; HideNameplates()
+      -- libcast fallback (vanilla without Nampower)
+      if unitstr and pfGetCastInfo then
+        local cast, _, _, texture, startTime, endTime = pfGetCastInfo(unitstr)
+        local channel
+        if not cast then
+          channel, _, _, texture, startTime, endTime = pfGetChannelInfo(unitstr)
+        end
+        if cast or channel then
+          local effect = cast or channel
+          local duration = endTime - startTime
+          local max = duration / 1000
+          local cur = now - startTime / 1000
+          if channel then cur = max + startTime / 1000 - now end
+          if cur < 0 then cur = 0 end
+          if cur > max then cur = max end
+          if nameplate.castbar.lastEndTime ~= endTime then
+            nameplate.castbar.lastEndTime = endTime
+            nameplate.castbar:SetMinMaxValues(0, max)
+            nameplate.castbar:SetStatusBarColor(strsplit(",", C.appearance.castbar[(channel and "channelcolor" or "castbarcolor")]))
+            if texture then
+              nameplate.castbar.icon.tex:SetTexture(texture)
+              nameplate.castbar.icon.tex:SetTexCoord(.1, .9, .1, .9)
+            end
+            if cfg.spellname then
+              nameplate.castbar.spell:SetText(effect)
+            else
+              nameplate.castbar.spell:SetText("")
+            end
+          end
+          nameplate.castbar:SetValue(cur)
+          local remaining = channel and cur or (max - cur)
+          if C.unitframes.castbardecimals == "1" then
+            nameplate.castbar.text:SetText(floor(remaining * 10) / 10)
+          else
+            nameplate.castbar.text:SetText(string.format("%.2f", remaining))
+          end
+          if not nameplate.castbar.isShown then nameplate.castbar.isShown = true; nameplate.castbar:Show() end
+        else
+          nameplate.castbar.isShown = nil
+          nameplate.castbar.lastEndTime = nil
+          nameplate.castbar:Hide()
+        end
+      else
+        nameplate.castbar.isShown = nil
+        nameplate.castbar.lastEndTime = nil
+        nameplate.castbar:Hide()
+      end
     end
-    if C.nameplates["showfriendly"] == "1" then
-      _G.FRIENDNAMEPLATES_ON = true; ShowFriendNameplates()
+  end
+
+  -- Dedicated frame that updates ONLY the target plate castbar.
+  -- Uses nameplates_castbar throttle from libthrottle.
+  nameplates.castbarFrame = CreateFrame("Frame", nil, UIParent)
+  nameplates.castbarFrame:SetScript("OnUpdate", function()
+    if not cfg.showcastbar then return end
+    local now = GetTime()
+    local throttle = pfUI.throttle:Get("nameplates_castbar")
+    if (this.tick or 0) > now then return end
+    this.tick = now + throttle
+
+    local targetGuid = UnitExists("target") and GetUnitGUID("target")
+    if not targetGuid then return end
+
+    local frame = guidRegistry[targetGuid]
+    if not frame or not frame.nameplate then return end
+
+    nameplates.UpdateCastbar(frame.nameplate, now)
+  end)
+
+  -- set nameplate game settings
+  nameplates.SetGameVariables = function()
+    -- update visibility (hostile)
+    if C.nameplates["showhostile"] == "1" then
+      _G.NAMEPLATES_ON = true
+      ShowNameplates()
     else
-      _G.FRIENDNAMEPLATES_ON = nil; HideFriendNameplates()
+      _G.NAMEPLATES_ON = nil
+      HideNameplates()
+    end
+
+    -- update visibility (hostile)
+    if C.nameplates["showfriendly"] == "1" then
+      _G.FRIENDNAMEPLATES_ON = true
+      ShowFriendNameplates()
+    else
+      _G.FRIENDNAMEPLATES_ON = nil
+      HideFriendNameplates()
     end
   end
 
   nameplates:SetGameVariables()
 
   nameplates.UpdateConfig = function()
+    -- Refresh config cache for all cfg.* values
     CacheConfig()
     RebuildOfftanks()
+    
+    -- update debuff filters
     DebuffFilterPopulate()
 
+    -- Check friendly zone state when config changes
     local disableHostile = C.nameplates["disable_hostile_in_friendly"] == "1"
     local disableFriendly = C.nameplates["disable_friendly_in_friendly"] == "1"
     local pvpType = GetZonePVPInfo()
     local nowFriendly = (pvpType == "friendly")
-
+    
     if nowFriendly and (disableHostile or disableFriendly) then
       if not inFriendlyZone then
+        -- Just entered friendly zone or feature just enabled
         inFriendlyZone = true
         savedHostileState = C.nameplates["showhostile"]
         savedFriendlyState = C.nameplates["showfriendly"]
       end
-      if disableHostile then _G.NAMEPLATES_ON = nil; HideNameplates()
-      elseif savedHostileState == "1" then _G.NAMEPLATES_ON = true; ShowNameplates() end
-      if disableFriendly then _G.FRIENDNAMEPLATES_ON = nil; HideFriendNameplates()
-      elseif savedFriendlyState == "1" then _G.FRIENDNAMEPLATES_ON = true; ShowFriendNameplates() end
-      return
+      
+      -- Apply current settings based on options
+      if disableHostile then
+        _G.NAMEPLATES_ON = nil
+        HideNameplates()
+      else
+        -- Restore hostile if option is off but we're in friendly zone
+        if savedHostileState == "1" then
+          _G.NAMEPLATES_ON = true
+          ShowNameplates()
+        end
+      end
+      
+      if disableFriendly then
+        _G.FRIENDNAMEPLATES_ON = nil
+        HideFriendNameplates()
+      else
+        -- Restore friendly if option is off but we're in friendly zone
+        if savedFriendlyState == "1" then
+          _G.FRIENDNAMEPLATES_ON = true
+          ShowFriendNameplates()
+        end
+      end
+      
+      return -- Don't call SetGameVariables
     elseif inFriendlyZone and not (disableHostile or disableFriendly) then
+      -- Both features disabled while in friendly zone - restore state
       inFriendlyZone = false
-      if savedHostileState == "1" then C.nameplates["showhostile"] = savedHostileState end
-      if savedFriendlyState == "1" then C.nameplates["showfriendly"] = savedFriendlyState end
-      savedHostileState = nil; savedFriendlyState = nil
+      
+      if savedHostileState == "1" then
+        C.nameplates["showhostile"] = savedHostileState
+      end
+      
+      if savedFriendlyState == "1" then
+        C.nameplates["showfriendly"] = savedFriendlyState
+      end
+      
+      savedHostileState = nil
+      savedFriendlyState = nil
+      -- Fall through to SetGameVariables to restore nameplates
     end
 
+    -- update nameplate visibility
     nameplates:SetGameVariables()
 
+    -- apply all config changes
     for plate in pairs(registry) do
-      plate.nameplate.cachedAlpha = nil
       nameplates.OnConfigChange(plate)
     end
   end
 
   if pfUI.client <= 11200 then
+    -- handle vanilla only settings
     local hookOnConfigChange = nameplates.OnConfigChange
     nameplates.OnConfigChange = function(self)
       hookOnConfigChange(self)
+
       local parent = self
       local nameplate = self.nameplate
       local plate = (C.nameplates["overlap"] == "1" or C.nameplates["vertical_offset"] ~= "0") and nameplate or parent
-      parent:EnableMouse(false); nameplate:EnableMouse(false)
+
+      -- disable all clicks for now
+      parent:EnableMouse(false)
+      nameplate:EnableMouse(false)
+
+      -- adjust vertical offset
       if C.nameplates["vertical_offset"] ~= "0" then
         nameplate:SetPoint("TOP", parent, "TOP", 0, tonumber(C.nameplates["vertical_offset"]))
       end
+
+      -- replace clickhandler
       if C.nameplates["overlap"] == "1" or C.nameplates["vertical_offset"] ~= "0" then
         plate:SetScript("OnClick", function() parent:Click() end)
       end
+
+      -- enable mouselook on rightbutton down
       if C.nameplates["rightclick"] == "1" then
         plate:SetScript("OnMouseDown", nameplates.mouselook.OnMouseDown)
       else
@@ -1637,17 +1978,22 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     local hookOnDataChanged = nameplates.OnDataChanged
     nameplates.OnDataChanged = function(self, nameplate)
       hookOnDataChanged(self, nameplate)
+
+      -- make sure to keep mouse events disabled on parent nameplate
       if (C.nameplates["overlap"] == "1" or C.nameplates["vertical_offset"] ~= "0") then
         nameplate.parent:EnableMouse(false)
       end
     end
 
+    -- enable mouselook on rightbutton down
     nameplates.mouselook = CreateFrame("Frame", nil, UIParent)
     nameplates.mouselook.time = nil
     nameplates.mouselook.frame = nil
     nameplates.mouselook.OnMouseDown = function()
       if arg1 and arg1 == "RightButton" then
         MouselookStart()
+
+        -- start detection of the rightclick emulation
         nameplates.mouselook.time = GetTime()
         nameplates.mouselook.frame = this
         nameplates.mouselook:Show()
@@ -1655,14 +2001,24 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     end
 
     nameplates.mouselook:SetScript("OnUpdate", function()
-      if not this.time or not this.frame then this:Hide(); return end
-      if not IsMouselooking() and this.time + tonumber(C.nameplates["clickthreshold"]) < GetTime() then
-        this:Hide(); return
+      -- break here if nothing to do
+      if not this.time or not this.frame then
+        this:Hide()
+        return
       end
+
+      -- if threshold is reached (0.5 second) no click action will follow
+      if not IsMouselooking() and this.time + tonumber(C.nameplates["clickthreshold"]) < GetTime() then
+        this:Hide()
+        return
+      end
+
+      -- run a usual nameplate rightclick action
       if not IsMouselooking() then
         this.frame:Click("LeftButton")
         if UnitCanAttack("player", "target") and not nameplates.combat.inCombat then AttackTarget() end
-        this:Hide(); return
+        this:Hide()
+        return
       end
     end)
   end
