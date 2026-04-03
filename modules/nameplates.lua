@@ -862,7 +862,13 @@ end
     nameplate.level = nameplate:CreateFontString(nil, "OVERLAY")
     nameplate.level:SetPoint("RIGHT", nameplate.health, "LEFT", -3, 0)
 
-    nameplate.raidicon:SetParent(plate)
+    -- Create a dedicated high-level frame for the raid icon so it renders
+    -- ABOVE nameplate.health (FrameLevel 4) and stays visible even when
+    -- nameplates are toggled off (the Blizzard parent plate still exists).
+    nameplate.raidiconframe = CreateFrame("Frame", nil, nameplate)
+    nameplate.raidiconframe:SetFrameLevel(10)
+    nameplate.raidiconframe:SetAllPoints(nameplate)
+    nameplate.raidicon:SetParent(nameplate.raidiconframe)
     nameplate.raidicon:SetDrawLayer("OVERLAY", 7)
     if C.unitframes.blizzard_raidicons ~= "1" then
       nameplate.raidicon:SetTexture(pfUI.media["img:raidicons"])
