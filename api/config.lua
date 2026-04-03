@@ -1367,5 +1367,20 @@ function pfUI:MigrateConfig()
   end
 
 
+  -- Remove "Show only own debuffs" from unitframes and nameplates
+  -- (feature was removed; only Target Debuff Bar in buffwatch keeps it)
+  if pfUI_config.nameplates then
+    pfUI_config.nameplates.selfdebuff = "0"
+  end
+  if pfUI_config.unitframes then
+    for _, unit in pairs({"target", "targettarget", "targettargettarget",
+                          "focus", "focustarget", "pet", "pettarget",
+                          "group", "raid", "player"}) do
+      if pfUI_config.unitframes[unit] and pfUI_config.unitframes[unit].selfdebuff then
+        pfUI_config.unitframes[unit].selfdebuff = "0"
+      end
+    end
+  end
+
   pfUI_config.version = pfUI.version.string
 end
