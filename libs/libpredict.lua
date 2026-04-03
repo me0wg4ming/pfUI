@@ -196,12 +196,14 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
   if not spellName then return end
 
   local pendingTarget = nil
+  local pendingTargetGuid = nil
   local pending = pfUI.libpredict_pending_cast
   if pending and pending.spellName == spellName and pending.targetGuid
      and pending.time and (GetTime() - pending.time) < 1 then
     local name = UnitName(pending.targetGuid)
     if name and name ~= UNKNOWNOBJECT and name ~= UKNOWNBEING then
       pendingTarget = name
+      pendingTargetGuid = pending.targetGuid
     end
     pending.spellId = nil
     pending.spellName = nil
@@ -209,6 +211,8 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
     pending.time = nil
   end
   local target = pendingTarget or resolveNameFromGuid(targetGuid) or senttarget or spell_queue[3]
+  -- resolved GUID: prefer pendingTargetGuid (mouseover/click-to-cast), fall back to targetGuid
+  local resolvedTargetGuid = pendingTargetGuid or targetGuid
 
 
   libpredict.sender.current_cast = spellName
@@ -288,10 +292,17 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
       return  -- skip the generic Heal call below
     end
 
-    -- If target is hostile (e.g. self-heal while targeting an enemy),
-    -- store the heal under player instead so the player frame shows prediction.
+    -- If the resolved heal target is itself hostile (e.g. self-cast heal while targeting an enemy),
+    -- store the heal under the player so the player frame shows the prediction.
+    -- Use resolvedTargetGuid (prefers pendingTargetGuid from mouseover/click-to-cast) so we
+    -- don't wrongly fall back to player when healing a friend via mouseover with a foe in target.
     local healTarget = target
-    if healTarget and UnitExists("target") and (UnitCanAttack("player", "target") or not UnitIsFriend("player", "target")) then
+    local unitTargetGuid = GetUnitGUID and GetUnitGUID("target")
+    local healTargetIsHostile = resolvedTargetGuid and unitTargetGuid
+      and resolvedTargetGuid == unitTargetGuid
+      and UnitExists("target")
+      and (UnitCanAttack("player", "target") or not UnitIsFriend("player", "target"))
+    if healTargetIsHostile then
       healTarget = player
     end
     libpredict:Heal(player, healTarget, amount, casttime)
