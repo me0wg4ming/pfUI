@@ -1656,9 +1656,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       local header = CreateConfig(nil, T["Nameplate Update Rate"], nil, nil, "header")
       header:GetParent().objectCount = header:GetParent().objectCount - 1
       header:SetHeight(20)
-      
+
       local targetCustom  -- declare first so callback can use it
-      
+
       CreateConfig(function()
         -- Callback when dropdown changes - update custom field immediately
         if targetCustom and targetCustom.input then
@@ -1689,10 +1689,10 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "fastest:" .. T["Fastest"] .. " (50 FPS)",
         "custom:" .. T["Custom"],
       })
-      
+
       -- Now create custom field AFTER dropdown
       targetCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_target_custom")
-      
+
       -- Set initial state
       local isCustom = pfUI.throttle:IsCustom("nameplates_target")
       if not isCustom then
@@ -1708,14 +1708,14 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           targetCustom.input:SetText(_G.pfUI_throttle.nameplates_target_custom)
         end
       end
-      
+
       -- Spacer after custom field
       local spacer1 = CreateConfig(nil, " ", nil, nil, "header")
       spacer1:GetParent().objectCount = spacer1:GetParent().objectCount - 1
       spacer1:SetHeight(5)
-      
+
       local normalCustom
-      
+
       CreateConfig(function()
         if normalCustom and normalCustom.input then
           local isCustom = pfUI.throttle:IsCustom("nameplates")
@@ -1743,9 +1743,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "fastest:" .. T["Fastest"] .. " (50 FPS)",
         "custom:" .. T["Custom"],
       })
-      
+
       normalCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_custom")
-      
+
       local isCustom2 = pfUI.throttle:IsCustom("nameplates")
       if not isCustom2 then
         normalCustom.input:EnableMouse(false)
@@ -1760,7 +1760,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           normalCustom.input:SetText(_G.pfUI_throttle.nameplates_custom)
         end
       end
-      
+
       -- Spacer after custom field
       local spacer2 = CreateConfig(nil, " ", nil, nil, "header")
       spacer2:GetParent().objectCount = spacer2:GetParent().objectCount - 1
@@ -1803,7 +1803,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       spacer3:SetHeight(5)
 
       local massCustom
-      
+
       CreateConfig(function()
         if massCustom and massCustom.input then
           local isCustom = pfUI.throttle:IsCustom("nameplates_mass")
@@ -1831,9 +1831,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "fastest:" .. T["Fastest"] .. " (50 FPS)",
         "custom:" .. T["Custom"],
       })
-      
+
       massCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "nameplates_mass_custom")
-      
+
       local isCustom3 = pfUI.throttle:IsCustom("nameplates_mass")
       if not isCustom3 then
         massCustom.input:EnableMouse(false)
@@ -1848,12 +1848,12 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           massCustom.input:SetText(_G.pfUI_throttle.nameplates_mass_custom)
         end
       end
-      
+
       -- Spacer before reset button
       local spacer = CreateConfig(nil, " ", nil, nil, "header")
       spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
       spacer:SetHeight(10)
-      
+
       -- Reset to defaults button
       CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
         pfUI.throttle:ResetToDefault("nameplates_target")
@@ -1871,9 +1871,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       local header = CreateConfig(nil, T["Tooltip Update Rate"], nil, nil, "header")
       header:GetParent().objectCount = header:GetParent().objectCount - 1
       header:SetHeight(20)
-      
+
       local cursorCustom
-      
+
       CreateConfig(function()
         if cursorCustom and cursorCustom.input then
           local isCustom = pfUI.throttle:IsCustom("tooltip_cursor")
@@ -1901,9 +1901,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "fastest:" .. T["Fastest"] .. " (50 FPS)",
         "custom:" .. T["Custom"],
       })
-      
+
       cursorCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "tooltip_cursor_custom")
-      
+
       local isCustom = pfUI.throttle:IsCustom("tooltip_cursor")
       if not isCustom then
         cursorCustom.input:EnableMouse(false)
@@ -1918,22 +1918,22 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           cursorCustom.input:SetText(_G.pfUI_throttle.tooltip_cursor_custom)
         end
       end
-      
+
       -- Small spacer
       local spacer1 = CreateConfig(nil, " ", nil, nil, "header")
       spacer1:GetParent().objectCount = spacer1:GetParent().objectCount - 1
       spacer1:SetHeight(5)
-      
+
       -- Info note about Native mode
       local infoText = CreateConfig(nil, T["Note: Only works when Cursor Align is NOT 'Native'"], nil, nil, "header")
       infoText:GetParent().objectCount = infoText:GetParent().objectCount - 1
       infoText:SetHeight(25)
-      
+
       -- Spacer before reset button
       local spacer = CreateConfig(nil, " ", nil, nil, "header")
       spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
       spacer:SetHeight(5)
-      
+
       -- Reset to defaults button
       CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
         pfUI.throttle:ResetToDefault("tooltip_cursor")
@@ -1943,7 +1943,7 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
     end)
     CreateGUIEntry(T["Throttling"], T["Chat Tab"], function()
       local chatCustom
-      
+
       CreateConfig(function()
         if chatCustom and chatCustom.input then
           local isCustom = pfUI.throttle:IsCustom("chat_tab")
@@ -1971,9 +1971,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         "fastest:" .. T["Fastest"] .. " (50 FPS)",
         "custom:" .. T["Custom"],
       })
-      
+
       chatCustom = CreateConfig(nil, T["Custom FPS"], _G.pfUI_throttle, "chat_tab_custom")
-      
+
       local isCustom = pfUI.throttle:IsCustom("chat_tab")
       if not isCustom then
         chatCustom.input:EnableMouse(false)
@@ -1988,12 +1988,12 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
           chatCustom.input:SetText(_G.pfUI_throttle.chat_tab_custom)
         end
       end
-      
+
       -- Spacer before reset button
       local spacer = CreateConfig(nil, " ", nil, nil, "header")
       spacer:GetParent().objectCount = spacer:GetParent().objectCount - 1
       spacer:SetHeight(10)
-      
+
       -- Reset to defaults button
       CreateConfig(nil, T["Reset to Defaults"], nil, nil, "button", function()
         pfUI.throttle:ResetToDefault("chat_tab")
@@ -2929,9 +2929,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
       CreateConfig(U["nameplates"], T["Hide Healthbar On Neutral NPCs"], C.nameplates, "neutralnpc", "checkbox")
       CreateConfig(U["nameplates"], T["Hide Healthbar On Friendly NPCs"], C.nameplates, "friendlynpc", "checkbox")
       CreateConfig(U["nameplates"], T["Hide Healthbar On Friendly Players"], C.nameplates, "friendlyplayer", "checkbox")
-      CreateConfig(U["nameplates"], T["Always Show Healthbar On Group Members"], C.nameplates, "groupplayer", "checkbox")
       CreateConfig(U["nameplates"], T["Hide Healthbar On Critters"], C.nameplates, "critters", "checkbox")
       CreateConfig(U["nameplates"], T["Hide Healthbar On Totems"], C.nameplates, "totems", "checkbox")
+      CreateConfig(U["nameplates"], T["Always Show Healthbar On Group Members"], C.nameplates, "groupplayer", "checkbox")
       CreateConfig(U["nameplates"], T["Always Show On Units With Missing HP"], C.nameplates, "fullhealth", "checkbox")
       CreateConfig(U["nameplates"], T["Always Show On Target Units"], C.nameplates, "target", "checkbox")
       CreateConfig(U["nameplates"], T["Vertical Healthbar"], C.nameplates, "verticalhealth", "checkbox")
