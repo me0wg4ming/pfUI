@@ -1414,6 +1414,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     local background = C.bars["bar"..i].background
     local formfactor = C.bars["bar"..i].formfactor
     local uneven = C.bars["bar"..i].uneven or "Down"
+    local fillmode = C.bars["bar"..i].fillmode or "auto"
     -- validate uneven against bar shape and reset if incompatible
     local _, _, fcols2, frows2 = string.find(tostring(formfactor or ""), "(%d+)%s*x%s*(%d+)")
     fcols2, frows2 = tonumber(fcols2), tonumber(frows2)
@@ -1558,7 +1559,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
       bars[i][j] = CreateActionButton(bars[i], i, j)
       bars[i][j].bar = i
 
-      BarButtonAnchor(bars[i][j], buttonbasename, j, buttons, formfactor, size, border, spacing, uneven)
+      BarButtonAnchor(bars[i][j], buttonbasename, j, buttons, formfactor, size, border, spacing, uneven, fillmode)
       bars[i][j]:ClearAllPoints()
       bars[i][j]:SetPoint(unpack(bars[i][j]._anchor))
       bars[i][j]:Show()
@@ -1589,7 +1590,7 @@ pfUI:RegisterModule("actionbar", "vanilla", function ()
     end
 
     -- adjust actionbar size
-    BarLayoutSize(bars[i], buttons, formfactor, size, border, spacing, uneven)
+    BarLayoutSize(bars[i], buttons, formfactor, size, border, spacing, uneven, fillmode)
     bars[i]:SetWidth(bars[i]._size[1])
     bars[i]:SetHeight(bars[i]._size[2])
     bars[i]:ClearAllPoints()

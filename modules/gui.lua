@@ -2921,6 +2921,9 @@ pfUI:RegisterModule("gui", "vanilla:tbc", function ()
         end
         CreateConfig(layout_ufunc, T["Layout"], C.bars["bar"..id], "formfactor", "dropdown", formfactors)
         uneven_frame = CreateConfig(U["bars"], T["Layout Uneven Orientation"], C.bars["bar"..id], "uneven", "dropdown", uneven_options)
+        CreateConfig(U["bars"], T["Fill Order"], C.bars["bar"..id], "fillmode", "dropdown", function()
+          return {"auto:Auto", "row:Row-first (1,2,3 / 4,5,6)", "col:Column-first (1,3,5 / 2,4,6)"}
+        end)
         CreateConfig(U["bars"], T["Bar Background"], C.bars["bar"..id], "background", "checkbox")
         CreateConfig(U["bars"], T["Show Hotkey Text"], C.bars["bar"..id], "showkeybind", "checkbox")
 
