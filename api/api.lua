@@ -1248,7 +1248,7 @@ function pfUI.api.BarLayoutFormfactor(option)
   end
 end
 
-local function ResolveBarLayout(barsize, formfactor, uneven, fillmode)
+local function ResolveBarLayout(barsize, formfactor, uneven)
   local layout = tostring(formfactor or "")
   local _, _, a, b = string.find(layout, "(%d+)%s*x%s*(%d+)")
   if a and b then
@@ -1256,28 +1256,13 @@ local function ResolveBarLayout(barsize, formfactor, uneven, fillmode)
     cols = math.min(NUM_ACTIONBAR_BUTTONS, math.max(1, cols))
     rows = math.min(NUM_ACTIONBAR_BUTTONS, math.max(1, rows))
     local orientation = string.upper(uneven or "DOWN")
-    local mode
-    if fillmode == "col" then
-      -- spaltenweise: rows aus formfactor fix, cols berechnen
-      mode = "cols"
-      rows = math.max(1, math.min(rows, barsize))
-      cols = math.max(1, math.ceil(barsize / rows))
-    elseif fillmode == "row" then
-      -- zeilenweise: rows aus formfactor fix, cols berechnen
-      mode = "rows"
-      rows = math.max(1, math.min(rows, barsize))
-      cols = math.max(1, math.ceil(barsize / rows))
+    local mode = (orientation == "LEFT" or orientation == "RIGHT") and "cols" or "rows"
+    if mode == "rows" then
+      cols = math.max(1, math.min(cols, barsize))
+      rows = math.max(1, math.ceil(barsize / cols))
     else
-      mode = (orientation == "LEFT" or orientation == "RIGHT") and "cols" or "rows"
-      if mode == "rows" then
-        -- rows aus formfactor fix, cols berechnen
-        rows = math.max(1, math.min(rows, barsize))
-        cols = math.max(1, math.ceil(barsize / rows))
-      else
-        -- cols aus formfactor fix, rows berechnen
-        cols = math.max(1, math.min(cols, barsize))
-        rows = math.max(1, math.ceil(barsize / cols))
-      end
+      rows = math.max(1, math.min(rows, barsize))
+      cols = math.max(1, math.ceil(barsize / rows))
     end
     return cols, rows, mode, orientation
   end
@@ -1292,9 +1277,9 @@ end
 -- 'barsize'    integer number of buttons,
 -- 'formfactor' string formfactor in cols x rows,
 -- 'padding'    the spacing between buttons
-function pfUI.api.BarLayoutSize(bar,barsize,formfactor,iconsize,bordersize,padding,uneven,fillmode)
+function pfUI.api.BarLayoutSize(bar,barsize,formfactor,iconsize,bordersize,padding,uneven)
   assert(barsize > 0 and barsize <= NUM_ACTIONBAR_BUTTONS,"BarLayoutSize: barsize "..tostring(barsize).." is invalid")
-  local cols, rows = ResolveBarLayout(barsize, formfactor, uneven, fillmode)
+  local cols, rows = ResolveBarLayout(barsize, formfactor, uneven)
   if not cols or not rows then cols, rows = unpack(pfGridmath[barsize][1]) end
   local width = (iconsize + bordersize*2+padding) * cols + padding
   local height = (iconsize + bordersize*2+padding) * rows + padding
@@ -1310,9 +1295,9 @@ end
 -- 'iconsize'     size of the button
 -- 'bordersize'   default bordersize
 -- 'padding'      the spacing between buttons
-function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor,iconsize,bordersize,padding,uneven,fillmode)
+function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor,iconsize,bordersize,padding,uneven)
   assert(barsize > 0 and barsize <= NUM_ACTIONBAR_BUTTONS,"BarButtonAnchor: barsize "..tostring(barsize).." is invalid")
-  local cols, rows, mode, orientation = ResolveBarLayout(barsize, formfactor, uneven, fillmode)
+  local cols, rows, mode, orientation = ResolveBarLayout(barsize, formfactor, uneven)
   if not cols or not rows then
     cols, rows, mode, orientation = unpack(pfGridmath[barsize][1]), "rows", "DOWN"
   end
@@ -1327,14 +1312,12 @@ function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor
     col = buttonindex - ((row-1) * cols)
   end
   if mode == "cols" and orientation == "LEFT" then
-    -- letzte Spalte nach links: col-Index verschieben
     local final_col = math.ceil(barsize / rows)
     local count = barsize - (final_col - 1) * rows
     if count > 0 and count < rows then
       if col == final_col then col = 1 else col = col + 1 end
     end
   elseif mode == "rows" and orientation == "UP" then
-    -- letzte Reihe nach oben: row-Index verschieben
     local final_row = math.ceil(barsize / cols)
     local count = barsize - (final_row - 1) * cols
     if count > 0 and count < cols then
@@ -1348,7 +1331,6 @@ function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor
   else
     button._anchor = {"TOPLEFT", parent, "TOPLEFT", x, y}
     if mode == "cols" then
-      -- centering: letzte unvollstaendige Spalte links oder rechts ausrichten
       local final_col = math.ceil(barsize / rows)
       local count = barsize - (final_col - 1) * rows
       local target_col = (orientation == "LEFT") and 1 or cols
@@ -1356,20 +1338,11 @@ function pfUI.api.BarButtonAnchor(button,basename,buttonindex,barsize,formfactor
         button._anchor[5] = button._anchor[5] - (rows - count) * step / 2
       end
     else
-      -- row-mode: letzte unvollstaendige Reihe vertikal mittig positionieren (wie col-mode horizontal)
-      -- orientation bestimmt x-Position (LEFT/RIGHT) oder ob oben/unten (UP/DOWN)
       local final_row = math.ceil(barsize / cols)
       local count = barsize - (final_row - 1) * cols
-      if count > 0 and count < cols then
-        local target_row = (orientation == "UP") and 1 or final_row
-        if row == target_row then
-          -- vertikal mittig: y-Offset um halben step nach oben
-          button._anchor[5] = button._anchor[5] - (rows - (final_row - 1)) * step / 2 + step / 2
-          -- x-Position: LEFT = linksbündig (kein Offset), RIGHT = rechtsbündig
-          if orientation == "RIGHT" then
-            button._anchor[4] = button._anchor[4] + (cols - count) * step
-          end
-        end
+      local target_row = (orientation == "UP") and 1 or rows
+      if count > 0 and count < cols and row == target_row and col == 1 then
+        button._anchor[4] = button._anchor[4] + (cols - count) * step / 2
       end
     end
   end
