@@ -95,9 +95,9 @@ pfUI:RegisterModule("marktracking", "vanilla:tbc", function ()
 pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
   pfUI.marktracking:SetFrameStrata("MEDIUM")
   if GROW == "up" then
-    pfUI.marktracking:SetPoint("LEFT", UIParent, "LEFT", 6, -5)
+    pfUI.marktracking:SetPoint("BOTTOM", UIParent, "CENTER", 0, 0)
   else
-    pfUI.marktracking:SetPoint("LEFT", UIParent, "LEFT", 6, -5)
+    pfUI.marktracking:SetPoint("TOP", UIParent, "CENTER", 0, 0)
   end
   pfUI.marktracking:SetWidth(TOTAL_ROW_WIDTH)
   pfUI.marktracking:SetHeight(8 * (ROW_HEIGHT + 1) + border * 2 - 1)
@@ -225,7 +225,7 @@ pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
           end
 
           if rm_showpct then
-            row.hptext:SetText(math.floor(pct * 100) .. "%")
+            row.hptext:SetText(math.ceil(pct * 100) .. "%")
           end
 
           if rm_showportrait then
