@@ -225,7 +225,7 @@ pfUI.marktracking = CreateFrame("Frame", "pfMarkTracking", UIParent)
           end
 
           if rm_showpct then
-            row.hptext:SetText(math.floor(pct * 100) .. "%")
+            row.hptext:SetText(math.ceil(pct * 100) .. "%")
           end
 
           if rm_showportrait then
