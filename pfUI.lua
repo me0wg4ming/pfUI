@@ -253,17 +253,20 @@ end
 -- a one-time prompt asking if they want to enable them.
 pfUI.new_modules = {}
 
-function pfUI:RegisterNewModule(name, label)
-  table.insert(pfUI.new_modules, { name = name, label = label })
+function pfUI:RegisterNewModule(name, label, class)
+  table.insert(pfUI.new_modules, { name = name, label = label, class = class })
 end
 
 function pfUI:CheckNewModules()
   pfUI_init.seen_modules = pfUI_init.seen_modules or {}
 
   local pending = 0
+  local _, playerClass = UnitClass("player")
   for _, entry in pairs(pfUI.new_modules) do
     if not pfUI_init.seen_modules[entry.name] and pfUI_init["finalize"] then
-      pending = pending + 1
+      if not entry.class or entry.class == playerClass then
+        pending = pending + 1
+      end
     end
   end
 
@@ -282,6 +285,10 @@ function pfUI:CheckNewModules()
   for _, entry in pairs(pfUI.new_modules) do
     local name = entry.name
     if not pfUI_init.seen_modules[name] then
+      -- Skip modules restricted to a different class
+      if entry.class and entry.class ~= playerClass then
+        -- don't mark as seen - player might have a druid alt later
+      else
       pfUI_init.seen_modules[name] = true
 
       if pfUI_init["finalize"] then
@@ -306,6 +313,7 @@ function pfUI:CheckNewModules()
         }
         StaticPopup_Show("PFUI_NEW_MODULE_" .. strupper(name))
       end
+      end -- else (class match)
     end
   end
 end
