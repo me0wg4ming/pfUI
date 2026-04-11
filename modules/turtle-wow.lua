@@ -45,10 +45,20 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
 
     -- Check if pfUI is handling group or raid for the current situation
     local function pfUIHandlesGroupOrRaid()
+      local disabled = C["disabled"] or {}
       if GetNumRaidMembers() > 0 then
-        return C.unitframes.raid and C.unitframes.raid.visible == "1"
+        if not C.unitframes.raid then return false end
+        -- Hide Turtle frames if: pfUI raid module is active, OR player disabled visibility
+        if disabled["raid"] == "1" then
+          return C.unitframes.raid.visible ~= "1"
+        end
+        return C.unitframes.raid.visible == "1"
       else
-        return C.unitframes.group and C.unitframes.group.visible == "1"
+        if not C.unitframes.group then return false end
+        if disabled["group"] == "1" then
+          return C.unitframes.group.visible ~= "1"
+        end
+        return C.unitframes.group.visible == "1"
       end
     end
 
