@@ -11,7 +11,7 @@ pfUI:RegisterModule("innervatecall", "vanilla", function ()
   local _, playerClass = UnitClass("player")
   if playerClass ~= "DRUID" then return end
 
-  local INNERVATE_SPELLID = 25299
+  local INNERVATE_SPELLID = 29166
 
   -- Cache player GUID
   local playerGuid = nil
