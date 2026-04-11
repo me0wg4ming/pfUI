@@ -38,10 +38,12 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     [2764] = true,  -- Throw (Warrior/Rogue)
   }
 
-  -- Slam: has cast time but does NOT reset the swing timer (just delays it).
-  -- We explicitly ignore these in SPELL_GO so they fall through to no-op.
-  local slamSpellIDs = {
-    [1464] = true, [8820] = true, [11604] = true, [11605] = true,
+  -- Spells that DELAY the swing timer by their cast duration but do NOT reset it.
+  -- Slam: vanilla behavior on Turtle WoW - delays swing, does not reset.
+  -- Hammer of Wrath: Turtle WoW changed behavior - does not reset swing timer.
+  local swingDelaySpells = {
+    [1464] = true, [8820] = true, [11604] = true, [11605] = true,  -- Slam R1-R4
+    [24275] = true, [24274] = true, [24239] = true,                -- Hammer of Wrath R1-R3
   }
 
   -- SPELL_ATTR_ON_NEXT_SWING (bit 2, value 4): spell replaces next auto-attack swing.
@@ -465,12 +467,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     local GRACE = 0.15  -- seconds to wait after timer hits 0 before hiding
 
     if S.mhActive then
-      S.mhTimer = S.mhTimer - delta
+      -- Don't tick while frozen (swing-delay spell like Slam is being cast)
+      if not S.mhFrozenAt then
+        S.mhTimer = S.mhTimer - delta
+      end
       if S.mhTimer <= 0 then
         S.mhTimer = 0
         if S.mhFrozenAt then
-          -- Spell with interruptFlags froze the swing: bar holds at 0, skip grace/hide.
-          -- ResetMH() will clear mhFrozenAt when AUTO_ATTACK_SELF arrives.
+          -- Swing-delay spell cast in progress: bar holds at 0, skip grace/hide.
+          -- SPELL_GO handler will unfreeze and add cast duration to timer.
         elseif not pfUI.swingtimer.mhGraceAt then
           pfUI.swingtimer.mhGraceAt = GetTime() + GRACE
         elseif GetTime() >= pfUI.swingtimer.mhGraceAt then
@@ -693,7 +698,23 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
   spellStartFrame:SetScript("OnEvent", function()
     if arg1 and arg1 > 0 then
       S.pendingCastSpellId = arg1
+      -- Slam (and other delay-only spells): freeze the swing timer during cast
+      -- so it pauses instead of ticking down and expiring mid-cast
+      if swingDelaySpells[arg1] and S.mhActive then
+        S.mhFrozenAt = GetTime()
+      end
     end
+  end)
+
+  -- Cast cancel/fail/interrupt: unfreeze swing timer if a delay spell was interrupted
+  local spellFailFrame = CreateFrame("Frame")
+  spellFailFrame:RegisterEvent("SPELLCAST_FAILED")
+  spellFailFrame:RegisterEvent("SPELLCAST_INTERRUPTED")
+  spellFailFrame:SetScript("OnEvent", function()
+    if S.mhFrozenAt then
+      S.mhFrozenAt = nil
+    end
+    S.pendingCastSpellId = nil
   end)
 
   -- SPELL_GO hook via libdebuff
@@ -702,8 +723,15 @@ pfUI:RegisterModule("swingtimer", "vanilla:tbc", function ()
     if RANGED_SPELLIDS[spellId] then
       ResetRanged()
       return
-    elseif slamSpellIDs[spellId] then
-      -- Slam delays auto-attack but does NOT reset the swing timer. Ignore.
+    elseif swingDelaySpells[spellId] then
+      -- Swing-delay spells (Slam, Hammer of Wrath on Turtle WoW):
+      -- Delay the swing timer by cast duration, do NOT reset it.
+      if S.mhFrozenAt then
+        local castDuration = GetTime() - S.mhFrozenAt
+        S.mhTimer = S.mhTimer + castDuration
+        S.mhTimerMax = S.mhTimerMax + castDuration
+        S.mhFrozenAt = nil
+      end
       S.pendingCastSpellId = nil
       return
     elseif hsSpellIDs[spellId] or cleaveSpellIDs[spellId] or maulSpellIDs[spellId] or IsOnSwingSpell(spellId) then
