@@ -200,10 +200,15 @@ pfUI.libdebuff_spell_start_self_hooks["libpredict"] = function(spellId, casterGu
   local pending = pfUI.libpredict_pending_cast
   if pending and pending.spellName == spellName and pending.targetGuid
      and pending.time and (GetTime() - pending.time) < 1 then
-    local name = UnitName(pending.targetGuid)
-    if name and name ~= UNKNOWNOBJECT and name ~= UKNOWNBEING then
-      pendingTarget = name
-      pendingTargetGuid = pending.targetGuid
+    -- If SPELL_CAST_EVENT target differs from SPELL_START_SELF target,
+    -- the client redirected the cast (e.g. offline target → selfcast).
+    -- Discard pending and trust the actual targetGuid from SPELL_START_SELF.
+    if pending.targetGuid == targetGuid then
+      local name = UnitName(pending.targetGuid)
+      if name and name ~= UNKNOWNOBJECT and name ~= UKNOWNBEING then
+        pendingTarget = name
+        pendingTargetGuid = pending.targetGuid
+      end
     end
     pending.spellId = nil
     pending.spellName = nil
