@@ -391,6 +391,15 @@ pfUI:RegisterModule("share", "vanilla:tbc", function ()
         if not error and f.scroll.text:GetText() ~= "" then
           ImportConfig()
           pfUI:LoadConfig()
+
+          -- Skip firstrun wizard when importing a shared profile
+          -- The imported config is a complete setup, no wizard needed
+          if pfUI.firstrun and pfUI.firstrun.steps then
+            for _, step in pairs(pfUI.firstrun.steps) do
+              pfUI_init[step.name] = true
+            end
+          end
+
           CreateQuestionDialog(T["Some settings need to reload the UI to take effect.\nDo you want to reloadUI now?"], ReloadUI)
         end
       end)
