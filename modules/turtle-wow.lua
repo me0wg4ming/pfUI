@@ -309,12 +309,12 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
 
     -- skin title dropdown menu
     -- taken from: https://github.com/doorknob6/pfUI-turtle/blob/master/skins/turtle/character.lua
-    if TWTitles and pfUI.skin["Character"] and pfUI_config["disabled"]["skin_Character"] ~= "1" then
+    if PaperDollFrameTitlesDropdown and pfUI.skin["Character"] and pfUI_config["disabled"]["skin_Character"] ~= "1" then
       CharacterLevelText:SetPoint("TOP", CharacterNameText, "BOTTOM", 0, -2)
-      SkinDropDown(TWTitles)
-      TWTitles:SetPoint("TOP", CharacterGuildText, "BOTTOM", 0, -2)
-      TWTitlesText:SetPoint("LEFT", TWTitles.backdrop, "LEFT", 6, 2)
-      CharacterResistanceFrame:SetPoint("TOP", TWTitles, "BOTTOM", 0, 0)
+      SkinDropDown(PaperDollFrameTitlesDropdown)
+      PaperDollFrameTitlesDropdown:SetPoint("TOP", CharacterGuildText, "BOTTOM", 0, -2)
+      CharacterTitleText:SetPoint("LEFT", PaperDollFrameTitlesDropdown.backdrop, "LEFT", 6, 2)
+      CharacterResistanceFrame:SetPoint("TOP", PaperDollFrameTitlesDropdown, "BOTTOM", 0, 0)
     end
   end)
 
@@ -381,10 +381,12 @@ pfUI:RegisterModule("turtle-wow", "vanilla", function ()
         -- break if theres nothing left to do
         if initialized then return end
 
+        local _, scaled_border = GetBorderSize()
+
         -- adjust ui positions
         SkinTab(InspectFrameTab3)
         InspectFrameTab3:ClearAllPoints()
-        InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", GetBorderSize()*2 + 1, 0)
+        InspectFrameTab3:SetPoint("LEFT", InspectFrameTab2, "RIGHT", scaled_border*2 + 1, 0)
         TWTalentFrameTab1:SetPoint("TOPLEFT", TWTalentFrameScrollFrame, "TOPLEFT", 2, TWTalentFrameTab1:GetHeight() + 4)
 
         -- reload text position
