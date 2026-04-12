@@ -834,21 +834,21 @@ function pfUI.uf:UpdateConfig()
   end
 
   f.hpLeftText:SetFontObject(GameFontWhite)
-  f.hpLeftText:SetFont(fontname, fontsize, fontstyle)
+  f.hpLeftText:SetFont(fontname, fontsize + tonumber(f.config.txthpleftsizedelta), fontstyle)
   f.hpLeftText:SetJustifyH("LEFT")
   f.hpLeftText:ClearAllPoints()
   f.hpLeftText:SetPoint("TOPLEFT",f.hp.bar, "TOPLEFT", 2*(default_border + f.config.txthpleftoffx), 1 + tonumber(f.config.txthpleftoffy))
   f.hpLeftText:SetPoint("BOTTOMRIGHT",f.hp.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txthpleftoffx), f.config.txthpleftoffy)
 
   f.hpRightText:SetFontObject(GameFontWhite)
-  f.hpRightText:SetFont(fontname, fontsize, fontstyle)
+  f.hpRightText:SetFont(fontname, fontsize + tonumber(f.config.txthprightsizedelta), fontstyle)
   f.hpRightText:SetJustifyH("RIGHT")
   f.hpRightText:ClearAllPoints()
   f.hpRightText:SetPoint("TOPLEFT",f.hp.bar, "TOPLEFT", 2*(default_border + f.config.txthprightoffx), 1 + tonumber(f.config.txthprightoffy))
   f.hpRightText:SetPoint("BOTTOMRIGHT",f.hp.bar, "BOTTOMRIGHT", -2*(default_border + f.config.txthprightoffx), f.config.txthprightoffy)
 
   f.hpCenterText:SetFontObject(GameFontWhite)
-  f.hpCenterText:SetFont(fontname, fontsize, fontstyle)
+  f.hpCenterText:SetFont(fontname, fontsize + tonumber(f.config.txthpcentersizedelta), fontstyle)
   f.hpCenterText:SetJustifyH("CENTER")
   f.hpCenterText:ClearAllPoints()
   f.hpCenterText:SetPoint("TOPLEFT",f.hp.bar, "TOPLEFT", f.config.txthpcenteroffx, 1 + tonumber(f.config.txthpcenteroffy))
@@ -3193,7 +3193,8 @@ function pfUI.uf:GetStatusValue(unit, pos)
   elseif config == "name" then
     return unit:GetColor("unit") .. pfUI.uf:GetNameString(unitstr)
   elseif config == "nameshort" then
-    return unit:GetColor("unit") .. strsub(UnitName(unitstr), 0, 3)
+    local length = tonumber(unit.config.txthpshortnamelen)
+    return unit:GetColor("unit") .. strsub(UnitName(unitstr), 0, length)
   elseif config == "level" then
     return unit:GetColor("level") .. pfUI.uf:GetLevelString(unitstr)
   elseif config == "class" then

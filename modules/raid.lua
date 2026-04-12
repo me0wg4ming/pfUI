@@ -48,23 +48,32 @@ pfUI:RegisterModule("raid", "vanilla:tbc", function ()
     x, y = tonumber(x), tonumber(y)
 
     if fill == "VERTICAL" then
-      for r=1, x do for g=1, y do
+        for r=1, x do for g=1, y do
         if pfUI.uf.raid[i] then
           pfUI.uf.raid[i]:ClearAllPoints()
           pfUI.uf.raid[i]:SetPoint("BOTTOMLEFT", (r-1)*(padding+width), (g-1)*(padding+height))
           UpdateMovable(pfUI.uf.raid[i], true)
         end
         i = i + 1
-      end end
+        end end
+    elseif fill == "VERTICALR" then
+        for r=1, x do for g=y, 1, -1 do
+          if pfUI.uf.raid[i] then
+            pfUI.uf.raid[i]:ClearAllPoints()
+            pfUI.uf.raid[i]:SetPoint("BOTTOMLEFT", (r-1)*(padding+width), (g-1)*(padding+height))
+            UpdateMovable(pfUI.uf.raid[i], true)
+          end
+          i = i + 1
+        end end
     else
-      for g=1, y do for r=1, x do
-        if pfUI.uf.raid[i] then
-          pfUI.uf.raid[i]:ClearAllPoints()
-          pfUI.uf.raid[i]:SetPoint("BOTTOMLEFT", (r-1)*(padding+width), (g-1)*(padding+height))
-          UpdateMovable(pfUI.uf.raid[i], true)
-        end
-        i = i + 1
-      end end
+        for g=1, y do for r=1, x do
+          if pfUI.uf.raid[i] then
+            pfUI.uf.raid[i]:ClearAllPoints()
+            pfUI.uf.raid[i]:SetPoint("BOTTOMLEFT", (r-1)*(padding+width), (g-1)*(padding+height))
+            UpdateMovable(pfUI.uf.raid[i], true)
+          end
+          i = i + 1
+        end end
     end
   end
 
