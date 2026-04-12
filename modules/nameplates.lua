@@ -56,6 +56,21 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     ["boss"] = "B"
   }
 
+  -- check if a name belongs to a party or raid member
+  local function IsInPlayerGroup(name)
+    if not name then return nil end
+    if GetNumRaidMembers() > 0 then
+      for i = 1, 40 do
+        if UnitName("raid" .. i) == name then return true end
+      end
+    elseif GetNumPartyMembers() > 0 then
+      for i = 1, 4 do
+        if UnitName("party" .. i) == name then return true end
+      end
+    end
+    return nil
+  end
+
   -- catch all nameplates
   local childs = {}  -- PERF: Reuse table instead of creating new one each scan
   local regions, plate
@@ -317,6 +332,8 @@ pfUI:RegisterModule("nameplates", "vanilla", function ()
     elseif C.nameplates.friendlynpc == "1" and unittype == "FRIENDLY_NPC" then
       return true
     elseif C.nameplates.friendlyplayer == "1" and unittype == "FRIENDLY_PLAYER" then
+      -- exempt group/raid members when the option is enabled
+      if C.nameplates.groupplayer == "1" and IsInPlayerGroup(name) then return nil end
       return true
     elseif C.nameplates.critters == "1" and unittype == "NEUTRAL_NPC" then
       for i, critter in pairs(L["critters"]) do
